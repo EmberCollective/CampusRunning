@@ -82,6 +82,19 @@ class AmapAdapter {
                 this._handlers.onMapClick({ lat: e.lnglat.getLat(), lng: e.lnglat.getLng() });
             }
         });
+
+        // 左键按下 → onMapMouseDown：画笔加点走按下而非 click（click 在按下后拖动平移时被引擎抑制，会丢点）
+        this.map.on('mousedown', (e) => {
+            if (e.target && e.target !== this.map) return;  // 防覆盖物按下冒泡到地图
+            const oe = e.originEvent || {};
+            // 顶点/中点覆盖物上的按下有自己的交互（拖顶点/插点），不当作地图落笔（DOM 级命中检测，双引擎一致）
+            const t = oe.target;
+            if (t && t.closest && t.closest('.vertex-marker, .midpoint-handle')) return;
+            if (oe.button !== undefined && oe.button !== 0) return;  // 中/右键按下是拖动或菜单，不加点
+            if (this._handlers && this._handlers.onMapMouseDown) {
+                this._handlers.onMapMouseDown({ lat: e.lnglat.getLat(), lng: e.lnglat.getLng() });
+            }
+        });
     }
 
     // 激活地图：恢复视角（AMap zoom 仅支持整数）

@@ -41,8 +41,12 @@ const toGeoCoords = () => points.map(p => ({ longitude: p.lng, latitude: p.lat }
 
 // ===== 编辑事件处理（由地图适配器回调，只操作 points）=====
 const HANDLERS = {
-    onMapClick(pt) {
-        // 仅画笔模式下点击才加点；拖动模式下点击仅用于平移（顶点/中点交互不受影响）
+    onMapClick() {
+        // 加点已改由 onMapMouseDown 承担：click 在按下后移动（地图拖动平移）时被引擎抑制，
+        // 会导致"按住左键稍一动点就丢"；这里保留空实现避免适配器侧再加一条加点路径
+    },
+    onMapMouseDown(pt) {
+        // 仅画笔模式下左键按下即加点（按下瞬间完成，之后拖动平移地图也不丢点）
         if (currentTool !== 'draw') return;
         pushUndo();
         points.push({ lat: pt.lat, lng: pt.lng });

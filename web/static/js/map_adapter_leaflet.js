@@ -5,10 +5,11 @@ class LeafletAdapter {
     // containerId: 地图容器元素 id
     constructor(containerId) {
         // zoomControl 关闭：默认缩放按钮位于左上角，会与搜索框重叠；缩放用滚轮/双击或「适配视野」
-        this.map = L.map(containerId, { center: [26.4205, 106.6713], zoom: 17, minZoom: 3, zoomControl: false });
+        this.map = L.map(containerId, { center: [26.4205, 106.6713], zoom: 17, minZoom: 3, maxZoom: 20, zoomControl: false });
 
         // 三档瓦片源预定义（高德瓦片直连免 Key；不立即全部 add，由 setBaseMode 决定挂载）
-        const tileOptions = { subdomains: ['1', '2', '3', '4'], maxZoom: 18, attribution: '© 高德地图' };
+        // maxZoom 20：高德瓦片对主要区域（如校区）提供 z19/z20 数据，放大会更细致
+        const tileOptions = { subdomains: ['1', '2', '3', '4'], maxZoom: 20, attribution: '© 高德地图' };
         this._tiles = {
             classic: L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', tileOptions),
             fresh: L.tileLayer('https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7', tileOptions),
@@ -28,6 +29,18 @@ class LeafletAdapter {
         this.map.on('click', (e) => {
             if (this._handlers) {
                 this._handlers.onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
+            }
+        });
+
+        // 左键按下 → onMapMouseDown：画笔加点走按下而非 click（click 在按下后拖动平移时被引擎抑制，会丢点）
+        this.map.on('mousedown', (e) => {
+            // 顶点/中点覆盖物上的按下有自己的交互（拖顶点/插点），不当作地图落笔；
+            // 不依赖 Leaflet 的 propagatedFrom（layer 未把 map 注册为 event parent，不会带该标记）
+            const t = e.originalEvent && e.originalEvent.target;
+            if (t && t.closest && t.closest('.vertex-marker, .midpoint-handle')) return;
+            if (e.originalEvent && e.originalEvent.button !== 0) return;  // 中/右键按下是拖动或菜单，不加点
+            if (this._handlers && this._handlers.onMapMouseDown) {
+                this._handlers.onMapMouseDown({ lat: e.latlng.lat, lng: e.latlng.lng });
             }
         });
     }

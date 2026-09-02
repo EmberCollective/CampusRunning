@@ -90,7 +90,7 @@ class AmapAdapter {
             // 顶点/中点覆盖物上的按下有自己的交互（拖顶点/插点），不当作地图落笔（DOM 级命中检测，双引擎一致）
             const t = oe.target;
             if (t && t.closest && t.closest('.vertex-marker, .midpoint-handle')) return;
-            if (oe.button !== undefined && oe.button !== 0) return;  // 中/右键按下是拖动或菜单，不加点
+            if (!oe || oe.button !== 0) return;  // 仅左键；事件缺按钮信息时保守拒绝（与 Leaflet 侧一致）
             if (this._handlers && this._handlers.onMapMouseDown) {
                 this._handlers.onMapMouseDown({ lat: e.lnglat.getLat(), lng: e.lnglat.getLng() });
             }
@@ -108,9 +108,10 @@ class AmapAdapter {
         return { lat: c.getLat(), lng: c.getLng(), zoom: this.map.getZoom() };
     }
 
-    // 拖动平移开关（画笔模式下禁用，避免按住左键移动被当成拖图）
+    // 拖动平移开关（画笔模式下禁用，避免按住左键移动被当成拖图）；
+    // 同时切换双击缩放：画笔下双击应是连续落笔而非视角跳动
     setDragEnabled(enabled) {
-        this.map.setStatus({ dragEnable: enabled });
+        this.map.setStatus({ dragEnable: enabled, doubleClickZoom: enabled });
     }
 
     // 定位到指定位置

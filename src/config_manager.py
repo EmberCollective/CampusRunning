@@ -74,6 +74,10 @@ class ConfigManager:
         Raises:
             FileNotFoundError: 轨迹文件不存在
         """
+        # track_id 校验与保存侧对齐：拒绝路径分隔符等非法字符（防目录穿越读取）
+        if not isinstance(track_id, str) or not _TRACK_ID_PATTERN.fullmatch(track_id):
+            raise FileNotFoundError(f"轨迹不存在: {track_id}")
+
         filepath = os.path.join(self._tracks_dir, f"{track_id}.json")
         if not os.path.isfile(filepath):
             raise FileNotFoundError(f"轨迹文件不存在: {filepath}")

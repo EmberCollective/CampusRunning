@@ -74,12 +74,15 @@ class LeafletAdapter {
         return { lat: c.lat, lng: c.lng, zoom: this.map.getZoom() };
     }
 
-    // 拖动平移开关（画笔模式下禁用，避免按住左键移动被当成拖图）
+    // 拖动平移开关（画笔模式下禁用，避免按住左键移动被当成拖图）；
+    // 同时切换双击缩放：画笔下双击应是连续落笔而非视角跳动
     setDragEnabled(enabled) {
         if (enabled) {
             this.map.dragging.enable();
+            this.map.doubleClickZoom.enable();
         } else {
             this.map.dragging.disable();
+            this.map.doubleClickZoom.disable();
         }
     }
 

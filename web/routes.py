@@ -171,10 +171,14 @@ def get_track_coords(track_id):
         track = _config_manager.load_track(track_id)
     except FileNotFoundError:
         abort(404, description=f"轨迹 {track_id} 不存在")
+    except ValueError:
+        # track_id 含非法字符（如路径分隔符），与保存侧校验对齐
+        abort(404, description=f"轨迹 {track_id} 不存在")
     except Exception as e:
         # KeyError / JSONDecodeError 等文件损坏场景
         logger.error("加载轨迹坐标 %s 失败: %s", track_id, e, exc_info=True)
-        return jsonify({"error": f"轨迹文件格式错误: {e}"}), 500
+        # 详细异常只进日志，响应用固定文案避免泄露服务端路径等信息
+        return jsonify({"error": "轨迹文件无法读取，请检查文件是否损坏"}), 500
 
     correction_data = None
     if track.coordinate_correction is not None:
@@ -254,7 +258,8 @@ def save_track():
         analysis = TrackAnalyzer(reloaded.base_coordinates).analyze_track()
     except Exception as e:
         logger.error("保存后校验失败 %s: %s", track.id, e, exc_info=True)
-        return jsonify({"error": f"保存后校验失败: {e}"}), 500
+        # 详细异常只进日志，响应用固定文案避免泄露服务端路径等信息
+        return jsonify({"error": "保存后校验失败，文件可能已写入但无法回读"}), 500
 
     # 使轨迹列表缓存失效，下次请求时重新加载
     _tracks_cache = None

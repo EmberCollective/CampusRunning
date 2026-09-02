@@ -61,6 +61,8 @@ python main.py --list-tracks
 python main.py --list-templates
 ```
 
+> **让 AI 替你跑**——仓库已内置 Agent Skill（`.claude/skills/campusrunning-cli/`，软链入口在 `.agents/skills/`）。用 Claude Code 等 AI 编码工具打开本项目，说一句「帮我生成 9 月整月、每天 2~5 km 的跑步数据」即可，选命令、配参数这些事交给 AI，无需费脑。
+
 完整参数说明见 [API 参考](docs/api_reference.md)。
 
 ### Web

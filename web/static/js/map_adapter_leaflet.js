@@ -8,8 +8,9 @@ class LeafletAdapter {
         this.map = L.map(containerId, { center: [26.4205, 106.6713], zoom: 17, minZoom: 3, maxZoom: 20, zoomControl: false });
 
         // 三档瓦片源预定义（高德瓦片直连免 Key；不立即全部 add，由 setBaseMode 决定挂载）
-        // maxZoom 20：高德瓦片对主要区域（如校区）提供 z19/z20 数据，放大会更细致
-        const tileOptions = { subdomains: ['1', '2', '3', '4'], maxZoom: 20, attribution: '© 高德地图' };
+        // maxNativeZoom 18：高德瓦片仅部分区域有 z19/z20 数据，其余空白；超过 18 一律复用
+        // z18 瓦片做插值放大（变模糊但无空白），地图仍可缩放到 maxZoom 20
+        const tileOptions = { subdomains: ['1', '2', '3', '4'], maxNativeZoom: 18, maxZoom: 20, attribution: '© 高德地图' };
         this._tiles = {
             classic: L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', tileOptions),
             fresh: L.tileLayer('https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7', tileOptions),

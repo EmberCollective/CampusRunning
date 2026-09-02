@@ -361,6 +361,8 @@ window.addEventListener('mouseup', (e) => {
     if (e.button !== 1) return;
     restoreToolUI();
 });
+// 中键拖出窗口外松开时收不到 mouseup，鼠标离开窗口即恢复工具态（restoreToolUI 幂等）
+document.documentElement.addEventListener('mouseleave', restoreToolUI);
 
 document.getElementById('tool-pan').addEventListener('click', () => setTool('pan'));
 document.getElementById('tool-draw').addEventListener('click', () => setTool('draw'));

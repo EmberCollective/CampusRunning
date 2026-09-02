@@ -30,4 +30,6 @@ Thumbs.db
 *.tmp
 *.temp
 
-.claude/
+# 排除 .claude 本地配置，但保留项目级 skills（供 AI 代理使用）
+.claude/*
+!.claude/skills/

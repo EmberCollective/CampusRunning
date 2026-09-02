@@ -16,7 +16,13 @@ from flask import Flask, render_template, request, jsonify, send_file, abort
 
 from src.config_manager import ConfigManager
 from src.template_manager import TemplateManager
-from src.core.models import GenerationConfig, GenerationResult
+from src.core.models import (
+    GenerationConfig,
+    GenerationResult,
+    GeoPoint,
+    TrackDefinition,
+    CoordinateCorrection,
+)
 from src.core.track_analyzer import TrackAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -116,6 +122,15 @@ def create_app() -> Flask:
     app.add_url_rule(
         "/api/download/<job_id>", "download_files", download_files, methods=["GET"]
     )
+    app.add_url_rule("/track-editor", "track_editor_page", track_editor_page)
+    app.add_url_rule(
+        "/api/tracks/<track_id>/coords",
+        "get_track_coords",
+        get_track_coords,
+        methods=["GET"],
+    )
+    # 与 GET /api/tracks（endpoint "list_tracks"）同路径不同方法，endpoint 名必须不同
+    app.add_url_rule("/api/tracks", "save_track_route", save_track, methods=["POST"])
 
     return app
 
@@ -143,6 +158,116 @@ def get_track(track_id):
         })
     except FileNotFoundError:
         abort(404, description=f"轨迹 {track_id} 不存在")
+
+
+def track_editor_page():
+    """渲染轨迹编辑器页面"""
+    return render_template("track_editor.html")
+
+
+def get_track_coords(track_id):
+    """获取轨迹的完整坐标数据（供轨迹编辑器使用）"""
+    try:
+        track = _config_manager.load_track(track_id)
+    except FileNotFoundError:
+        abort(404, description=f"轨迹 {track_id} 不存在")
+    except Exception as e:
+        # KeyError / JSONDecodeError 等文件损坏场景
+        logger.error("加载轨迹坐标 %s 失败: %s", track_id, e, exc_info=True)
+        return jsonify({"error": f"轨迹文件格式错误: {e}"}), 500
+
+    correction_data = None
+    if track.coordinate_correction is not None:
+        correction_data = {
+            "current_center": {
+                "longitude": track.coordinate_correction.current_center.longitude,
+                "latitude": track.coordinate_correction.current_center.latitude,
+            },
+            "target_center": {
+                "longitude": track.coordinate_correction.target_center.longitude,
+                "latitude": track.coordinate_correction.target_center.latitude,
+            },
+        }
+
+    return jsonify({
+        "id": track.id,
+        "name": track.name,
+        "description": track.description,
+        "base_coordinates": [
+            {"longitude": p.longitude, "latitude": p.latitude}
+            for p in track.base_coordinates
+        ],
+        "coordinate_correction": correction_data,
+    })
+
+
+def save_track():
+    """保存轨迹（轨迹编辑器提交）"""
+    global _tracks_cache
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "无效的请求数据"}), 400
+
+    try:
+        # 解析坐标修正（前端可能传 null）
+        correction = None
+        cc_data = data.get("coordinate_correction")
+        if cc_data:
+            correction = CoordinateCorrection(
+                current_center=GeoPoint(
+                    longitude=cc_data["current_center"]["longitude"],
+                    latitude=cc_data["current_center"]["latitude"],
+                ),
+                target_center=GeoPoint(
+                    longitude=cc_data["target_center"]["longitude"],
+                    latitude=cc_data["target_center"]["latitude"],
+                ),
+            )
+
+        track = TrackDefinition(
+            id=data["id"],
+            name=data["name"],
+            description=data.get("description", ""),
+            base_coordinates=[
+                GeoPoint(longitude=p["longitude"], latitude=p["latitude"])
+                for p in data["base_coordinates"]
+            ],
+            coordinate_correction=correction,
+        )
+
+        filepath, created = _config_manager.save_track(
+            track, overwrite=bool(data.get("overwrite", False))
+        )
+    except KeyError as e:
+        return jsonify({"error": f"请求数据缺少必填字段: {e}"}), 400
+    except TypeError as e:
+        return jsonify({"error": f"请求数据缺少必填字段: {e}"}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except FileExistsError:
+        return jsonify({"error": f"轨迹 {data.get('id', '')} 已存在", "exists": True}), 409
+
+    # 保存后回读验证，确保文件可正常加载且坐标可分析
+    try:
+        reloaded = _config_manager.load_track(track.id)
+        analysis = TrackAnalyzer(reloaded.base_coordinates).analyze_track()
+    except Exception as e:
+        logger.error("保存后校验失败 %s: %s", track.id, e, exc_info=True)
+        return jsonify({"error": f"保存后校验失败: {e}"}), 500
+
+    # 使轨迹列表缓存失效，下次请求时重新加载
+    _tracks_cache = None
+
+    logger.info("轨迹编辑器保存成功: %s (created=%s)", track.id, created)
+    return jsonify({
+        "id": track.id,
+        "name": track.name,
+        "filepath": filepath,
+        "created": created,
+        "distance_meters": round(analysis.total_distance_meters, 1),
+        "num_points": analysis.num_points,
+    }), 201
 
 
 def list_templates():

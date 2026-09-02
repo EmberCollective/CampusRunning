@@ -11,5 +11,9 @@
   "min_daily_km": 2.0,
   "max_daily_km": 8.0,
   "web_host": "0.0.0.0",
-  "web_port": 5000
+  "web_port": 5000,
+  "default_coordinate_correction": {
+    "current_center": {"longitude": 106.671, "latitude": 26.444},
+    "target_center": {"longitude": 106.674613, "latitude": 26.440410}
+  }
 }

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>轨迹编辑器 - 校园跑步数据生成器</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+    <link rel="stylesheet" href="/static/css/track_editor.css">
+</head>
+<body>
+    <header class="editor-header">
+        <a href="/">&larr; 返回生成器</a>
+        <h1>轨迹编辑器</h1>
+    </header>
+
+    <div class="editor-layout">
+        <!-- 左侧工具栏：模式（拖动/画笔）+ 操作（撤销/重做/适配/清空），底部为高德 Key 设置 -->
+        <aside class="tool-bar">
+            <!-- 模式组：互斥选中，决定左键行为 -->
+            <button type="button" id="tool-pan" class="tool-btn active" title="拖动模式：平移地图（左键点击不加点）">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <!-- 拖动/移动 -->
+                    <polyline points="5 9 2 12 5 15"></polyline>
+                    <polyline points="9 5 12 2 15 5"></polyline>
+                    <polyline points="15 19 12 22 9 19"></polyline>
+                    <polyline points="19 9 22 12 19 15"></polyline>
+                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                    <line x1="12" y1="2" x2="12" y2="22"></line>
+                </svg>
+            </button>
+            <button type="button" id="tool-draw" class="tool-btn" title="画笔模式：点击地图放置轨迹点">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <!-- 画笔 -->
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                </svg>
+            </button>
+            <!-- 模式组与操作组分隔线 -->
+            <div class="tool-divider"></div>
+            <button type="button" id="undo-btn" class="tool-btn" disabled title="撤销 (Ctrl+Z)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <!-- 撤销（逆时针旋转） -->
+                    <polyline points="1 4 1 10 7 10"></polyline>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                </svg>
+            </button>
+            <button type="button" id="redo-btn" class="tool-btn" title="重做 (Ctrl+Shift+Z)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <!-- 重做（顺时针旋转） -->
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+            </button>
+            <button type="button" id="fit-btn" class="tool-btn" title="适配视野">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <!-- 全屏四角 -->
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                </svg>
+            </button>
+            <button type="button" id="clear-btn" class="tool-btn" title="清空轨迹">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <!-- 垃圾桶 -->
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+            </button>
+            <!-- 弹性空隙：把齿轮按钮顶到工具栏底部 -->
+            <div class="tool-spacer"></div>
+            <button type="button" id="settings-btn" class="tool-btn" title="高德 Key 设置">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <!-- 设置齿轮 -->
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+        </aside>
+
+        <!-- 中部地图舞台：双容器叠放（Leaflet 三档 + 官方 AMap 档） -->
+        <div class="map-stage">
+            <!-- Leaflet 挂载点：经典 / 新版 / 卫星三档共用 -->
+            <div id="map-leaflet"></div>
+            <!-- 高德官方 JS API 容器：仅「官方」档使用，初始隐藏 -->
+            <div id="map-amap" style="display:none"></div>
+
+            <!-- 左上角：地点搜索（配置高德 Key 后可用） -->
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="搜索地点，如：贵州大学" autocomplete="off">
+                <ul id="search-results"></ul>
+            </div>
+
+            <!-- 右上角：底图四档切换 -->
+            <div class="basemap-switch">
+                <button type="button" id="mode-classic" class="switch-btn active" title="经典地图（默认）">经典</button>
+                <button type="button" id="mode-fresh" class="switch-btn" title="新版地图">新版</button>
+                <button type="button" id="mode-satellite" class="switch-btn" title="卫星影像">卫星</button>
+                <button type="button" id="mode-amap" class="switch-btn" title="官方高德地图（需配置 Key）">官方</button>
+            </div>
+
+            <!-- 左下角：操作提示 -->
+            <div class="map-hint">默认拖动平移；切「画笔」后点击地图加点；顶点可拖动/点击删除；点线段中点小圆插点</div>
+
+            <!-- 全屏加载遮罩：加载官方 JS API 时由 JS 显示，文案可被改写 -->
+            <div id="map-loading" class="map-loading" style="display:none"><span id="map-loading-text">加载高德地图…</span></div>
+        </div>
+
+        <!-- 右侧面板：加载轨迹 / 统计 / 保存 -->
+        <aside class="editor-panel">
+            <!-- 加载轨迹 -->
+            <div class="card">
+                <h3>加载轨迹</h3>
+                <div class="form-group">
+                    <label for="load-track-select">选择轨迹</label>
+                    <select id="load-track-select">
+                        <option value="">选择轨迹...</option>
+                    </select>
+                </div>
+                <div class="btn-group">
+                    <button type="button" id="load-btn" class="btn btn-primary">加载到地图</button>
+                    <button type="button" id="new-btn" class="btn btn-secondary">新建空白</button>
+                </div>
+                <p id="correction-note" class="hint hidden"></p>
+            </div>
+
+            <!-- 统计 -->
+            <div class="card">
+                <h3>统计</h3>
+                <p class="stat-line"><span id="stat-points">0</span> 点数</p>
+                <p class="stat-line"><span id="stat-distance">0.0 m</span> 环线总距离</p>
+            </div>
+
+            <!-- 保存 -->
+            <div class="card">
+                <h3>保存</h3>
+                <form id="save-form">
+                    <div class="form-group">
+                        <label for="track-id">轨迹ID（文件名）</label>
+                        <input type="text" id="track-id" required pattern="[a-z0-9_-]+" title="仅小写字母、数字、下划线、连字符">
+                    </div>
+                    <div class="form-group">
+                        <label for="track-name">名称</label>
+                        <input type="text" id="track-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="track-desc">描述</label>
+                        <input type="text" id="track-desc">
+                    </div>
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary">保存轨迹</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 消息提示 -->
+            <div id="message" class="message"></div>
+        </aside>
+
+        <!-- 高德 Key 设置弹窗：由左侧工具栏底部的齿轮按钮打开 -->
+        <div id="settings-modal" class="modal-mask" style="display:none">
+            <div class="modal-card">
+                <h3>高德地图 Key 设置</h3>
+                <p class="hint">申请「Web端(JS API)」Key 与安全密钥的教程见 <code>docs/amap_key_guide.md</code>；配置后解锁地址搜索与官方地图。</p>
+                <div class="form-group">
+                    <label for="amap-key-input">Key</label>
+                    <input type="text" id="amap-key-input" placeholder="JS API Key">
+                </div>
+                <div class="form-group">
+                    <label for="amap-scode-input">安全密钥</label>
+                    <input type="text" id="amap-scode-input" placeholder="securityJsCode 安全密钥">
+                </div>
+                <!-- 保存/清除结果的提示区域，由 JS 写入 -->
+                <p id="settings-note" class="hint"></p>
+                <div class="btn-group">
+                    <button type="button" id="settings-save-btn" class="btn btn-primary">保存</button>
+                    <button type="button" id="settings-clear-btn" class="btn btn-secondary">清除</button>
+                    <button type="button" id="settings-close-btn" class="btn btn-secondary">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 脚本加载顺序：Leaflet → 两个地图适配器 → 引擎 → 搜索框 → 编辑器主逻辑 -->
+    <script src="/static/vendor/leaflet/leaflet.js"></script>
+    <script src="/static/js/map_adapter_leaflet.js"></script>
+    <script src="/static/js/map_adapter_amap.js"></script>
+    <script src="/static/js/map_engine.js"></script>
+    <script src="/static/js/search_box.js"></script>
+    <script src="/static/js/track_editor.js"></script>
+</body>
+</html>

@@ -35,6 +35,14 @@
                     <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                 </svg>
             </button>
+            <button type="button" id="tool-erase" class="tool-btn" title="橡皮擦模式：点击顶点删除该点">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <!-- 橡皮擦 -->
+                    <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path>
+                    <path d="M22 21H7"></path>
+                    <path d="m5 11 9 9"></path>
+                </svg>
+            </button>
             <!-- 模式组与操作组分隔线 -->
             <div class="tool-divider"></div>
             <button type="button" id="undo-btn" class="tool-btn" disabled title="撤销 (Ctrl+Z)">
@@ -99,7 +107,7 @@
             </div>
 
             <!-- 左下角：操作提示 -->
-            <div class="map-hint">默认拖动平移；切「画笔」后点击地图加点；顶点可拖动/点击删除；点线段中点小圆插点</div>
+            <div class="map-hint">默认拖动平移；「画笔」点击地图加点；「橡皮擦」点击顶点删点；顶点可拖动；线段中点小圆插点</div>
 
             <!-- 全屏加载遮罩：加载官方 JS API 时由 JS 显示，文案可被改写 -->
             <div id="map-loading" class="map-loading" style="display:none"><span id="map-loading-text">加载高德地图…</span></div>

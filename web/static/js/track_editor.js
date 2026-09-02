@@ -13,22 +13,27 @@ let editingTrackId = null;          // 从磁盘加载的轨迹 id；null=新建
 let activeCorrection = null;        // 保存时使用：新建→defaultCorrection；编辑→加载时的原值
 let defaultCorrection = null;       // GET /api/defaults 的 default_coordinate_correction
 let dragStartSnapshot = null;       // 顶点拖拽开始时的快照
-let currentTool = 'pan';            // 当前工具：'pan' 拖动平移（默认）/ 'draw' 画笔加点
+let currentTool = 'pan';            // 当前工具：'pan' 拖动平移（默认）/ 'draw' 画笔加点 / 'erase' 橡皮擦删点
 
 const UNDO_LIMIT = 100;
+
+// 地图舞台元素（工具光标切换、中键临时态都要用）
+const mapStageEl = document.querySelector('.map-stage');
 
 // ===== 工具切换 =====
 function applyToolButtons() {
     document.getElementById('tool-pan').classList.toggle('active', currentTool === 'pan');
     document.getElementById('tool-draw').classList.toggle('active', currentTool === 'draw');
+    document.getElementById('tool-erase').classList.toggle('active', currentTool === 'erase');
 }
 
 function setTool(tool) {
-    if (tool !== 'pan' && tool !== 'draw') return;
+    if (tool !== 'pan' && tool !== 'draw' && tool !== 'erase') return;
     currentTool = tool;
     applyToolButtons();
-    // 地图光标反馈：画笔为十字，拖动用地图默认（抓手）
-    document.querySelector('.map-stage').classList.toggle('draw-mode', tool === 'draw');
+    // 地图光标反馈：画笔为十字，橡皮擦悬停顶点变红（CSS），拖动用地图默认（抓手）
+    mapStageEl.classList.toggle('draw-mode', tool === 'draw');
+    mapStageEl.classList.toggle('erase-mode', tool === 'erase');
 }
 
 // ===== 边界转换（{lat,lng} 与项目 JSON {longitude,latitude} 的唯一转换点）=====
@@ -53,11 +58,15 @@ const HANDLERS = {
         renderTrack();
     },
     onVertexClick(i) {
+        // 仅橡皮擦模式下点击顶点才删点，避免拖动/画笔模式下拖拽顶点时误触删除
+        if (currentTool !== 'erase') return;
         pushUndo();
         points.splice(i, 1);
         renderTrack();
     },
     onMidpointClick(i, mid) {
+        // 橡皮擦模式下点击中点不插点（该模式意图是删除，误触插点很反直觉）
+        if (currentTool === 'erase') return;
         pushUndo();
         points.splice(i + 1, 0, { lat: mid.lat, lng: mid.lng });
         renderTrack();
@@ -329,22 +338,35 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// 中键拖动地图时临时高亮「拖动」按钮并取消十字光标，松开恢复当前工具态
-const mapStageEl = document.querySelector('.map-stage');
-window.addEventListener('mousedown', (e) => {
-    if (e.button !== 1) return;
+// 中键拖动地图时临时高亮「拖动」按钮并取消特殊光标，松开恢复当前工具态
+function showTempPanUI() {
     document.getElementById('tool-pan').classList.add('active');
     document.getElementById('tool-draw').classList.remove('active');
+    document.getElementById('tool-erase').classList.remove('active');
     mapStageEl.classList.remove('draw-mode');
+    mapStageEl.classList.remove('erase-mode');
+}
+
+function restoreToolUI() {
+    applyToolButtons();
+    mapStageEl.classList.toggle('draw-mode', currentTool === 'draw');
+    mapStageEl.classList.toggle('erase-mode', currentTool === 'erase');
+}
+
+window.addEventListener('mousedown', (e) => {
+    if (e.button !== 1) return;
+    showTempPanUI();
 });
 window.addEventListener('mouseup', (e) => {
     if (e.button !== 1) return;
-    applyToolButtons();
-    mapStageEl.classList.toggle('draw-mode', currentTool === 'draw');
+    restoreToolUI();
 });
 
 document.getElementById('tool-pan').addEventListener('click', () => setTool('pan'));
 document.getElementById('tool-draw').addEventListener('click', () => setTool('draw'));
+document.getElementById('tool-erase').addEventListener('click', () => setTool('erase'));
+document.getElementById('undo-btn').addEventListener('click', undo);
+document.getElementById('redo-btn').addEventListener('click', redo);
 document.getElementById('load-btn').addEventListener('click', handleLoad);
 document.getElementById('new-btn').addEventListener('click', handleNew);
 document.getElementById('fit-btn').addEventListener('click', () => {

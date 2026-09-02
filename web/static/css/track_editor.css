@@ -88,6 +88,18 @@
     cursor: crosshair !important;
 }
 
+/* 橡皮擦模式：顶点悬停变红放大提示可删除（!important 用于压过 AMap Marker 的内联 cursor） */
+.map-stage.erase-mode .vertex-marker {
+    cursor: pointer !important;
+}
+
+.map-stage.erase-mode .vertex-marker:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+    /* 用 box-shadow 而非 transform 放大：Leaflet 用内联 transform 定位顶点，样式表 transform 会被压制 */
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.35);
+}
+
 /* 中部地图舞台：承载两个地图容器与全部悬浮控件 */
 .map-stage {
     position: relative;

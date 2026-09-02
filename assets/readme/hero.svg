@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" role="img" aria-labelledby="heroTitle">
+  <title id="heroTitle">校园跑步数据生成器 —— 真实轨迹 · 真实配速 · 一键生成 TCX</title>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0D1117"/>
+      <stop offset="1" stop-color="#11161D"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 画布 -->
+  <rect width="1200" height="300" rx="16" fill="url(#bg)" stroke="#21262D" stroke-width="1"/>
+
+  <!-- 装饰：散布准星 -->
+  <g stroke="#242B36" stroke-width="1.5" stroke-linecap="round">
+    <path d="M600 56 v12 M594 62 h12"/>
+    <path d="M656 236 v12 M650 242 h12"/>
+    <path d="M536 148 v12 M530 154 h12"/>
+  </g>
+
+  <!-- 操场跑道 -->
+  <g>
+    <rect x="712" y="68" width="426" height="164" rx="82" fill="#241412" stroke="#E2472E" stroke-width="1.5" stroke-opacity="0.55"/>
+    <rect x="732" y="88" width="386" height="124" rx="62" fill="none" stroke="#E2472E" stroke-width="1" stroke-opacity="0.22"/>
+    <rect x="752" y="108" width="346" height="84" rx="42" fill="none" stroke="#E2472E" stroke-width="1" stroke-opacity="0.22"/>
+  </g>
+
+  <!-- GPS 轨迹点连线（顺时针） -->
+  <polyline fill="none" stroke="#58A6FF" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"
+    points="742,152 746,136 759,112 773,103 794,98 880,96 990,100 1056,98 1079,102 1092,114 1105,136 1108,150 1105,164 1093,186 1079,198 1056,202 990,200 880,204 794,202 771,198 758,186 746,164"/>
+  <g fill="#58A6FF">
+    <circle cx="746" cy="136" r="2.5"/><circle cx="759" cy="112" r="2.5"/>
+    <circle cx="773" cy="103" r="2.5"/><circle cx="880" cy="96" r="2.5"/>
+    <circle cx="990" cy="100" r="2.5"/><circle cx="1079" cy="102" r="2.5"/>
+    <circle cx="1105" cy="136" r="2.5"/><circle cx="1105" cy="164" r="2.5"/>
+    <circle cx="1093" cy="186" r="2.5"/><circle cx="990" cy="200" r="2.5"/>
+    <circle cx="880" cy="204" r="2.5"/><circle cx="771" cy="198" r="2.5"/>
+    <circle cx="758" cy="186" r="2.5"/>
+  </g>
+
+  <!-- 起点标记 -->
+  <circle cx="742" cy="152" r="11" fill="none" stroke="#3FB950" stroke-width="1.5" opacity="0.45"/>
+  <circle cx="742" cy="152" r="6" fill="#3FB950"/>
+  <circle cx="742" cy="152" r="2.2" fill="#0D1117"/>
+
+  <!-- 标题区 -->
+  <text x="64" y="124" font-family="-apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',system-ui,sans-serif"
+        font-size="46" font-weight="700" fill="#E6EDF3" letter-spacing="2">校园跑步数据生成器</text>
+  <text x="64" y="170" font-family="-apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',system-ui,sans-serif"
+        font-size="21" fill="#8B949E" letter-spacing="1">真实轨迹 · 真实配速 · 一键生成 TCX</text>
+
+  <!-- 命令行示例 -->
+  <g font-family="'SF Mono','JetBrains Mono',Menlo,Consolas,'Courier New',monospace" font-size="18">
+    <text x="64" y="224" fill="#3FB950">$</text>
+    <text x="86" y="224" fill="#A5B4C0">python main.py single --distance 5.0</text>
+  </g>
+</svg>

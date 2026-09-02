@@ -1,140 +1,88 @@
-# 校园跑步数据生成器
+<div align="center">
+  <img src="assets/readme/hero.svg" alt="校园跑步数据生成器 —— 真实轨迹 · 真实配速 · 一键生成 TCX" width="100%">
+  <p>
+    <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
+    <img alt="Python 3.13+" src="https://img.shields.io/badge/Python-3.13%2B-3776AB?logo=python&logoColor=white">
+    <a href="https://github.com/YuShenLiu06/CampusRunning"><img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen"></a>
+  </p>
+</div>
 
-**版本 2.0.0** - 重构发布
+> ⚠️ **免责声明**：本项目仅供学习交流与技术研究所用，请自觉遵守所在学校及运动平台的相关规定。因使用本工具产生的一切后果，由使用者自行承担。
 
-Keep校园跑的终极方案，理论上支持所有支持导入tcx文件的运动软件
+## 天下苦校园跑久矣
 
-一个专业的TCX格式跑步数据自动生成工具，支持CLI和Web两种使用方式。
+早起打卡、里程配速，一样不能少——天下学子苦其久矣。
 
-## 简述
+社区已有不少虚拟定位方案，各有取舍；本工具走了另一条路：**生成带真实操场轨迹与真实配速的 TCX 文件，导入运动软件即可使用**。
 
-作者深陷 gzu 校园跑侵扰，同时发现社区中大部分为基于虚拟定位的解决方案，不能满足我本身要求，故开发了这个工具并开源。
+作者坚持为爱发电，愿普度天下苦校园跑的学子。若这个项目帮到了你，点亮 Star 便是对作者最好的鼓励 ✨。
 
-## 文件使用方法
+## 它能做什么
 
-见 [数据生成后使用指南](guied.md)
+三种生成模式，覆盖从「补一次记录」到「整学期一次配齐」：
 
-## 项目概述
+| 模式 | 命令 | 适用场景 |
+|------|------|----------|
+| 每日范围 | `daily` | 给定日期区间，每天在公里数范围内随机生成 |
+| 总公里数 | `total` | 给定总里程，自动分配到每天（周末可为平日 1.5 倍，支持每周休息日） |
+| 单文件 | `single` | 为特定日期补一条指定里程的记录 |
 
-本项目提供完整的TCX（Training Center XML）格式文件生成解决方案，支持：
-- 根据时间范围和每日公里数范围生成TCX文件
-- 根据时间和总公里数生成匹配数据的TCX文件
-- 生成单个TCX文件
-- 自定义配速、总公里数、跑步开始时间范围
-- 真实轨迹生成：基于操场坐标的顺时针跑步轨迹
+每条记录由四层机制撑起「真实感」：
 
-## 功能特点
+- **真实轨迹**——基于操场坐标生成顺时针 GPS 轨迹点，内置多条校园轨迹，也可自行添加
+- **真实配速**——热身 → 稳定 → 疲劳 → 冲刺四阶段配速波动，拒绝匀速直线
+- **坐标修正**——GCJ-02 系统性偏移自动校正，轨迹落在它该在的位置
+- **可视化轨迹编辑器**——Web 内在高德地图上标点绘制轨迹，一键保存为配置
 
-### 核心功能
-- 灵活的时间范围设置：支持自定义开始和结束日期
-- 智能距离计算：周末距离是周内的1.5倍
-- 真实配速模拟：可自定义配速范围，支持配速波动
-- 多种生成模式：支持按日范围、总公里数和单文件生成
-- 真实轨迹生成：基于操场坐标的顺时针跑步轨迹
-
-### 扩展功能
-- **多轨迹支持**：通过JSON配置文件定义多条轨迹
-- **预设模板**：保存常用配置为模板，一键应用
-- **Web界面**：浏览器可视化操作，无需记忆CLI参数
-- **坐标修正**：修正GPS系统性偏移
-- **配速波动**：4阶段真实配速模拟
-
-## 项目结构
-
-```
-campus_running_data_generation/
-├── main.py                      # CLI入口
-├── app.py                      # Web应用入口
-├── config/                      # 配置文件
-│   ├── tracks/                 # 轨迹定义
-│   │   └── campus_default.json
-│   ├── templates/            # 预设模板
-│   │   ├── easy_run.json
-│   │   ├── long_run.json
-│   │   └── interval.json
-│   └── default_settings.json  # 默认设置
-├── src/                       # 源代码
-│   ├── core/                  # 核心模块
-│   │   ├── __init__.py
-│   │   ├── models.py         # 数据模型
-│   │   ├── track_analyzer.py # 轨迹分析
-│   │   ├── track_generator.py # 轨迹生成
-│   │   ├── pace_fluctuator.py # 配速波动
-│   │   ├── coordinate_corrector.py # 坐标修正
-│   │   └── helpers.py        # 工具函数
-│   ├── planners/            # 规划策略
-│   │   ├── __init__.py
-│   │   ├── daily_planner.py # 每日范围规划
-│   │   ├── total_km_planner.py # 总公里数规划
-│   │   └── single_planner.py # 单文件规划
-│   ├── exporters/            # 导出格式
-│   │   ├── __init__.py
-│   │   ├── base.py          # 导出器基类
-│   │   └── tcx_exporter.py  # TCX导出
-│   ├── config_manager.py     # 配置管理
-│   ├── template_manager.py   # 模板管理
-│   └── generation_engine.py  # 生成引擎
-├── web/                      # Web应用
-│   ├── routes.py             # API路由
-│   ├── templates/            # HTML模板
-│   └── static/               # 静态资源
-├── docs/                     # 文档
-│   ├── architecture.md
-│   ├── track_format.md
-│   └── api_reference.md
-└── output/                  # 生成文件输出
-```
-
-## 安装
-
-```bash
-# CLI版本（无需额外依赖）
-python main.py --help
-
-# Web界面（需要安装Flask）
-pip install flask
-python app.py
-```
+CLI 与 Web 双入口，生成结果一致。
 
 ## 快速开始
 
-### CLI模式
+要求 Python 3.13+。
+
+### CLI
 
 ```bash
-# 列出可用轨迹和模板
-python main.py --list-tracks
-python main.py --list-templates
-
-# 每日范围生成
-python main.py daily --start-date 2025-01-01 --end-date 2025-01-07 --min-km 2 --max-km 5
-
-# 总公里数生成
-python main.py total --start-date 2025-01-01 --end-date 2025-01-31 --total-km 100
-
-# 单文件生成
+# 最快验证：生成一次 5 km 记录
 python main.py single --date 2025-01-01 --distance 5.0
 
-# 使用模板
-python main.py daily --template easy_run --start-date 2025-01-01 --end-date 2025-01-07 --min-km 2 --max-km 5
+# 整月按每日范围生成
+python main.py daily --start-date 2025-01-01 --end-date 2025-01-31 --min-km 2 --max-km 5
 
-# 指定轨迹
-python main.py single --track campus_default --date 2025-01-01 --distance 5.0
+# 目标 100 km，自动分配到每天
+python main.py total --start-date 2025-01-01 --end-date 2025-01-31 --total-km 100
+
+# 组合：模板 + 指定轨迹 + 打包 ZIP
+python main.py daily --template easy_run --track campus_default --zip \
+  --start-date 2025-01-01 --end-date 2025-01-07 --min-km 2 --max-km 5
+
+# 查看可用轨迹 / 模板 / 完整参数
+python main.py --list-tracks
+python main.py --list-templates
 ```
 
-### Web模式
+完整参数说明见 [API 参考](docs/api_reference.md)。
+
+### Web
 
 ```bash
 pip install flask
-python app.py
+python app.py    # 浏览器访问 http://127.0.0.1:5000
 ```
 
-然后访问 http://127.0.0.1:5000
+表单化操作，支持模板保存与应用、轨迹编辑器、结果 ZIP 下载。
 
-## 配置说明
+### 导入手机
 
-### 添加新轨迹
+生成结果如何导入 Keep，见 [Keep 导入教程（含截图）](guied.md)。TCX 是通用格式，Garmin Training Center、GoldenCheetah、Strava 等软件也可直接打开。
 
-本项目使用**高德坐标系（GCJ-02）**，在 `config/tracks/` 创建新JSON文件：
+## 配置
+
+### 添加轨迹
+
+**方式一：Web 轨迹编辑器（推荐）**——启动 Web 后从首页进入「轨迹编辑器」，在高德地图上标点绘制轨迹、实时查看环线距离，保存后直接写入 `config/tracks/`，无需手工拾取坐标。「官方」地图档需要配置高德 JS API Key，申请步骤见[高德 Key 申请教程](docs/amap_key_guide.md)。
+
+**方式二：手工编辑 JSON**——在 `config/tracks/` 下新建文件：
 
 ```json
 {
@@ -152,64 +100,41 @@ python app.py
 }
 ```
 
-> **说明**：`coordinate_correction` 中的 `current_center` 是轨迹坐标的中心点，`target_center` 是该轨迹在地图上的实际位置中心。只需填入高德坐标的实际值，系统会自动处理偏移校正。
-```
+本项目使用**高德坐标系（GCJ-02）**。`coordinate_correction` 中的 `current_center` 是轨迹坐标自身的中心点，`target_center` 是该轨迹在地图上的实际位置中心——只需填入高德坐标的实际值，系统会自动完成偏移校正。字段说明见[轨迹配置格式](docs/track_format.md)。
 
-### 创建模板
+### 使用模板
 
-模板用于保存和复用配置，支持多模式配置（每日范围/总公里数/单文件）。
+模板把配速、里程、休息日等常用配置存成 JSON，一键复用：
 
-**在Web界面中创建：**
-1. 填写好表单配置
-2. 点击"导出模板"按钮
-3. 在弹出窗口中输入模板名称
-4. 点击"导出"下载 JSON 文件
+- **Web 内创建**：填好表单 → 「导出模板」→ 命名下载
+- **手工创建**：放入 `config/templates/`，格式见[模板创建指南](config/templates/TEMPLATE_GUIDE.md)
+- **应用**：CLI 加 `--template easy_run`，或在 Web 中下拉选择
 
-**在 config/templates/ 中创建：**
-```json
-{
-  "id": "my_template",
-  "name": "我的模板",
-  "description": "日常训练",
-  "track_id": "",
-  "daily_config": {
-    "min_pace": 6.5,
-    "max_pace": 7.5,
-    "min_km": 2.0,
-    "max_km": 5.0,
-    "enable_pace_fluctuation": true
-  },
-  "total_config": {
-    "min_pace": 6.5,
-    "max_pace": 7.5,
-    "total_km": 50,
-    "weekend_factor": 1.5,
-    "min_daily_km": 2.0,
-    "max_daily_km": 8.0,
-    "rest_days_per_week": 1,
-    "enable_pace_fluctuation": true
-  }
-}
-```
+## 项目结构
 
-详细说明请参考 [模板创建指南](config/templates/TEMPLATE_GUIDE.md)。
+| 位置 | 职责 |
+|------|------|
+| `main.py` / `app.py` | CLI 与 Web 入口 |
+| `src/core/` | 轨迹分析与生成、配速波动、坐标修正、数据模型 |
+| `src/planners/` | 各生成模式的距离规划策略 |
+| `src/exporters/` | TCX 导出（接口抽象，可扩展 GPX / FIT） |
+| `src/*.py` | 配置管理、模板管理、生成引擎编排 |
+| `web/` | Flask 路由、页面与静态资源 |
+| `config/` | 轨迹定义、预设模板、默认设置 |
+
+架构与数据流详见[架构说明](docs/architecture.md)。
 
 ## 文档
 
 - [架构说明](docs/architecture.md)
 - [轨迹配置格式](docs/track_format.md)
-- [API参考](docs/api_reference.md)
+- [API 参考](docs/api_reference.md)
+- [模板创建指南](config/templates/TEMPLATE_GUIDE.md)
+- [高德 Key 申请教程](docs/amap_key_guide.md)
+- [Keep 导入教程](guied.md)
 
-## 验证生成的文件
+## 许可
 
-生成的文件可在以下软件中打开：
-- Garmin Training Center
-- GoldenCheetah
-- Strava（上传）
-- 其他支持TCX格式的运动数据分析软件
+[MIT](LICENSE) © YuShen
 
-## 作者
-
-YuShen
-
-> 如果喜欢，那么点亮个start吧！✨，这对我很重要！如果有任何问题或建议，欢迎提交issue或PR！😊
+为爱发电，普度众生。若这个项目替你跑过一公里，欢迎点亮 Star ✨；Issue 与 PR 一律欢迎。

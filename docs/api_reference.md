@@ -29,7 +29,7 @@ python main.py daily \
 
 可选参数：
 - `--min-pace` / `--max-pace` - 配速范围
-- `--start-hour-min` / `--start-hour-max` - 开始时间范围
+- `--start-time-min` / `--start-time-max` - 开始时间范围
 - `--output-dir` - 输出目录
 - `--no-track` - 不生成轨迹点
 - `--no-correction` - 不应用坐标修正

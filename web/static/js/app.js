@@ -54,9 +54,9 @@ async function loadTracks() {
 
         const tracks = await response.json();
         const select = document.getElementById('track-select');
-        select.innerHTML = tracks.map(t =>
-            `<option value="${t.id}">${t.name} (${t.lap_distance_km}km/圈)</option>`
-        ).join('');
+        // 用 DOM API 构建（name 来自 JSON 文件的任意文本，禁止拼入 innerHTML 防存储型 XSS）
+        select.replaceChildren();
+        tracks.forEach(t => select.add(new Option(`${t.name} (${t.lap_distance_km}km/圈)`, t.id)));
     } catch (error) {
         showMessage('加载轨迹列表失败: ' + error.message, 'error');
     }

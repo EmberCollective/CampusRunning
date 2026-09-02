@@ -206,7 +206,7 @@ def save_track():
     global _tracks_cache
 
     data = request.get_json()
-    if not data:
+    if not isinstance(data, dict):
         return jsonify({"error": "无效的请求数据"}), 400
 
     try:
@@ -263,7 +263,8 @@ def save_track():
     return jsonify({
         "id": track.id,
         "name": track.name,
-        "filepath": filepath,
+        # 仅返回相对路径，避免向客户端暴露服务端目录结构
+        "filepath": f"config/tracks/{os.path.basename(filepath)}",
         "created": created,
         "distance_meters": round(analysis.total_distance_meters, 1),
         "num_points": analysis.num_points,

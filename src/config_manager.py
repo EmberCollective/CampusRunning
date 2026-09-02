@@ -229,10 +229,12 @@ class ConfigManager:
         # created 需在写入前判断文件是否已存在
         created = not os.path.exists(filepath)
 
-        # 确保目录存在后写入
+        # 确保目录存在后写入（先写临时文件再原子替换，避免覆盖时写坏原轨迹文件）
         os.makedirs(self._tracks_dir, exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as fh:
+        tmp_path = filepath + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as fh:
             json.dump(track_data, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, filepath)
 
         logger.info("轨迹已保存: %s (%s)", track.name, track.id)
 

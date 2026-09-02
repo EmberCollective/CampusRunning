@@ -34,8 +34,16 @@ function loadAmap(key, securityJsCode) {
         if (!_loaderScriptAdded) {
             const script = document.createElement('script');
             script.src = 'https://webapi.amap.com/loader.js';
-            script.onload = startLoad;
+            // loader.js 注入同样加 15 秒超时：请求悬挂（无 onload/onerror）时不能永久锁死引擎
+            const scriptTimeout = setTimeout(() => {
+                _loadPromise = null;
+                _loaderScriptAdded = false;
+                reject(new Error('连接高德服务超时'));
+            }, 15000);
+            const clearScriptTimeout = () => clearTimeout(scriptTimeout);
+            script.onload = () => { clearScriptTimeout(); startLoad(); };
             script.onerror = () => {
+                clearScriptTimeout();
                 _loadPromise = null;
                 _loaderScriptAdded = false;  // 注入失败允许重试
                 reject(new Error('无法连接高德服务'));

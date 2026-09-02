@@ -18,11 +18,15 @@ let currentTool = 'pan';            // 当前工具：'pan' 拖动平移（默�
 const UNDO_LIMIT = 100;
 
 // ===== 工具切换 =====
+function applyToolButtons() {
+    document.getElementById('tool-pan').classList.toggle('active', currentTool === 'pan');
+    document.getElementById('tool-draw').classList.toggle('active', currentTool === 'draw');
+}
+
 function setTool(tool) {
     if (tool !== 'pan' && tool !== 'draw') return;
     currentTool = tool;
-    document.getElementById('tool-pan').classList.toggle('active', tool === 'pan');
-    document.getElementById('tool-draw').classList.toggle('active', tool === 'draw');
+    applyToolButtons();
     // 地图光标反馈：画笔为十字，拖动用地图默认（抓手）
     document.querySelector('.map-stage').classList.toggle('draw-mode', tool === 'draw');
 }
@@ -139,9 +143,9 @@ async function refreshTrackSelect() {
 
         const tracks = await response.json();
         const select = document.getElementById('load-track-select');
-        select.innerHTML = '<option value="">选择轨迹...</option>' + tracks.map(t =>
-            `<option value="${t.id}">${t.name} (${t.lap_distance_km} km/圈)</option>`
-        ).join('');
+        // 用 DOM API 构建（name 来自 JSON 文件的任意文本，禁止拼入 innerHTML 防存储型 XSS）
+        select.replaceChildren(new Option('选择轨迹...', ''));
+        tracks.forEach(t => select.add(new Option(`${t.name} (${t.lap_distance_km} km/圈)`, t.id)));
         if (editingTrackId) select.value = editingTrackId;
     } catch (error) {
         showMessage('加载轨迹列表失败: ' + error.message, 'error');
@@ -310,6 +314,8 @@ function disableButtons(disabled) {
 
 // ===== 事件绑定 =====
 document.addEventListener('keydown', (e) => {
+    // 输入框内保留浏览器原生文本撤销，不劫持为轨迹 undo
+    if (e.target.closest('input, textarea, select')) return;
     if (!(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();
     const isUndo = key === 'z' && !e.shiftKey;
@@ -321,6 +327,20 @@ document.addEventListener('keydown', (e) => {
         e.preventDefault();
         redo();
     }
+});
+
+// 中键拖动地图时临时高亮「拖动」按钮并取消十字光标，松开恢复当前工具态
+const mapStageEl = document.querySelector('.map-stage');
+window.addEventListener('mousedown', (e) => {
+    if (e.button !== 1) return;
+    document.getElementById('tool-pan').classList.add('active');
+    document.getElementById('tool-draw').classList.remove('active');
+    mapStageEl.classList.remove('draw-mode');
+});
+window.addEventListener('mouseup', (e) => {
+    if (e.button !== 1) return;
+    applyToolButtons();
+    mapStageEl.classList.toggle('draw-mode', currentTool === 'draw');
 });
 
 document.getElementById('tool-pan').addEventListener('click', () => setTool('pan'));
@@ -361,4 +381,5 @@ document.getElementById('save-form').addEventListener('submit', handleSaveSubmit
     updateCorrectionNote();
     updateButtonStates();
     updateStats();
+    renderTrack();  // 空渲染一次：向地图适配器注入事件回调，否则刷新后首次点击不会加点
 })();

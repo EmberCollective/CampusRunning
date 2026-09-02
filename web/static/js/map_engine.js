@@ -30,6 +30,7 @@ const MapEngine = {
     mode: 'classic',               // 当前底图模式
     adapters: { leaflet: null, amap: null },  // amap 懒建（需 Key + 在线加载）
     loading: false,                // 官方引擎加载防重入
+    _dragEnabled: true,            // 拖动平移状态（画笔工具禁用），切换档位后需重放
 
     init() {
         this.adapters.leaflet = new LeafletAdapter('map-leaflet');
@@ -56,6 +57,7 @@ const MapEngine = {
             this.adapters.leaflet.activate(view);
         }
         this.adapters.leaflet.setBaseMode(mode);
+        this.adapters.leaflet.setDragEnabled(this._dragEnabled);
         this.mode = mode;
         this._updateSwitchStates();
         renderTrack();  // 后台引擎覆盖物不维护，切换后必须重渲染
@@ -74,6 +76,7 @@ const MapEngine = {
             document.getElementById('map-leaflet').style.display = 'none';
             document.getElementById('map-amap').style.display = '';
             this.adapters.amap.activate(view);
+            this.adapters.amap.setDragEnabled(this._dragEnabled);
             this.mode = 'amap';
             this._updateSwitchStates();
             renderTrack();
@@ -89,6 +92,7 @@ const MapEngine = {
             document.getElementById('map-leaflet').style.display = 'none';
             document.getElementById('map-amap').style.display = '';  // 容器必须先可见再建实例
             this.adapters.amap = new AmapAdapter(AMap, 'map-amap', view);
+            this.adapters.amap.setDragEnabled(this._dragEnabled);
             this.mode = 'amap';
             this._updateSwitchStates();
             renderTrack();
@@ -116,6 +120,12 @@ const MapEngine = {
 
     flyTo(lat, lng, zoom) {
         this.activeAdapter().flyTo(lat, lng, zoom);
+    },
+
+    // 拖动平移开关（画笔工具禁用）：存值并转发当前活跃引擎，切换档位后重放
+    setDragEnabled(enabled) {
+        this._dragEnabled = enabled;
+        this.activeAdapter().setDragEnabled(enabled);
     },
 
     // ===== 切换按钮 =====

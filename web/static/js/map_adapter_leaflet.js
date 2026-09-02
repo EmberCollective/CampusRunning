@@ -74,6 +74,15 @@ class LeafletAdapter {
         return { lat: c.lat, lng: c.lng, zoom: this.map.getZoom() };
     }
 
+    // 拖动平移开关（画笔模式下禁用，避免按住左键移动被当成拖图）
+    setDragEnabled(enabled) {
+        if (enabled) {
+            this.map.dragging.enable();
+        } else {
+            this.map.dragging.disable();
+        }
+    }
+
     // 平滑飞行到指定位置
     flyTo(lat, lng, zoom) {
         this.map.flyTo([lat, lng], zoom);

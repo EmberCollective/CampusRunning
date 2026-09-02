@@ -31,6 +31,8 @@ function setTool(tool) {
     if (tool !== 'pan' && tool !== 'draw' && tool !== 'erase') return;
     currentTool = tool;
     applyToolButtons();
+    // 画笔模式下锁定地图拖动：按住左键移动不再被判成拖图（平移请切回拖动模式）
+    MapEngine.setDragEnabled(tool !== 'draw');
     // 地图光标反馈：画笔为十字，橡皮擦悬停顶点变红（CSS），拖动用地图默认（抓手）
     mapStageEl.classList.toggle('draw-mode', tool === 'draw');
     mapStageEl.classList.toggle('erase-mode', tool === 'erase');
@@ -343,29 +345,33 @@ document.addEventListener('keydown', (e) => {
 });
 
 // 中键拖动地图时临时高亮「拖动」按钮并取消特殊光标，松开恢复当前工具态
+// 画笔模式下地图拖动被锁定，中键按下时临时解锁（capture 阶段先于引擎的拖动监听，时序可行）
 function showTempPanUI() {
     document.getElementById('tool-pan').classList.add('active');
     document.getElementById('tool-draw').classList.remove('active');
     document.getElementById('tool-erase').classList.remove('active');
     mapStageEl.classList.remove('draw-mode');
     mapStageEl.classList.remove('erase-mode');
+    MapEngine.setDragEnabled(true);
 }
 
 function restoreToolUI() {
     applyToolButtons();
     mapStageEl.classList.toggle('draw-mode', currentTool === 'draw');
     mapStageEl.classList.toggle('erase-mode', currentTool === 'erase');
+    // 恢复当前工具对应的拖动状态（画笔=锁定；restoreToolUI 幂等）
+    MapEngine.setDragEnabled(currentTool !== 'draw');
 }
 
 window.addEventListener('mousedown', (e) => {
     if (e.button !== 1) return;
     showTempPanUI();
-});
+}, true);  // capture：确保在地图引擎的拖动监听之前解锁
 window.addEventListener('mouseup', (e) => {
     if (e.button !== 1) return;
     restoreToolUI();
-});
-// 中键拖出窗口外松开时收不到 mouseup，鼠标离开窗口即恢复工具态（restoreToolUI 幂等）
+}, true);
+// 中键拖出窗口外松开时收不到 mouseup，鼠标离开窗口即恢复工具态
 document.documentElement.addEventListener('mouseleave', restoreToolUI);
 
 document.getElementById('tool-pan').addEventListener('click', () => setTool('pan'));

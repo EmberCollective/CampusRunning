@@ -108,6 +108,11 @@ class AmapAdapter {
         return { lat: c.getLat(), lng: c.getLng(), zoom: this.map.getZoom() };
     }
 
+    // 拖动平移开关（画笔模式下禁用，避免按住左键移动被当成拖图）
+    setDragEnabled(enabled) {
+        this.map.setStatus({ dragEnable: enabled });
+    }
+
     // 定位到指定位置
     flyTo(lat, lng, zoom) {
         this.map.setZoomAndCenter(zoom, [lng, lat]);

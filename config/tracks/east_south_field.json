@@ -1,0 +1,41 @@
+{
+  "id": "east_south_field",
+  "name": "东区南操场轨迹图",
+  "description": "东区南操场跑道",
+  "base_coordinates": [
+    {"longitude": 106.670889, "latitude": 26.420388},
+    {"longitude": 106.670925, "latitude": 26.420506},
+    {"longitude": 106.670971, "latitude": 26.420679},
+    {"longitude": 106.671024, "latitude": 26.420888},
+    {"longitude": 106.671085, "latitude": 26.42113},
+    {"longitude": 106.671141, "latitude": 26.421262},
+    {"longitude": 106.671259, "latitude": 26.421362},
+    {"longitude": 106.671309, "latitude": 26.421383},
+    {"longitude": 106.671397, "latitude": 26.421406},
+    {"longitude": 106.6715, "latitude": 26.421404},
+    {"longitude": 106.671594, "latitude": 26.421382},
+    {"longitude": 106.671715, "latitude": 26.421306},
+    {"longitude": 106.671778, "latitude": 26.421233},
+    {"longitude": 106.671813, "latitude": 26.421165},
+    {"longitude": 106.671822, "latitude": 26.421071},
+    {"longitude": 106.6718, "latitude": 26.420975},
+    {"longitude": 106.671768, "latitude": 26.420845},
+    {"longitude": 106.671713, "latitude": 26.420636},
+    {"longitude": 106.671686, "latitude": 26.420529},
+    {"longitude": 106.671636, "latitude": 26.420332},
+    {"longitude": 106.671612, "latitude": 26.420247},
+    {"longitude": 106.671572, "latitude": 26.420177},
+    {"longitude": 106.671483, "latitude": 26.420103},
+    {"longitude": 106.671382, "latitude": 26.420061},
+    {"longitude": 106.671256, "latitude": 26.420041},
+    {"longitude": 106.67117, "latitude": 26.420053},
+    {"longitude": 106.671118, "latitude": 26.420069},
+    {"longitude": 106.671005, "latitude": 26.420142},
+    {"longitude": 106.670936, "latitude": 26.420218},
+    {"longitude": 106.6709, "latitude": 26.420307}
+  ],
+  "coordinate_correction": {
+    "current_center": {"longitude": 106.6713753, "latitude": 26.42071},
+    "target_center": {"longitude": 106.674613, "latitude": 26.417410}
+  }
+}

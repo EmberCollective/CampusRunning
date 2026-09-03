@@ -353,7 +353,7 @@ function initForms() {
 // 显示导出模态框
 function showExportModal() {
     document.getElementById('export-template-name').value = '';
-    document.getElementById('export-modal').style.display = 'block';
+    document.getElementById('export-modal').style.display = 'flex';
 }
 
 // 隐藏导出模态框

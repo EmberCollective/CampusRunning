@@ -33,3 +33,5 @@ Thumbs.db
 # 排除 .claude 本地配置，但保留项目级 skills（供 AI 代理使用）
 .claude/*
 !.claude/skills/
+# Claude Code 会话临时文件（截图等）
+.claude-tmp/

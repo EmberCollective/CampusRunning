@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPEC PREVIEW v4 — PRO WORKBENCH · 校园跑步数据生成器</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* ============================================================
+   PULSE v4 — 专业工作台 PRO WORKBENCH (LIGHT)
+   本稿单页纵排：01 生成器（工作台布局）→ 02 轨迹编辑器 → 03 组件规范
+   布局逻辑：左栏配置（数据源/模式）· 主区参数执行 · 下方输出
+   ============================================================ */
+:root {
+    --bg:      #F4F5F7;
+    --surface: #FFFFFF;
+    --surface-2:#F0F2F5;
+    --field:   #FFFFFF;
+    --border:  #E2E5EA;
+    --border-2:#CBD1D9;
+    --text:    #1B1F27;
+    --text-2:  #5B6472;
+    --text-3:  #98A0AC;
+    --accent:      #3B5BD7;
+    --accent-hover:#2F4CC4;
+    --accent-dim:  rgba(59,91,215,.09);
+    --danger:  #D64545;
+    --danger-dim: rgba(214,69,69,.08);
+    --success: #217A4B;
+    --success-dim: rgba(33,122,75,.08);
+
+    --sans: 'Noto Sans SC', -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', 'Courier New', monospace;
+    --radius: 6px;
+    --radius-sm: 4px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13.5px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--accent); color: #fff; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #C6CCD4; border-radius: 5px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: #AEB6C0; }
+
+.mono-tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .06em;
+    color: var(--text-3);
+}
+.mono-tag b { color: var(--accent); font-weight: 600; }
+
+/* 文档区块分隔标题（设计稿导航） */
+.doc-sep {
+    display: flex; align-items: center; gap: 14px;
+    padding: 34px 0 16px;
+    max-width: 1160px; margin: 0 auto;
+}
+.doc-sep .doc-no {
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding: 3px 9px;
+    border-radius: 4px;
+}
+.doc-sep h2 { font-size: 16px; font-weight: 700; }
+.doc-sep .mono-tag { margin-left: auto; }
+
+/* ============================================================
+   通用组件
+   ============================================================ */
+.panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+.section-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+}
+.section-head h2 { font-size: 12.5px; font-weight: 700; }
+.section-head .mono-tag { margin-left: auto; }
+.section-body { padding: 14px; }
+
+.group-label {
+    font-family: var(--mono);
+    font-size: 10px; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 9px;
+    display: flex; align-items: center; gap: 8px;
+}
+.group-label .step-no {
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9.5px;
+}
+
+/* 表单 */
+.form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 14px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group.full-width { grid-column: 1 / -1; }
+.form-group label { font-size: 12px; font-weight: 500; color: var(--text-2); }
+.form-group input, .form-group select {
+    padding: 7px 10px;
+    background: var(--field);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    transition: border-color .12s, box-shadow .12s;
+    width: 100%;
+}
+.form-group input::placeholder { color: var(--text-3); }
+.form-group input:hover, .form-group select:hover { border-color: #B4BCC7; }
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.form-group input::-webkit-calendar-picker-indicator { opacity: .55; cursor: pointer; }
+
+/* 按钮 */
+.btn-group { display: flex; gap: 8px; margin-top: 14px; }
+.btn {
+    flex: 1;
+    padding: 8px 18px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    font-family: var(--sans);
+    font-size: 13px; font-weight: 500;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+.btn-secondary { background: var(--surface); color: var(--text-2); border-color: var(--border-2); }
+.btn-secondary:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.btn-sm { flex: none; padding: 5px 13px; font-size: 12px; }
+
+/* ============================================================
+   生成器：工作台布局
+   ============================================================ */
+.topbar {
+    position: sticky; top: 0; z-index: 900;
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 20px;
+    height: 48px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+.app-icon {
+    width: 22px; height: 22px; flex: none;
+    background: var(--accent);
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+}
+.topbar h1 { font-size: 13.5px; font-weight: 700; }
+.topbar .mono-tag { margin-left: 2px; }
+.topbar .topbar-side { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.link-btn {
+    font-size: 12px;
+    color: var(--text-2);
+    padding: 5px 11px;
+    background: var(--surface);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    transition: all .12s;
+}
+.link-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+.gen-frame { max-width: 1160px; margin: 0 auto; padding: 18px 20px 8px; }
+
+/* 工作台主网格：左配置 280px + 主区自适应 */
+.workbench {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 14px;
+    align-items: start;
+}
+
+/* 左配置栏 */
+.cfg-side { display: flex; flex-direction: column; gap: 14px; }
+.cfg-side .panel-sec { padding: 14px; }
+.setting-item { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.setting-item:last-child { margin-bottom: 0; }
+.setting-item label { font-size: 12px; font-weight: 500; color: var(--text-2); }
+.setting-item select {
+    padding: 8px 10px;
+    background: var(--field);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono); font-size: 12.5px;
+    cursor: pointer;
+    transition: border-color .12s, box-shadow .12s;
+}
+.setting-item select:hover { border-color: #B4BCC7; }
+.setting-item select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+
+/* 模式选择：垂直选项列表（沿用 tab-button 类名，Phase B 结构平移） */
+.mode-list { display: flex; flex-direction: column; gap: 6px; }
+.tab-button {
+    display: block; width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
+    font-family: var(--sans);
+    font-size: 12.5px; font-weight: 500;
+    cursor: pointer;
+    transition: all .12s;
+}
+.tab-button .mode-name { display: flex; align-items: center; gap: 8px; font-weight: 500; color: inherit; }
+.tab-button .mode-name .idx {
+    font-family: var(--mono); font-size: 9.5px; font-weight: 600;
+    color: var(--text-3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 5px;
+    line-height: 1.7;
+}
+.tab-button .mode-desc {
+    display: block;
+    font-size: 11px; font-weight: 400;
+    color: var(--text-3);
+    margin-top: 3px;
+    padding-left: 27px;
+}
+.tab-button:hover { border-color: var(--border-2); color: var(--text); background: var(--surface-2); }
+.tab-button.active {
+    background: var(--accent-dim);
+    border-color: rgba(59,91,215,.35);
+    border-left: 2px solid var(--accent);
+    color: var(--accent);
+}
+.tab-button.active .mode-name .idx { color: var(--accent); border-color: rgba(59,91,215,.35); }
+.tab-button.active .mode-desc { color: var(--text-2); }
+
+.mode-content { display: none; }
+.mode-content.active { display: block; }
+
+/* 主区：参数 + 执行 */
+.param-main .section-body { padding: 16px; }
+.param-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 14px; }
+.run-bar {
+    display: flex; gap: 8px; margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+.run-bar .btn { flex: none; min-width: 130px; }
+.run-bar .btn-primary { flex: 1; }
+.run-note { margin-left: auto; align-self: center; }
+
+/* 输出区 */
+.output-sec { margin-top: 14px; }
+.results-section { display: none; }
+.results-section.show { display: block; }
+.results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 12px; }
+.results-header h3 { font-size: 12.5px; font-weight: 700; }
+.results-table { width: 100%; border-collapse: collapse; }
+.results-table th {
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-3);
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+}
+.results-table td {
+    font-family: var(--mono); font-size: 12px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+}
+.results-table tbody tr { transition: background .1s; }
+.results-table tbody tr:hover { background: var(--surface-2); }
+.results-table td.num { color: var(--accent); }
+.results-table td:first-child { color: var(--text-2); }
+
+/* 消息条（JS 覆盖 className 为 `message ${type} show`） */
+.message {
+    display: none;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    font-family: var(--mono);
+    font-size: 12px;
+    border: 1px solid transparent;
+}
+.message.show { display: flex; align-items: center; gap: 9px; }
+.message.success { background: var(--success-dim); border-color: rgba(33,122,75,.25); color: var(--success); }
+.message.error   { background: var(--danger-dim); border-color: rgba(214,69,69,.3); color: var(--danger); }
+.message.loading { background: var(--accent-dim); border-color: rgba(59,91,215,.25); color: var(--accent); }
+.message.loading::before {
+    content: '';
+    width: 12px; height: 12px; flex: none;
+    border: 2px solid rgba(59,91,215,.25);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 模态框 */
+.modal {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(24,28,36,.4);
+    z-index: 1000;
+    align-items: center; justify-content: center;
+}
+.modal-content {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 22px;
+    max-width: 420px; width: 90%;
+    position: relative;
+    box-shadow: 0 16px 48px rgba(20,26,40,.18);
+}
+.modal-close { position: absolute; top: 10px; right: 13px; font-size: 19px; cursor: pointer; color: var(--text-3); }
+.modal-close:hover { color: var(--text); }
+.modal h3 { font-size: 13.5px; font-weight: 700; margin-bottom: 14px; }
+.modal .form-group { margin-bottom: 12px; }
+.modal .btn-group { margin-top: 16px; }
+
+/* 状态条 */
+.statusbar {
+    display: flex; align-items: center; gap: 18px;
+    padding: 6px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--text-3);
+    margin-top: 14px;
+}
+.statusbar .st-item { display: flex; align-items: center; gap: 6px; }
+.statusbar .st-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+/* ============================================================
+   编辑器
+   ============================================================ */
+.ed-shell { height: 720px; display: flex; flex-direction: column; background: var(--bg); max-width: 1160px; margin: 0 auto; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+
+.ed-header {
+    height: 44px; flex: none;
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+.ed-back {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--text-2);
+    padding: 4px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border-2); border-radius: var(--radius-sm);
+    transition: all .12s;
+}
+.ed-back:hover { color: var(--accent); border-color: var(--accent); }
+.ed-header h1 { font-size: 13px; font-weight: 700; }
+.ed-header .ed-readout { margin-left: auto; }
+
+.ed-layout { flex: 1; min-height: 0; display: flex; }
+
+.tool-bar {
+    width: 44px; flex: none;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 3px;
+    padding: 8px 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+}
+.tool-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+}
+.tool-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.tool-btn:disabled { color: #C9CFD6; cursor: default; }
+.tool-btn.active { background: var(--accent); color: #fff; }
+.tool-divider { width: 20px; height: 1px; margin: 4px 0; background: var(--border); }
+.tool-spacer { flex: 1; }
+
+.map-stage {
+    position: relative;
+    flex: 1;
+    background: #E8EAEE;
+    overflow: hidden;
+    z-index: 1;
+}
+.fake-map { position: absolute; inset: 0; }
+.fake-map svg { width: 100%; height: 100%; display: block; }
+.map-stage.draw-mode .fake-map { cursor: crosshair; }
+
+.search-box { position: absolute; top: 12px; left: 12px; z-index: 1000; width: 280px; }
+.search-box input {
+    width: 100%;
+    padding: 8px 11px 8px 32px;
+    background: var(--surface);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono); font-size: 12px;
+    box-shadow: 0 2px 10px rgba(20,26,40,.1);
+    transition: border-color .12s, box-shadow .12s;
+}
+.search-box input::placeholder { color: var(--text-3); }
+.search-box input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.search-box::before {
+    content: '⌕';
+    position: absolute; left: 10px; top: 50%;
+    transform: translateY(-54%);
+    color: var(--text-3); font-size: 14px;
+    pointer-events: none;
+}
+#search-results {
+    margin-top: 5px;
+    list-style: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    max-height: 260px; overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(20,26,40,.12);
+}
+#search-results:empty { display: none; }
+#search-results li { padding: 7px 11px; cursor: pointer; }
+#search-results li:hover { background: var(--accent-dim); }
+#search-results .poi-name { display: block; font-size: 12px; font-weight: 500; color: var(--text); }
+#search-results .poi-addr { display: block; font-size: 10.5px; font-family: var(--mono); color: var(--text-3); }
+
+.basemap-switch {
+    position: absolute; top: 12px; right: 12px; z-index: 1000;
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 2px 10px rgba(20,26,40,.1);
+}
+.switch-btn {
+    padding: 4px 10px;
+    font-family: var(--mono); font-size: 10.5px;
+    border: none; border-radius: 3px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+}
+.switch-btn:hover { color: var(--text); background: var(--surface-2); }
+.switch-btn.active { background: var(--accent); color: #fff; }
+.switch-btn.disabled { color: #C9CFD6; cursor: not-allowed; }
+
+.map-hint {
+    position: absolute; left: 12px; bottom: 12px; z-index: 1000;
+    max-width: 72%;
+    padding: 6px 11px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 11.5px;
+    color: var(--text-2);
+    box-shadow: 0 2px 10px rgba(20,26,40,.08);
+}
+.map-hint b { color: var(--accent); font-weight: 500; }
+
+.map-loading {
+    position: absolute; inset: 0; z-index: 2000;
+    background: rgba(244,245,247,.85);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 12px;
+    color: var(--text-2);
+}
+
+.editor-panel {
+    width: 300px; flex: none;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+}
+.editor-panel .panel-sec { padding: 13px 15px; border-bottom: 1px solid var(--border); }
+.editor-panel .form-group { margin-bottom: 10px; }
+.editor-panel .btn-group { margin-top: 10px; flex-wrap: wrap; }
+.editor-panel .btn { padding: 7px 13px; font-size: 12.5px; }
+
+.stat-row { display: flex; gap: 22px; }
+.stat-num { font-family: var(--mono); font-size: 20px; font-weight: 600; line-height: 1.25; color: var(--text); }
+.stat-num small { font-size: 11px; color: var(--text-3); font-weight: 400; margin-left: 2px; }
+.stat-label { font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.hint { font-size: 11.5px; color: var(--text-2); margin-top: 8px; line-height: 1.6; }
+.hint code { font-family: var(--mono); font-size: 10.5px; color: var(--accent); background: var(--accent-dim); padding: 1px 5px; border-radius: 3px; }
+
+.modal-mask {
+    position: fixed; inset: 0;
+    background: rgba(24,28,36,.4);
+    z-index: 3000;
+    display: flex; align-items: center; justify-content: center;
+}
+.modal-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    width: 380px;
+    box-shadow: 0 16px 48px rgba(20,26,40,.18);
+}
+.modal-card h3 { font-size: 13.5px; font-weight: 700; margin-bottom: 6px; }
+.modal-card .form-group { margin-bottom: 10px; }
+.modal-card .btn-group { margin-top: 14px; flex-wrap: wrap; }
+.modal-card .btn { padding: 7px 13px; font-size: 12.5px; }
+
+.hidden { display: none; }
+.vertex-marker {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(20,26,40,.35);
+}
+.midpoint-handle { opacity: .45; }
+
+/* ============================================================
+   03 组件规范展台
+   ============================================================ */
+.spec-wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px 60px; }
+.spec-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.spec-cell { padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+.spec-cell .message, .spec-cell .btn { flex: none; }
+.spec-cell .btn { padding: 7px 14px; }
+.modal-static { position: static; display: block; background: none; }
+.modal-static .modal-content { max-width: none; width: 100%; box-shadow: none; }
+
+.legend { display: flex; flex-direction: column; gap: 11px; }
+.legend-item { display: flex; align-items: center; gap: 9px; font-size: 11.5px; color: var(--text-2); }
+.lg-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(20,26,40,.3); }
+.lg-mid { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); opacity: .45; }
+.lg-erase { background: var(--danger); }
+.lg-line { width: 22px; height: 0; border-top: 2.5px solid var(--accent); }
+.lg-dash { width: 22px; height: 0; border-top: 2px dashed var(--accent); opacity: .5; }
+
+@media (max-width: 960px) {
+    .workbench { grid-template-columns: 1fr; }
+    .param-grid { grid-template-columns: 1fr 1fr; }
+    .form-grid { grid-template-columns: 1fr 1fr; }
+    .spec-grid { grid-template-columns: 1fr; }
+    .editor-panel { width: 280px; }
+}
+@media (max-width: 640px) {
+    .form-grid, .param-grid { grid-template-columns: 1fr; }
+    .editor-panel { width: 100%; }
+    .stat-row { flex-direction: column; gap: 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═════════════════════════════════════════════
+     01 · 生成器（工作台布局）
+     ═════════════════════════════════════════════ -->
+<div class="doc-sep">
+    <span class="doc-no">01</span>
+    <h2>生成器 — 工作台布局</h2>
+    <span class="mono-tag">左栏配置 · 主区参数执行 · 下方输出</span>
+</div>
+
+<header class="topbar" style="max-width:1160px;margin:0 auto;border:1px solid var(--border);border-radius:var(--radius);">
+    <span class="app-icon">CR</span>
+    <h1>校园跑步数据生成器</h1>
+    <span class="mono-tag">v2.0 · TCX · GCJ-02</span>
+    <div class="topbar-side">
+        <a href="#ed" class="link-btn">轨迹编辑器 →</a>
+    </div>
+</header>
+
+<div class="gen-frame">
+
+    <!-- 工作台：左配置 / 右参数 -->
+    <div class="workbench">
+
+        <!-- 左栏：数据源 + 模式 -->
+        <aside class="cfg-side">
+            <div class="panel">
+                <div class="panel-sec">
+                    <div class="group-label"><span class="step-no">01</span>数据源 SOURCE</div>
+                    <div class="setting-item">
+                        <label>选择轨迹</label>
+                        <select><option>贵州大学东校区 · 环线 3.2km</option><option>东区南田田径场</option></select>
+                    </div>
+                    <div class="setting-item">
+                        <label>预设模板</label>
+                        <select><option>不使用模板</option><option>周中 3km × 5 日</option><option>上传模板...</option></select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-sec">
+                    <div class="group-label"><span class="step-no">02</span>生成模式 MODE</div>
+                    <div class="mode-list">
+                        <button class="tab-button active">
+                            <span class="mode-name"><span class="idx">A</span>每日公里数范围</span>
+                            <span class="mode-desc">每天在设定公里数区间内随机生成</span>
+                        </button>
+                        <button class="tab-button">
+                            <span class="mode-name"><span class="idx">B</span>总公里数生成</span>
+                            <span class="mode-desc">按目标总量与周末系数分配到每天</span>
+                        </button>
+                        <button class="tab-button">
+                            <span class="mode-name"><span class="idx">C</span>单个文件</span>
+                            <span class="mode-desc">生成一天的单个 TCX 文件</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主区：参数 + 执行 -->
+        <main class="panel param-main">
+            <div class="section-head">
+                <h2>参数 — 按每日范围生成</h2>
+                <span class="mono-tag">OUTPUT → ./OUTPUT</span>
+            </div>
+            <div class="section-body">
+                <div class="param-grid">
+                    <div class="form-group"><label>开始日期</label><input type="date" value="2026-09-03"></div>
+                    <div class="form-group"><label>结束日期</label><input type="date" value="2026-09-10"></div>
+                    <div class="form-group"><label>最低公里数</label><input type="number" value="2.0" step="0.1"></div>
+                    <div class="form-group"><label>最高公里数</label><input type="number" value="5.0" step="0.1"></div>
+                    <div class="form-group"><label>最快配速 (min/km)</label><input type="number" value="7.0" step="0.1"></div>
+                    <div class="form-group"><label>最慢配速 (min/km)</label><input type="number" value="8.0" step="0.1"></div>
+                    <div class="form-group"><label>最早开始时间</label><input type="time" value="06:00"></div>
+                    <div class="form-group"><label>最晚开始时间</label><input type="time" value="08:00"></div>
+                    <div class="form-group full-width"><label>输出目录</label><input type="text" value="output"></div>
+                </div>
+                <div class="run-bar">
+                    <button class="btn btn-primary">开始生成</button>
+                    <button class="btn btn-secondary">导出模板</button>
+                    <span class="run-note mono-tag">9 DAYS · EST ~31.5 KM</span>
+                </div>
+            </div>
+
+            <!-- 消息条：紧跟执行区（生成中/结果反馈显示在此） -->
+            <div class="section-body" style="padding-top:0;">
+                <div class="message loading show">正在生成轨迹数据…</div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 输出区：横贯全宽 -->
+    <section class="panel output-sec">
+        <div class="section-head">
+            <span class="group-label" style="margin:0;"><span class="step-no">03</span>生成结果 OUTPUT</span>
+            <span class="mono-tag" style="margin-left:auto;">7 FILES · 21.4 KM TOTAL</span>
+            <button class="btn btn-primary btn-sm">下载文件</button>
+        </div>
+        <div class="section-body">
+            <table class="results-table">
+                <thead>
+                    <tr><th>日期</th><th>距离</th><th>配速</th><th>时长</th><th>卡路里</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>2026-09-02</td><td class="num">3.24 km</td><td>5'31" /km</td><td>17:52</td><td class="num">218</td></tr>
+                    <tr><td>2026-09-01</td><td class="num">2.02 km</td><td>6'04" /km</td><td>12:15</td><td class="num">139</td></tr>
+                    <tr><td>2026-08-31</td><td class="num">4.86 km</td><td>5'47" /km</td><td>28:06</td><td class="num">322</td></tr>
+                    <tr><td>2026-08-30</td><td class="num">3.31 km</td><td>5'58" /km</td><td>19:47</td><td class="num">223</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 状态条 -->
+    <div class="statusbar">
+        <span class="st-item"><span class="st-dot"></span>READY</span>
+        <span class="st-item">GCJ-02</span>
+        <span class="st-item">TCX v2</span>
+        <span class="st-item">TRACKS: 2</span>
+        <span class="st-item" style="margin-left:auto;">LAST RUN 2026-09-02 07:14</span>
+    </div>
+</div>
+
+<!-- ═════════════════════════════════════════════
+     02 · 轨迹编辑器
+     ═════════════════════════════════════════════ -->
+<div class="doc-sep" id="ed">
+    <span class="doc-no">02</span>
+    <h2>轨迹编辑器 — 三栏工具布局</h2>
+    <span class="mono-tag">工具栏 · 地图舞台 · 属性面板</span>
+</div>
+
+<div class="ed-shell">
+    <header class="ed-header">
+        <a href="#" class="ed-back">← 返回生成器</a>
+        <h1>轨迹编辑器</h1>
+        <span class="ed-readout mono-tag">GCJ-02 · <b>TOOL: PAN</b></span>
+    </header>
+
+    <div class="ed-layout">
+        <!-- 左：工具栏 -->
+        <aside class="tool-bar">
+            <button class="tool-btn active" title="拖动模式">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+            </button>
+            <button class="tool-btn" title="画笔模式">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+            </button>
+            <button class="tool-btn" title="橡皮擦模式">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+            </button>
+            <div class="tool-divider"></div>
+            <button class="tool-btn" title="撤销">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            </button>
+            <button class="tool-btn" title="重做">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+            <button class="tool-btn" title="适配视野">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            </button>
+            <button class="tool-btn" title="清空轨迹">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            </button>
+            <div class="tool-spacer"></div>
+            <button class="tool-btn" title="高德 Key 设置">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+        </aside>
+
+        <!-- 中：地图舞台 -->
+        <div class="map-stage">
+            <div class="fake-map">
+                <svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                    <rect width="1200" height="800" fill="#EDEFF2"/>
+                    <g fill="#E2E5EA">
+                        <rect x="40" y="60" width="300" height="220" rx="2"/>
+                        <rect x="390" y="40" width="260" height="180" rx="2"/>
+                        <rect x="700" y="90" width="380" height="200" rx="2"/>
+                        <rect x="80" y="340" width="240" height="200" rx="2"/>
+                        <rect x="380" y="280" width="300" height="260" rx="2"/>
+                        <rect x="740" y="340" width="340" height="230" rx="2"/>
+                        <rect x="140" y="600" width="360" height="160" rx="2"/>
+                        <rect x="580" y="620" width="420" height="140" rx="2"/>
+                    </g>
+                    <g stroke="#FFFFFF" stroke-width="12" stroke-linecap="round">
+                        <line x1="0" y1="310" x2="1200" y2="290"/>
+                        <line x1="0" y1="580" x2="1200" y2="600"/>
+                        <line x1="360" y1="0" x2="350" y2="800"/>
+                        <line x1="720" y1="0" x2="730" y2="800"/>
+                    </g>
+                    <g stroke="#F7F8FA" stroke-width="5">
+                        <line x1="0" y1="160" x2="1200" y2="150"/>
+                        <line x1="0" y1="440" x2="1200" y2="460"/>
+                        <line x1="180" y1="0" x2="170" y2="800"/>
+                        <line x1="540" y1="0" x2="545" y2="800"/>
+                        <line x1="960" y1="0" x2="965" y2="800"/>
+                    </g>
+                    <path d="M 950,700 C 1000,660 1120,680 1180,720 L 1200,800 L 980,800 C 940,760 930,720 950,700 Z" fill="#CDE3F5"/>
+                    <path d="M 300,420 C 270,330 360,260 470,275 C 580,290 700,265 760,340 C 815,410 760,490 640,505 C 560,515 480,540 400,510 C 330,485 318,460 300,420 Z"
+                          fill="none" stroke="#3B5BD7" stroke-width="2.5" stroke-linejoin="round"/>
+                    <path d="M 300,420 C 250,480 240,560 320,600 C 420,650 560,620 640,505"
+                          fill="none" stroke="#3B5BD7" stroke-width="1.8" stroke-dasharray="5 6" opacity=".45"/>
+                    <g fill="#FFFFFF" stroke="#3B5BD7" stroke-width="2">
+                        <circle cx="300" cy="420" r="5"/>
+                        <circle cx="270" cy="330" r="5"/>
+                        <circle cx="470" cy="275" r="5"/>
+                        <circle cx="700" cy="265" r="5"/>
+                        <circle cx="760" cy="340" r="5"/>
+                        <circle cx="640" cy="505" r="5"/>
+                        <circle cx="400" cy="510" r="5"/>
+                    </g>
+                    <g fill="#3B5BD7" opacity=".45">
+                        <circle cx="372" cy="288" r="3.5"/>
+                        <circle cx="586" cy="266" r="3.5"/>
+                        <circle cx="736" cy="300" r="3.5"/>
+                        <circle cx="708" cy="425" r="3.5"/>
+                        <circle cx="522" cy="526" r="3.5"/>
+                    </g>
+                    <text x="320" y="402" style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.08em;" fill="#5B6472">START 06:42</text>
+                    <text x="600" y="470" style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;" fill="#98A0AC">3,482 m</text>
+                </svg>
+            </div>
+
+            <div class="search-box">
+                <input type="text" placeholder="搜索地点，如：贵州大学" readonly>
+            </div>
+
+            <div class="basemap-switch">
+                <button class="switch-btn active">经典</button>
+                <button class="switch-btn">新版</button>
+                <button class="switch-btn">卫星</button>
+                <button class="switch-btn disabled">官方</button>
+            </div>
+
+            <div class="map-hint">
+                默认<b>拖动</b>平移 · <b>画笔</b>点击加点（锁定平移） · <b>橡皮擦</b>点击顶点删点 · 顶点可拖动 · 线段中点插点
+            </div>
+        </div>
+
+        <!-- 右：属性面板 -->
+        <aside class="editor-panel">
+            <section class="panel-sec">
+                <div class="group-label">加载轨迹 LOAD</div>
+                <div class="form-group">
+                    <label>选择轨迹</label>
+                    <select><option>贵州大学东校区 · 环线</option><option>东区南田田径场</option></select>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary">加载到地图</button>
+                    <button class="btn btn-secondary">新建空白</button>
+                </div>
+            </section>
+
+            <section class="panel-sec">
+                <div class="group-label">统计 STATS</div>
+                <div class="stat-row">
+                    <div class="stat-block">
+                        <div class="stat-num">128</div>
+                        <div class="stat-label">点数 POINTS</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="stat-num">3,482<small>m</small></div>
+                        <div class="stat-label">环线总距离 LOOP</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel-sec">
+                <div class="group-label">保存 SAVE</div>
+                <div class="form-group">
+                    <label>轨迹ID（文件名）</label>
+                    <input type="text" value="east_south_field">
+                </div>
+                <div class="form-group">
+                    <label>名称</label>
+                    <input type="text" value="东区南田田径场">
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <input type="text" placeholder="可选">
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary">保存轨迹</button>
+                </div>
+            </section>
+        </aside>
+    </div>
+</div>
+
+<!-- ═════════════════════════════════════════════
+     03 · 组件规范
+     ═════════════════════════════════════════════ -->
+<div class="doc-sep" id="spec">
+    <span class="doc-no">03</span>
+    <h2>组件规范</h2>
+    <span class="mono-tag">MESSAGE / BUTTON / MODAL / LOADING / LEGEND</span>
+</div>
+
+<div class="spec-wrap">
+    <div class="spec-grid">
+        <div class="panel spec-cell">
+            <span class="group-label">消息条三态</span>
+            <div class="message success show">✓ 已生成 7 个 TCX 文件</div>
+            <div class="message error show">✕ 日期范围无效：结束日期早于开始日期</div>
+            <div class="message loading show">正在生成轨迹数据…</div>
+        </div>
+        <div class="panel spec-cell">
+            <span class="group-label">按钮态</span>
+            <button class="btn btn-primary">主操作</button>
+            <button class="btn btn-secondary">次操作</button>
+            <button class="btn btn-primary" disabled>禁用态</button>
+        </div>
+        <div class="panel spec-cell">
+            <span class="group-label">导出模板弹窗</span>
+            <div class="modal modal-static">
+                <div class="modal-content">
+                    <span class="modal-close">&times;</span>
+                    <h3>导出模板</h3>
+                    <div class="form-group"><label>模板名称</label><input type="text" value="周中 3km × 5 日"></div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary">导出</button>
+                        <button class="btn btn-secondary">取消</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="panel spec-cell">
+            <span class="group-label">高德 KEY 设置弹窗</span>
+            <div class="modal-mask modal-static" style="position:static;display:block;background:none;">
+                <div class="modal-card" style="width:100%;box-shadow:none;">
+                    <h3>高德地图 Key 设置</h3>
+                    <p class="hint" style="margin:0 0 10px;">申请「Web端(JS API)」Key 与安全密钥见 <code>docs/amap_key_guide.md</code></p>
+                    <div class="form-group"><label>Key</label><input type="text" placeholder="JS API Key"></div>
+                    <div class="form-group"><label>安全密钥</label><input type="text" placeholder="securityJsCode"></div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary">保存</button>
+                        <button class="btn btn-secondary">清除</button>
+                        <button class="btn btn-secondary">关闭</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="panel spec-cell">
+            <span class="group-label">加载遮罩 &amp; 工具选中态</span>
+            <div class="map-loading" style="position:relative;inset:auto;height:110px;border:1px solid var(--border);border-radius:4px;">
+                加载高德地图…
+            </div>
+            <div style="display:flex;gap:6px;">
+                <button class="tool-btn active" style="border:1px solid var(--border);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
+                <button class="tool-btn" style="border:1px solid var(--border);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg></button>
+                <button class="tool-btn" disabled style="border:1px solid var(--border);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+            </div>
+        </div>
+        <div class="panel spec-cell">
+            <span class="group-label">地图元素图例</span>
+            <div class="legend">
+                <span class="legend-item"><span class="lg-dot"></span> 顶点 VERTEX（可拖动 / 橡皮擦删除）</span>
+                <span class="legend-item"><span class="lg-dot lg-erase"></span> 擦除态 HOVER（红）</span>
+                <span class="legend-item"><span class="lg-mid"></span> 中点插入手柄 MIDPOINT</span>
+                <span class="legend-item"><span class="lg-line"></span> 主轨迹 TRACK</span>
+                <span class="legend-item"><span class="lg-dash"></span> 闭合段 CLOSURE</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

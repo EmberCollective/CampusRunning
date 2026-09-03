@@ -1,6 +1,10 @@
 // Leaflet 地图适配器（经典/新版/卫星三档瓦片，无 Key）
 // 由 map_engine.js 加载使用；[lat,lng] 顺序转换仅限本文件内部，外部统一 {lat,lng}
 
+// 轨迹覆盖物主题色：地图覆盖物无法读取 CSS 变量，改用 JS 常量集中定义；
+// 本文件先于 map_adapter_amap.js 加载，两适配器共用此常量。换主题时与 style.css 的 --accent 同步修改。
+const TRACK_ACCENT = '#3B5BD7';
+
 class LeafletAdapter {
     // containerId: 地图容器元素 id
     constructor(containerId) {
@@ -109,12 +113,12 @@ class LeafletAdapter {
 
         // 主线
         if (n >= 2) {
-            L.polyline(points.map((p) => [p.lat, p.lng]), { color: '#2563eb', weight: 3 }).addTo(this.lineLayer);
+            L.polyline(points.map((p) => [p.lat, p.lng]), { color: TRACK_ACCENT, weight: 3 }).addTo(this.lineLayer);
         }
 
         // 闭合虚线（末点→首点）
         if (n >= 3) {
-            L.polyline([points[n - 1], points[0]], { color: '#2563eb', weight: 2, dashArray: '6 6', opacity: 0.6 }).addTo(this.lineLayer);
+            L.polyline([points[n - 1], points[0]], { color: TRACK_ACCENT, weight: 2, dashArray: '6 6', opacity: 0.6 }).addTo(this.lineLayer);
         }
 
         // 顶点（可拖拽调整、点击删除）
@@ -146,7 +150,7 @@ class LeafletAdapter {
                 const handle = L.circleMarker([mid.lat, mid.lng], {
                     radius: 5,
                     className: 'midpoint-handle',
-                    color: '#2563eb',
+                    color: TRACK_ACCENT,
                     fillOpacity: 0.8,
                     bubblingMouseEvents: false  // 阻断 click 冒泡到 map，避免插中点同时误加点（对齐 AMap 侧防冒泡）
                 });

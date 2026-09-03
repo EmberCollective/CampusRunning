@@ -141,7 +141,7 @@ class AmapAdapter {
         if (n >= 2) {
             this.overlays.push(new this._AMap.Polyline({
                 path: points.map((p) => [p.lng, p.lat]),
-                strokeColor: '#2563eb',
+                strokeColor: TRACK_ACCENT,
                 strokeWeight: 3,
                 strokeOpacity: 1,
                 lineJoin: 'round',
@@ -153,7 +153,7 @@ class AmapAdapter {
         if (n >= 3) {
             this.overlays.push(new this._AMap.Polyline({
                 path: [[points[n - 1].lng, points[n - 1].lat], [points[0].lng, points[0].lat]],
-                strokeColor: '#2563eb',
+                strokeColor: TRACK_ACCENT,
                 strokeWeight: 2,
                 strokeOpacity: 0.6,
                 strokeStyle: 'dashed',    // 虚线生效必须同时声明 strokeStyle
@@ -191,9 +191,9 @@ class AmapAdapter {
                 const handle = new this._AMap.CircleMarker({
                     center: [mid.lng, mid.lat],
                     radius: 5,
-                    strokeColor: '#2563eb',
+                    strokeColor: TRACK_ACCENT,
                     strokeWeight: 2,
-                    fillColor: '#2563eb',
+                    fillColor: TRACK_ACCENT,
                     fillOpacity: 0.35,
                     cursor: 'pointer',
                     map: this.map

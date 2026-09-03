@@ -1,320 +1,286 @@
-/* 轨迹编辑器 - 布局样式（仅功能必需，视觉后续统一处理） */
+/* ============================================================
+   轨迹编辑器 — 三栏工具布局（顶栏 / 工具栏 · 地图舞台 · 属性面板）
+   视觉跟随 style.css 的专业工作台体系
+   ============================================================ */
 
-/* 头部：覆盖 style.css 中 header 的居中布局，改为左侧返回链接 + 标题 */
-.editor-header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 12px 20px;
-    margin: 0;
-}
-
-/* 头部为蓝色背景（继承自 style.css header），白色文字保证链接可见 */
-.editor-header a {
-    color: #fff;
-}
-
-/* 主布局：左工具栏 + 中地图 + 右面板；工具栏紧贴地图，故 gap 为 0 */
-.editor-layout {
-    display: flex;
-    gap: 0;
-    padding: 16px;
-    height: calc(100vh - 120px);
-}
-
-/* 左侧竖排工具栏（44px 宽） */
-.tool-bar {
-    width: 44px;
+/* 应用外壳：顶栏 + 三栏占满视口 */
+.ed-shell {
+    height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: 8px 0;
-    background: #fff;
-    border-right: 1px solid #e2e8f0;
 }
 
-/* 工具栏图标按钮（36px） */
-.tool-btn {
-    width: 36px;
-    height: 36px;
+/* 顶栏 */
+.ed-header {
+    height: 44px; flex: none;
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+.ed-back {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--text-2);
+    padding: 4px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border-2); border-radius: var(--radius-sm);
+    transition: all .12s;
+}
+.ed-back:hover { color: var(--accent); border-color: var(--accent); }
+.ed-header h1 { font-size: 13px; font-weight: 700; }
+.ed-header .ed-readout { margin-left: auto; }
+
+/* 三栏主布局：左工具栏 44px · 地图舞台弹性 · 右属性面板 300px */
+.editor-layout {
+    flex: 1; min-height: 0;
     display: flex;
-    align-items: center;
-    justify-content: center;
+}
+
+/* 左：工具栏 */
+.tool-bar {
+    width: 44px; flex: none;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 3px;
+    padding: 8px 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+}
+.tool-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
     border: none;
     background: transparent;
-    border-radius: 6px;
-    color: #475569;
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
     cursor: pointer;
+    transition: background .12s, color .12s;
 }
-
-/* 禁用态：浅灰图标 + 不可点击 */
-.tool-btn:disabled {
-    color: #cbd5e1;
-    cursor: default;
-}
-
-.tool-btn:hover:not(:disabled) {
-    background: #f1f5f9;
-}
-
-/* 工具按钮选中态（当前模式，如 拖动/画笔） */
-.tool-btn.active {
-    background: #2563eb;
-    color: #fff;
-}
-
-.tool-btn.active:hover:not(:disabled) {
-    background: #2563eb;
-}
+.tool-btn svg { display: block; }
+.tool-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.tool-btn:disabled { color: #C9CFD6; cursor: default; }
+.tool-btn.active { background: var(--accent); color: #fff; }
+.tool-btn.active:hover:not(:disabled) { background: var(--accent); color: #fff; }
 
 /* 模式组与操作组之间的分隔线 */
-.tool-divider {
-    width: 24px;
-    height: 1px;
-    margin: 4px 0;
-    background: #e2e8f0;
-}
+.tool-divider { width: 20px; height: 1px; margin: 4px 0; background: var(--border); }
 
 /* 弹性空隙：让齿轮按钮沉到工具栏底部 */
-.tool-spacer {
-    flex: 1;
-}
+.tool-spacer { flex: 1; }
 
-/* 画笔模式下地图显示十字光标（对两个地图容器生效） */
-.map-stage.draw-mode #map-leaflet,
-.map-stage.draw-mode #map-amap,
-.map-stage.draw-mode .leaflet-interactive {
-    cursor: crosshair !important;
-}
-
-/* 橡皮擦模式：顶点悬停变红放大提示可删除（!important 用于压过 AMap Marker 的内联 cursor） */
-.map-stage.erase-mode .vertex-marker {
-    cursor: pointer !important;
-}
-
-.map-stage.erase-mode .vertex-marker:hover {
-    background: #ef4444;
-    border-color: #ef4444;
-    /* 用 box-shadow 而非 transform 放大：Leaflet 用内联 transform 定位顶点，样式表 transform 会被压制 */
-    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.35);
-}
-
-/* 中部地图舞台：承载两个地图容器与全部悬浮控件 */
+/* 中：地图舞台（stacking context 防止 Leaflet pane 溢出盖住面板） */
 .map-stage {
     position: relative;
     flex: 1;
     overflow: hidden;
-    background: #e2e8f0;
-    /* 建立 stacking context，防止 Leaflet pane 溢出覆盖右侧面板 */
+    background: #E8EAEE;
     z-index: 1;
 }
 
-/* 两个地图容器叠放：经典/新版/卫星档挂 Leaflet，官方档挂 AMap */
+/* 两个地图容器叠放：经典/新版/卫星档挂 Leaflet，官方档挂 AMap（JS 内联切换显隐） */
 #map-leaflet,
 #map-amap {
     position: absolute;
     inset: 0;
 }
 
-/* 右侧面板（布局 gap 为 0，用左边距与地图保持间距） */
-.editor-panel {
-    width: 340px;
-    overflow-y: auto;
-    margin-left: 16px;
+/* 画笔模式：地图显示十字光标（压过 Leaflet/AMap 的 grab 光标） */
+.map-stage.draw-mode #map-leaflet,
+.map-stage.draw-mode #map-amap,
+.map-stage.draw-mode .leaflet-interactive,
+.map-stage.draw-mode .leaflet-container {
+    cursor: crosshair !important;
 }
 
-/* 面板内表单纵向间距（无 form-grid 时的最小间隔） */
-.editor-panel .form-group {
-    margin-bottom: 12px;
+/* 橡皮擦模式：顶点可点击；hover 变红提示删除
+   （!important 压过 AMap Marker 的内联 cursor；
+    用 box-shadow 放大而非 transform——Leaflet 用内联 transform 定位顶点） */
+.map-stage.erase-mode .vertex-marker { cursor: pointer !important; }
+.map-stage.erase-mode .vertex-marker:hover {
+    background: var(--danger);
+    border-color: #fff;
+    box-shadow: 0 0 0 3px rgba(214,69,69,.25);
 }
 
-/* 统计行间距 */
-.stat-line {
-    margin-bottom: 4px;
-}
-
-/* 左上角悬浮搜索框（配置高德 Key 后可用） */
+/* 左上：地点搜索 */
 .search-box {
     position: absolute;
-    top: 10px;
-    left: 10px;
+    top: 12px; left: 12px;
     z-index: 1000;
     width: 280px;
 }
-
 .search-box input {
     width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    background: #fff;
-    font-size: 0.9rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    padding: 8px 11px 8px 32px;
+    background: var(--surface);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono); font-size: 12px;
+    box-shadow: 0 2px 10px rgba(20,26,40,.1);
+    transition: border-color .12s, box-shadow .12s;
 }
-
+.search-box input::placeholder { color: var(--text-3); }
 .search-box input:focus {
     outline: none;
-    border-color: #2563eb;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
+/* 放大镜图标挂在输入框包装层上（若挂在 .search-box，下拉展开后 top:50% 会漂移到列表中部） */
+.search-input-wrap { position: relative; }
+.search-input-wrap::before {
+    content: '⌕';
+    position: absolute; left: 10px; top: 50%;
+    transform: translateY(-54%);
+    color: var(--text-3); font-size: 14px;
+    pointer-events: none;
+}
+.search-box input:disabled { background: var(--surface-2); color: var(--text-3); cursor: not-allowed; }
 
-/* 搜索结果下拉列表 */
+/* 搜索结果下拉 */
 #search-results {
-    position: relative;
-    z-index: 1001;
-    margin-top: 4px;
+    margin-top: 5px;
     list-style: none;
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    max-height: 260px;
-    overflow-y: auto;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    max-height: 260px; overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(20,26,40,.12);
 }
+#search-results:empty { display: none; }
+#search-results li { padding: 7px 11px; cursor: pointer; transition: background .1s; }
+#search-results li:hover { background: var(--accent-dim); }
+#search-results .poi-name { display: block; font-size: 12px; font-weight: 500; color: var(--text); }
+#search-results .poi-addr { display: block; font-size: 10.5px; font-family: var(--mono); color: var(--text-3); }
 
-/* 列表为空时不渲染空白边框 */
-#search-results:empty {
-    display: none;
-}
-
-#search-results li {
-    padding: 8px 12px;
-    cursor: pointer;
-}
-
-#search-results li:hover {
-    background: #f1f5f9;
-}
-
-/* POI 名称：加粗小字 */
-#search-results .poi-name {
-    display: block;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: #0f172a;
-}
-
-/* POI 地址：灰色小字 */
-#search-results .poi-addr {
-    display: block;
-    font-size: 0.75rem;
-    color: #64748b;
-}
-
-/* 右上角底图切换竖条（经典/新版/卫星/官方） */
+/* 右上：底图四档切换 */
 .basemap-switch {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    position: absolute; top: 12px; right: 12px; z-index: 1000;
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 2px 10px rgba(20,26,40,.1);
 }
-
 .switch-btn {
-    padding: 4px 8px;
-    font-size: 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    background: #fff;
-    color: #475569;
-    cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-}
-
-.switch-btn:hover {
-    background: #f1f5f9;
-}
-
-/* 当前档位高亮 */
-.switch-btn.active {
-    background: #2563eb;
-    border-color: #2563eb;
-    color: #fff;
-}
-
-/* 不可用状态（如未配置 Key） */
-.switch-btn.disabled {
-    background: #f1f5f9;
-    color: #cbd5e1;
-    cursor: not-allowed;
-}
-
-/* 左下角操作提示小字 */
-.map-hint {
-    position: absolute;
-    left: 10px;
-    bottom: 10px;
-    z-index: 1000;
     padding: 4px 10px;
-    background: rgba(255, 255, 255, 0.85);
-    border-radius: 6px;
-    font-size: 12px;
-    color: #64748b;
+    font-family: var(--mono); font-size: 10.5px;
+    border: none; border-radius: 3px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    text-align: center;
 }
+.switch-btn:hover { color: var(--text); background: var(--surface-2); }
+.switch-btn.active { background: var(--accent); color: #fff; }
+.switch-btn.active:hover { background: var(--accent); color: #fff; }
+.switch-btn.disabled { color: #C9CFD6; cursor: not-allowed; }
+.switch-btn.disabled:hover { background: transparent; color: #C9CFD6; }
 
-/* 全屏加载遮罩（加载官方 JS API 时由 JS 显示） */
+/* 左下：操作提示 */
+.map-hint {
+    position: absolute; left: 12px; bottom: 12px; z-index: 1000;
+    max-width: 72%;
+    padding: 6px 11px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 11.5px;
+    color: var(--text-2);
+    box-shadow: 0 2px 10px rgba(20,26,40,.08);
+}
+.map-hint b { color: var(--accent); font-weight: 500; }
+
+/* 全屏加载遮罩（JS 控制显隐与文案） */
 .map-loading {
-    position: absolute;
-    inset: 0;
-    z-index: 2000;
-    background: rgba(255, 255, 255, 0.75);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #475569;
+    position: absolute; inset: 0; z-index: 2000;
+    background: rgba(244,245,247,.85);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 12px;
+    color: var(--text-2);
 }
 
-/* Key 设置弹窗：全屏半透明遮罩 + 居中卡片（由内联 display:none 控制显隐） */
+/* 右：属性面板 */
+.editor-panel {
+    width: 300px; flex: none;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+}
+.editor-panel .panel-sec { padding: 13px 15px; border-bottom: 1px solid var(--border); }
+.editor-panel .form-group { margin-bottom: 10px; }
+.editor-panel .btn-group { margin-top: 10px; flex-wrap: wrap; }
+.editor-panel .btn { padding: 7px 13px; font-size: 12.5px; }
+
+/* 统计 */
+.stat-row { display: flex; gap: 22px; }
+.stat-num {
+    font-family: var(--mono);
+    font-size: 20px; font-weight: 600; line-height: 1.25;
+    color: var(--text);
+}
+.stat-num small { font-size: 11px; color: var(--text-3); font-weight: 400; margin-left: 2px; }
+.stat-label {
+    font-family: var(--mono); font-size: 9.5px;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-3);
+}
+
+/* 高德 Key 设置弹窗（.modal-mask 默认 flex，JS 内联 display 控制显隐） */
 .modal-mask {
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.45);
+    position: fixed; inset: 0;
+    background: rgba(24,28,36,.4);
     z-index: 3000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
 }
-
 .modal-card {
-    background: #fff;
-    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
     padding: 20px;
     width: 380px;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 16px 48px rgba(20,26,40,.18);
 }
+.modal-card h3 { font-size: 13.5px; font-weight: 700; margin-bottom: 6px; }
+.modal-card .form-group { margin-bottom: 10px; }
+.modal-card .btn-group { margin-top: 14px; flex-wrap: wrap; }
+.modal-card .btn { padding: 7px 13px; font-size: 12.5px; }
 
-.modal-card h3 {
-    margin-bottom: 12px;
-}
-
-.modal-card .form-group {
-    margin-bottom: 12px;
-}
-
-/* 地图顶点标记（divIcon） */
+/* 地图顶点标记（Leaflet divIcon / AMap Marker content 共用） */
 .vertex-marker {
-    width: 12px;
-    height: 12px;
+    width: 12px; height: 12px;
     border-radius: 50%;
-    background: #2563eb;
+    background: var(--accent);
     border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(20,26,40,.35);
+    transition: background .12s, box-shadow .12s;
 }
 
-/* 线段中点插入手柄（circleMarker） */
-.midpoint-handle {
-    opacity: 0.4;
-}
+/* 线段中点插入手柄（circleMarker，颜色在适配器 JS 中） */
+.midpoint-handle { opacity: 0.45; }
 
-/* 隐藏工具类 */
-.hidden {
-    display: none;
+/* 响应式 */
+@media (max-width: 900px) {
+    .editor-panel { width: 260px; }
 }
-
-/* 操作提示文字 */
-.hint {
-    font-size: 0.85rem;
-    color: #64748b;
-    margin-top: 8px;
+@media (max-width: 720px) {
+    .editor-layout { flex-direction: column; }
+    .tool-bar {
+        width: 100%; height: 44px; flex: none;
+        flex-direction: row;
+        padding: 0 8px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    .tool-divider { width: 1px; height: 20px; margin: 0 4px; }
+    .tool-spacer { flex: 1; height: auto; }
+    .editor-panel {
+        width: 100%;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        max-height: 45%;
+    }
+    .map-hint { display: none; }
 }

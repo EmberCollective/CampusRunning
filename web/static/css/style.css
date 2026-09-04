@@ -363,10 +363,203 @@ button { font-family: inherit; }
 .statusbar .st-item { display: flex; align-items: center; gap: 6px; }
 .statusbar .st-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
 
+/* ============================================================
+   日历选择器
+   ============================================================ */
+.dates-cal-row {
+    display: flex; gap: 14px;
+    margin-bottom: 14px;
+    align-items: stretch;
+}
+.calendar-container {
+    flex: 1; min-width: 0;
+    background: var(--field);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    user-select: none;
+}
+.dates-side {
+    width: 200px; flex: none;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.dates-side label {
+    font-size: 12px; font-weight: 500; color: var(--text-2);
+}
+
+.calendar-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+}
+.cal-title {
+    font-family: var(--mono);
+    font-size: 12px; font-weight: 600;
+    color: var(--text);
+}
+.cal-nav-btn {
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .12s;
+}
+.cal-nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+    margin-bottom: 2px;
+}
+.calendar-weekdays span {
+    font-family: var(--mono);
+    font-size: 9.5px; font-weight: 600;
+    color: var(--text-3);
+    text-align: center;
+    padding: 2px 0;
+    letter-spacing: .05em;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+}
+.cal-day {
+    height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px; font-weight: 500;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all .1s;
+    position: relative;
+}
+.cal-day:hover:not(.cal-empty):not(.cal-selected) {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+}
+.cal-day.cal-empty {
+    cursor: default;
+    background: transparent;
+}
+.cal-day.cal-today {
+    border-color: var(--border-2);
+    font-weight: 700;
+}
+.cal-day.cal-today::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    width: 3px; height: 3px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+.cal-day.cal-selected {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 600;
+}
+.cal-day.cal-selected:hover {
+    background: var(--accent-hover);
+}
+.cal-day.cal-weekend {
+    color: var(--danger);
+}
+.cal-day.cal-weekend.cal-selected {
+    color: #fff;
+}
+.cal-day.cal-other-month {
+    color: var(--text-3);
+    opacity: .45;
+}
+
+.calendar-actions {
+    display: flex; gap: 4px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+}
+.cal-action-btn {
+    flex: 1;
+    padding: 3px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--sans);
+    font-size: 10.5px;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all .12s;
+}
+.cal-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 已选日期标签 */
+.selected-dates-tags {
+    flex: 1;
+    display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;
+    min-height: 0;
+    padding: 8px;
+    background: var(--field);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    overflow-y: auto;
+    max-height: 200px;
+}
+.dates-placeholder {
+    font-size: 11px;
+    color: var(--text-3);
+    line-height: 1.6;
+}
+.date-tag {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 6px;
+    background: var(--accent-dim);
+    border: 1px solid rgba(59,91,215,.25);
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--accent);
+    animation: tag-in .15s ease-out;
+}
+.date-tag .tag-remove {
+    width: 13px; height: 13px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    color: var(--text-3);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all .1s;
+    line-height: 1;
+}
+.date-tag .tag-remove:hover { color: var(--danger); background: var(--danger-dim); }
+
+@keyframes tag-in {
+    from { opacity: 0; transform: scale(.9); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+.dates-count {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-3);
+    margin-left: 4px;
+}
+
 /* 响应式 */
 @media (max-width: 960px) {
     .workbench { grid-template-columns: 1fr; }
     .form-grid { grid-template-columns: 1fr 1fr; }
+    .dates-cal-row { flex-direction: column; }
+    .dates-side { width: 100%; }
 }
 @media (max-width: 640px) {
     .form-grid { grid-template-columns: 1fr; }

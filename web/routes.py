@@ -338,6 +338,7 @@ def _parse_generate_request(data: dict) -> GenerationConfig:
         "include_track": data.get("include_track", True),
         "apply_correction": data.get("apply_correction", True),
         "enable_pace_fluctuation": data.get("enable_pace_fluctuation", True),
+        "enable_cadence": data.get("enable_cadence", True),
     }
     if "track_id" in data:
         overrides["track_id"] = data["track_id"]

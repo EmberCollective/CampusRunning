@@ -23,6 +23,7 @@ from src.core.models import GeoPoint, TrackAnalysis, TrackpointData
 from src.core.track_analyzer import TrackAnalyzer
 from src.core.coordinate_corrector import CoordinateCorrector
 from src.core.pace_fluctuator import PaceFluctuator
+from src.core.cadence_generator import CadenceGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class TrackGenerator:
         max_deviation: float = 2.0,
         smooth_factor: float = 0.3,
         enable_pace_fluctuation: bool = True,
+        enable_cadence: bool = True,
     ) -> None:
         """初始化轨迹生成器。
 
@@ -52,6 +54,7 @@ class TrackGenerator:
             max_deviation: 最大偏离距离（米）。
             smooth_factor: 光滑因子。
             enable_pace_fluctuation: 是否启用配速波动。
+            enable_cadence: 是否启用步频/步数数据自动生成。
         """
         self.base_analysis: TrackAnalysis = track_analysis
         self.analyzer: TrackAnalyzer = analyzer
@@ -61,6 +64,7 @@ class TrackGenerator:
         self.max_deviation: float = max_deviation
         self.smooth_factor: float = smooth_factor
         self.enable_pace_fluctuation: bool = enable_pace_fluctuation
+        self.enable_cadence: bool = enable_cadence
 
         # 基础轨迹（可能经过坐标修正）
         if corrector is not None:
@@ -74,6 +78,9 @@ class TrackGenerator:
 
         # 配速波动器（延迟初始化）
         self._pace_fluctuator: Optional[PaceFluctuator] = None
+
+        # 步频生成器（无 base_pace 依赖，无需延迟初始化）
+        self._cadence_generator: CadenceGenerator = CadenceGenerator()
 
         logger.info(
             "轨迹生成器初始化: 基础距离 %.2f 米, 最大偏离 %.2f 米",
@@ -354,11 +361,12 @@ class TrackGenerator:
         duration_seconds: float,
         base_pace_min_per_km: Optional[float] = None,
         enable_pace_fluctuation: bool = True,
+        enable_cadence: bool = True,
     ) -> List[TrackpointData]:
         """生成TCX格式的轨迹点。
 
         根据配速波动或均匀时间分布，为每个轨迹点生成时间戳、
-        海拔和累计距离等信息。
+        海拔、累计距离以及步频/速度等信息。
 
         Args:
             track_points: 轨迹点列表。
@@ -367,6 +375,7 @@ class TrackGenerator:
             base_pace_min_per_km: 基础配速（分钟/公里），
                                   为 None 时使用均匀时间分布。
             enable_pace_fluctuation: 是否启用配速波动。
+            enable_cadence: 是否启用步频/步数数据自动生成。
 
         Returns:
             TrackpointData 列表。
@@ -376,11 +385,11 @@ class TrackGenerator:
 
         if enable_pace_fluctuation and base_pace_min_per_km is not None:
             return self._generate_trackpoints_with_pace(
-                track_points, start_time, base_pace_min_per_km
+                track_points, start_time, base_pace_min_per_km, enable_cadence
             )
         else:
             return self._generate_trackpoints_uniform(
-                track_points, start_time, duration_seconds
+                track_points, start_time, duration_seconds, enable_cadence
             )
 
     def _generate_trackpoints_with_pace(
@@ -388,6 +397,7 @@ class TrackGenerator:
         track_points: List[GeoPoint],
         start_time: datetime.datetime,
         base_pace_min_per_km: float,
+        enable_cadence: bool = True,
     ) -> List[TrackpointData]:
         """使用配速波动生成轨迹点。
 
@@ -395,6 +405,7 @@ class TrackGenerator:
             track_points: 轨迹点列表。
             start_time: 开始时间。
             base_pace_min_per_km: 基础配速（分钟/公里）。
+            enable_cadence: 是否启用步频/步数数据自动生成。
 
         Returns:
             TrackpointData 列表。
@@ -410,6 +421,18 @@ class TrackGenerator:
         pace_profile = self._pace_fluctuator.generate_pace_profile(
             len(track_points)
         )
+
+        # 根据配速曲线推导每点速度与步频（速度 = 1000 / (60·配速)）
+        speeds: List[float] = []
+        cadence_spm: List[int] = []
+        if enable_cadence:
+            speeds = [
+                1000.0 / (60.0 * pace) if pace > 0 else 0.0
+                for pace in pace_profile
+            ]
+            cadence_spm = self._cadence_generator.generate_cadence_profile(
+                len(track_points), speeds
+            )
 
         # 计算每段距离
         segment_distances: List[float] = []
@@ -460,6 +483,12 @@ class TrackGenerator:
                     longitude=point.longitude,
                     altitude=altitude,
                     distance_meters=cumulative_distance,
+                    run_cadence=(
+                        round(cadence_spm[i] / 2) if enable_cadence else None
+                    ),
+                    speed=(
+                        round(speeds[i], 2) if enable_cadence else None
+                    ),
                 )
             )
 
@@ -476,6 +505,7 @@ class TrackGenerator:
         track_points: List[GeoPoint],
         start_time: datetime.datetime,
         duration_seconds: float,
+        enable_cadence: bool = True,
     ) -> List[TrackpointData]:
         """使用均匀时间分布生成轨迹点。
 
@@ -483,11 +513,44 @@ class TrackGenerator:
             track_points: 轨迹点列表。
             start_time: 开始时间。
             duration_seconds: 总时长（秒）。
+            enable_cadence: 是否启用步频/步数数据自动生成。
 
         Returns:
             TrackpointData 列表。
         """
         time_interval = duration_seconds / len(track_points)
+
+        # 按实际轨迹点距离计算累计距离。
+        # 注意：base_distance 是单圈长度，多圈轨迹下不能用其均分近似
+        # （否则累计距离与速度都会系统性偏低）。
+        segment_distances = [
+            self.analyzer.calculate_distance(
+                track_points[j], track_points[j + 1]
+            )
+            for j in range(len(track_points) - 1)
+        ]
+        cumulative_distances: List[float] = [0.0]
+        for segment_distance in segment_distances:
+            cumulative_distances.append(
+                cumulative_distances[-1] + segment_distance
+            )
+
+        # 均匀路径无配速曲线，使用恒定速度（实际总距离 / 总时长）
+        avg_speed: float = 0.0
+        if (
+            enable_cadence
+            and duration_seconds > 0
+            and len(track_points) >= 2
+        ):
+            avg_speed = cumulative_distances[-1] / duration_seconds
+
+        speeds: List[float] = []
+        cadence_spm: List[int] = []
+        if enable_cadence:
+            speeds = [avg_speed] * len(track_points)
+            cadence_spm = self._cadence_generator.generate_cadence_profile(
+                len(track_points), speeds
+            )
 
         trackpoints: List[TrackpointData] = []
 
@@ -510,7 +573,7 @@ class TrackGenerator:
             )
 
             # 均匀分布的累计距离
-            cumulative_distance = i * (self.base_distance / len(track_points))
+            cumulative_distance = cumulative_distances[i]
 
             trackpoints.append(
                 TrackpointData(
@@ -519,6 +582,12 @@ class TrackGenerator:
                     longitude=point.longitude,
                     altitude=altitude,
                     distance_meters=cumulative_distance,
+                    run_cadence=(
+                        round(cadence_spm[i] / 2) if enable_cadence else None
+                    ),
+                    speed=(
+                        round(speeds[i], 2) if enable_cadence else None
+                    ),
                 )
             )
 

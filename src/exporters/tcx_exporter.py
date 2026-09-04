@@ -11,7 +11,8 @@ import zipfile
 import logging
 from xml.dom import minidom
 
-from src.core.models import ExportData
+from src.core.models import ExportData, TrackpointData
+from src.core.cadence_generator import compute_lap_cadence_metrics
 from .base import BaseExporter
 
 logger = logging.getLogger(__name__)
@@ -21,11 +22,14 @@ class TcxExporter(BaseExporter):
     """TCX格式导出器
 
     将跑步数据导出为 Garmin Training Center XML (TCX) 格式。
-    保留与原始 TCXGenerator 完全一致的 XML 结构。
+    保留与原始 TCXGenerator 完全一致的 XML 结构，
+    并在轨迹点携带步频数据时输出 Cadence/TPX/LX 扩展节点。
     """
 
     _NAMESPACE = "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
     _XSI = "http://www.w3.org/2001/XMLSchema-instance"
+    _EXTENSION_NS = "http://www.garmin.com/xmlschemas/ActivityExtension/v2"
+    _EXTENSION_XSD = "http://www.garmin.com/xmlschemas/ActivityExtensionv2.xsd"
 
     def export(self, data: ExportData, output_path: str) -> str:
         """导出 ExportData 为 TCX 文件
@@ -100,13 +104,35 @@ class TcxExporter(BaseExporter):
         # 构建轨迹XML（如果有轨迹点）
         track_xml = self._build_track_xml(data.trackpoints)
 
+        # 构建Lap扩展XML（如果有可积分的步频数据）
+        lap_ext_xml = self._build_lap_extensions_xml(data.trackpoints)
+
+        # 是否携带扩展数据（步频或速度）：决定是否声明扩展命名空间。
+        # minidom 重解析要求 ns3 前缀必须已在根节点绑定，
+        # 因此命名空间声明与任何可能输出 ns3 元素的条件保持一致。
+        has_extension = any(
+            tp.run_cadence is not None or tp.speed is not None
+            for tp in data.trackpoints
+        )
+        if has_extension:
+            root_attrs = (
+                f'xmlns:ns3="{self._EXTENSION_NS}" '
+                f'xsi:schemaLocation="{self._NAMESPACE} '
+                f'{self._NAMESPACE}/TrainingCenterDatabasev2.xsd '
+                f'{self._EXTENSION_NS} {self._EXTENSION_XSD}"'
+            )
+        else:
+            root_attrs = (
+                f'xsi:schemaLocation="{self._NAMESPACE} '
+                f'{self._NAMESPACE}/TrainingCenterDatabasev2.xsd"'
+            )
+
         # 组装完整XML
         xml_content = (
             f'<?xml version="1.0" encoding="UTF-8"?>\n'
             f'<TrainingCenterDatabase xmlns="{self._NAMESPACE}" '
             f'xmlns:xsi="{self._XSI}" '
-            f'xsi:schemaLocation="{self._NAMESPACE} '
-            f'{self._NAMESPACE}/TrainingCenterDatabasev2.xsd">\n'
+            f'{root_attrs}>\n'
             f'  <Activities>\n'
             f'    <Activity Sport="Running">\n'
             f'      <Id>{start_time_str}</Id>\n'
@@ -118,6 +144,7 @@ class TcxExporter(BaseExporter):
             f'        <Intensity>Active</Intensity>\n'
             f'        <TriggerMethod>Manual</TriggerMethod>\n'
             f'{track_xml}'
+            f'{lap_ext_xml}'
             f'      </Lap>\n'
             f'    </Activity>\n'
             f'  </Activities>\n'
@@ -142,19 +169,75 @@ class TcxExporter(BaseExporter):
         return dom.toprettyxml(indent="  ")
 
     @staticmethod
-    def _build_track_xml(trackpoints: list) -> str:
-        """构建Track节点的XML字符串
+    def _build_trackpoint_xml(tp: TrackpointData) -> str:
+        """构建单个Trackpoint的XML片段
 
-        Trackpoint 格式：
+        有步频数据时（XSD 元素顺序：Cadence 在 Extensions 前）：
         <Trackpoint>
           <Time>{time}</Time>
-          <Position>
-            <LatitudeDegrees>{latitude}</LatitudeDegrees>
-            <LongitudeDegrees>{longitude}</LongitudeDegrees>
-          </Position>
+          <Position>...</Position>
           <AltitudeMeters>{altitude}</AltitudeMeters>
           <DistanceMeters>{distance_meters}</DistanceMeters>
+          <Cadence>{run_cadence}</Cadence>
+          <Extensions>
+            <ns3:TPX>
+              <ns3:Speed>{speed}</ns3:Speed>
+              <ns3:RunCadence>{run_cadence}</ns3:RunCadence>
+            </ns3:TPX>
+          </Extensions>
         </Trackpoint>
+
+        Args:
+            tp: 轨迹点数据
+
+        Returns:
+            Trackpoint XML片段
+        """
+        # Cadence 节点（XSD 中位于 DistanceMeters 之后、Extensions 之前）
+        cadence_xml = ""
+        if tp.run_cadence is not None:
+            cadence_xml = (
+                f"          <Cadence>{tp.run_cadence}</Cadence>\n"
+            )
+
+        # TPX 扩展节点（Speed 与 RunCadence 任一存在时输出）
+        tpx_lines = []
+        if tp.speed is not None:
+            tpx_lines.append(
+                f"            <ns3:Speed>{tp.speed:.2f}</ns3:Speed>"
+            )
+        if tp.run_cadence is not None:
+            tpx_lines.append(
+                f"            <ns3:RunCadence>{tp.run_cadence}</ns3:RunCadence>"
+            )
+        if tpx_lines:
+            extension_xml = (
+                f"          <Extensions>\n"
+                f"            <ns3:TPX>\n"
+                + "\n".join(tpx_lines) + "\n"
+                f"            </ns3:TPX>\n"
+                f"          </Extensions>\n"
+            )
+        else:
+            extension_xml = ""
+
+        return (
+            f"        <Trackpoint>\n"
+            f"          <Time>{tp.time}</Time>\n"
+            f"          <Position>\n"
+            f"            <LatitudeDegrees>{tp.latitude}</LatitudeDegrees>\n"
+            f"            <LongitudeDegrees>{tp.longitude}</LongitudeDegrees>\n"
+            f"          </Position>\n"
+            f"          <AltitudeMeters>{tp.altitude}</AltitudeMeters>\n"
+            f"          <DistanceMeters>{tp.distance_meters}</DistanceMeters>\n"
+            f"{cadence_xml}"
+            f"{extension_xml}"
+            f"        </Trackpoint>"
+        )
+
+    @staticmethod
+    def _build_track_xml(trackpoints: list) -> str:
+        """构建Track节点的XML字符串
 
         Args:
             trackpoints: 轨迹点数据列表（可能为空）
@@ -167,18 +250,52 @@ class TcxExporter(BaseExporter):
 
         lines = ["      <Track>"]
         for tp in trackpoints:
-            lines.append(
-                f"        <Trackpoint>\n"
-                f"          <Time>{tp.time}</Time>\n"
-                f"          <Position>\n"
-                f"            <LatitudeDegrees>{tp.latitude}</LatitudeDegrees>\n"
-                f"            <LongitudeDegrees>{tp.longitude}</LongitudeDegrees>\n"
-                f"          </Position>\n"
-                f"          <AltitudeMeters>{tp.altitude}</AltitudeMeters>\n"
-                f"          <DistanceMeters>{tp.distance_meters}</DistanceMeters>\n"
-                f"        </Trackpoint>"
-            )
+            lines.append(TcxExporter._build_trackpoint_xml(tp))
         lines.append("      </Track>")
+        lines.append("")  # 尾部换行
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_lap_extensions_xml(trackpoints: list) -> str:
+        """构建Lap级步频扩展XML字符串（ns3:LX）
+
+        从轨迹点积分计算平均步频/最大步频/总步数，
+        保证 Lap 聚合值与逐点数据构造性一致。
+
+        格式（XSD 中 Extensions 位于 Track 之后）：
+        <Extensions>
+          <ns3:LX>
+            <ns3:AvgRunCadence>{avg}</ns3:AvgRunCadence>
+            <ns3:MaxRunCadence>{max}</ns3:MaxRunCadence>
+            <ns3:Steps>{steps}</ns3:Steps>
+          </ns3:LX>
+        </Extensions>
+
+        Args:
+            trackpoints: 轨迹点数据列表
+
+        Returns:
+            LX扩展XML字符串，无法积分时返回空字符串
+        """
+        metrics = compute_lap_cadence_metrics(trackpoints)
+        if metrics is None:
+            return ""
+
+        avg_cadence, max_cadence, total_steps = metrics
+
+        lines = [
+            "      <Extensions>",
+            "        <ns3:LX>",
+            f"          <ns3:AvgRunCadence>{avg_cadence}</ns3:AvgRunCadence>",
+            f"          <ns3:MaxRunCadence>{max_cadence}</ns3:MaxRunCadence>",
+        ]
+        if total_steps is not None:
+            lines.append(
+                f"          <ns3:Steps>{total_steps}</ns3:Steps>"
+            )
+        lines.append("        </ns3:LX>")
+        lines.append("      </Extensions>")
         lines.append("")  # 尾部换行
 
         return "\n".join(lines)

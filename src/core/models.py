@@ -245,3 +245,16 @@ class GenerationConfig:
     calories_per_km: float = 60.0
     start_date: Optional[datetime.date] = None
     end_date: Optional[datetime.date] = None
+
+    _VALID_OUTPUT_FORMATS = ("tcx", "fit")
+
+    def __post_init__(self) -> None:
+        """构造时校验关键字段取值，非法值尽早暴露
+
+        Raises:
+            ValueError: output_format 不是受支持的格式
+        """
+        if self.output_format not in self._VALID_OUTPUT_FORMATS:
+            raise ValueError(
+                f"不支持的输出格式: {self.output_format}（可选 tcx/fit）"
+            )

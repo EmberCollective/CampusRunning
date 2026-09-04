@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/readme/hero.svg" alt="校园跑步数据生成器 —— 真实轨迹 · 真实配速 · 一键生成 TCX" width="100%">
+  <img src="assets/readme/hero.svg" alt="校园跑步数据生成器 —— 真实轨迹 · 真实配速 · 一键生成运动数据文件" width="100%">
   <p>
     <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
     <img alt="Python 3.13+" src="https://img.shields.io/badge/Python-3.13%2B-3776AB?logo=python&logoColor=white">
@@ -13,7 +13,7 @@
 
 早起打卡、里程配速，一样不能少——天下学子苦其久矣。
 
-社区已有不少虚拟定位方案，各有取舍；本工具走了另一条路：**生成带真实操场轨迹与真实配速的 TCX 文件，导入运动软件即可使用**。
+社区已有不少虚拟定位方案，各有取舍；本工具走了另一条路：**生成带真实操场轨迹、真实配速与步频步数的运动数据文件（默认 FIT，兼容 TCX），导入运动软件即可使用**。
 
 作者坚持为爱发电，愿普度天下苦校园跑的学子。若这个项目帮到了你，点亮 Star 便是对作者最好的鼓励 。
 
@@ -76,7 +76,7 @@ python app.py    # 浏览器访问 http://127.0.0.1:5000
 
 ### 导入手机
 
-生成结果如何导入 Keep，见 [Keep 导入教程（含截图）](guied.md)。TCX 是通用格式，Garmin Training Center、GoldenCheetah、Strava 等软件也可直接打开。
+生成结果如何导入 Keep，见 [Keep 导入教程（含截图）](guied.md)。默认输出 FIT 格式（Keep 导入推荐，带完整步频/步数数据）；也可切换 TCX——它是通用格式，Garmin Training Center、GoldenCheetah、Strava 等软件可直接打开。
 
 ## 配置
 
@@ -119,7 +119,7 @@ python app.py    # 浏览器访问 http://127.0.0.1:5000
 | `main.py` / `app.py` | CLI 与 Web 入口 |
 | `src/core/` | 轨迹分析与生成、配速波动、坐标修正、数据模型 |
 | `src/planners/` | 各生成模式的距离规划策略 |
-| `src/exporters/` | TCX 导出（接口抽象，可扩展 GPX / FIT） |
+| `src/exporters/` | FIT / TCX 导出（接口抽象，可扩展 GPX） |
 | `src/*.py` | 配置管理、模板管理、生成引擎编排 |
 | `web/` | Flask 路由、页面与静态资源 |
 | `config/` | 轨迹定义、预设模板、默认设置 |

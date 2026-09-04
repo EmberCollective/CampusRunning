@@ -209,6 +209,8 @@ class GenerationConfig:
         apply_correction: 是否应用坐标修正
         enable_pace_fluctuation: 是否启用配速波动
         enable_cadence: 是否启用步频/步数数据自动生成
+        output_format: 输出文件格式（"fit" 或 "tcx"；Keep 的 TCX
+                       导入通道不解析步频，FIT 为默认格式）
         create_zip: 是否创建 ZIP 压缩包
         points_per_km: 每公里生成的轨迹点数
         max_deviation_meters: 最大偏移距离（米）
@@ -231,6 +233,7 @@ class GenerationConfig:
     apply_correction: bool = True
     enable_pace_fluctuation: bool = True
     enable_cadence: bool = True
+    output_format: str = "fit"
     create_zip: bool = False
     points_per_km: int = 50
     max_deviation_meters: float = 2.0

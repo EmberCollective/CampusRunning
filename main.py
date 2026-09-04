@@ -60,6 +60,8 @@ def generate_by_daily_range(args, engine: GenerationEngine, template_manager: Te
     }
     if args.track:
         overrides["track_id"] = args.track
+    if args.format:
+        overrides["output_format"] = args.format
 
     config = template_manager.apply_template(
         template_id=args.template,
@@ -74,7 +76,7 @@ def generate_by_daily_range(args, engine: GenerationEngine, template_manager: Te
     results = engine.generate_daily(start_date, end_date, args.min_km, args.max_km, config)
 
     print(f"\n任务完成！")
-    print(f"生成的TCX文件: {len(results)}个")
+    print(f"生成的文件: {len(results)}个")
     print(f"输出目录: {args.output_dir}")
     print(f"包含轨迹: {'否' if args.no_track else '是'}")
 
@@ -105,6 +107,8 @@ def generate_by_total_km(args, engine: GenerationEngine, template_manager: Templ
     }
     if args.track:
         overrides["track_id"] = args.track
+    if args.format:
+        overrides["output_format"] = args.format
 
     config = template_manager.apply_template(
         template_id=args.template,
@@ -125,7 +129,7 @@ def generate_by_total_km(args, engine: GenerationEngine, template_manager: Templ
     print(f"  时间范围: {args.start_date} 至 {args.end_date}")
 
     print(f"\n任务完成！")
-    print(f"生成的TCX文件: {len(results)}个")
+    print(f"生成的文件: {len(results)}个")
     print(f"输出目录: {args.output_dir}")
     print(f"包含轨迹: {'否' if args.no_track else '是'}")
 
@@ -148,6 +152,8 @@ def generate_single_file(args, engine: GenerationEngine, template_manager: Templ
     }
     if args.track:
         overrides["track_id"] = args.track
+    if args.format:
+        overrides["output_format"] = args.format
     if args.pace:
         # 单文件模式使用固定配速
         overrides["min_pace"] = args.pace
@@ -169,7 +175,7 @@ def generate_single_file(args, engine: GenerationEngine, template_manager: Templ
     result = engine.generate_single(date, args.distance, config)
 
     print(f"\n任务完成！")
-    print(f"生成的TCX文件: {os.path.basename(result.filepath)}")
+    print(f"生成的文件: {os.path.basename(result.filepath)}")
     print(f"输出目录: {args.output_dir}")
     print(f"包含轨迹: {'否' if args.no_track else '是'}")
 
@@ -220,7 +226,8 @@ def main():
     daily_parser.add_argument('--no-track', action='store_true', help='不生成轨迹点')
     daily_parser.add_argument('--no-correction', action='store_true', help='不应用坐标修正')
     daily_parser.add_argument('--no-pace-fluctuation', action='store_true', help='不应用配速波动')
-    daily_parser.add_argument('--zip', action='store_true', help='将生成的TCX文件打包成ZIP压缩包')
+    daily_parser.add_argument('--format', choices=['tcx', 'fit'], help='输出文件格式 (默认: fit，Keep 导入请用 fit)')
+    daily_parser.add_argument('--zip', action='store_true', help='将生成的文件打包成ZIP压缩包')
     daily_parser.add_argument('--track', help='指定轨迹ID')
     daily_parser.add_argument('--template', help='指定预设模板')
 
@@ -241,7 +248,8 @@ def main():
     total_parser.add_argument('--no-track', action='store_true', help='不生成轨迹点')
     total_parser.add_argument('--no-correction', action='store_true', help='不应用坐标修正')
     total_parser.add_argument('--no-pace-fluctuation', action='store_true', help='不应用配速波动')
-    total_parser.add_argument('--zip', action='store_true', help='将生成的TCX文件打包成ZIP压缩包')
+    total_parser.add_argument('--format', choices=['tcx', 'fit'], help='输出文件格式 (默认: fit，Keep 导入请用 fit)')
+    total_parser.add_argument('--zip', action='store_true', help='将生成的文件打包成ZIP压缩包')
     total_parser.add_argument('--track', help='指定轨迹ID')
     total_parser.add_argument('--template', help='指定预设模板')
 
@@ -255,7 +263,8 @@ def main():
     single_parser.add_argument('--no-track', action='store_true', help='不生成轨迹点')
     single_parser.add_argument('--no-correction', action='store_true', help='不应用坐标修正')
     single_parser.add_argument('--no-pace-fluctuation', action='store_true', help='不应用配速波动')
-    single_parser.add_argument('--zip', action='store_true', help='将生成的TCX文件打包成ZIP压缩包')
+    single_parser.add_argument('--format', choices=['tcx', 'fit'], help='输出文件格式 (默认: fit，Keep 导入请用 fit)')
+    single_parser.add_argument('--zip', action='store_true', help='将生成的文件打包成ZIP压缩包')
     single_parser.add_argument('--track', help='指定轨迹ID')
     single_parser.add_argument('--template', help='指定预设模板')
 

@@ -17,6 +17,7 @@ PR #10（FIT 导出器 + 步频/步数生成）已合并 main，默认输出格�
 - 方案 A（自研提取脚本），不用第三方 changelog action，不做 semantic-release
 - tag 统一 `v` 前缀（`v3.0.0`）；历史 tag `2.1.0`/`2.1.1` 不带前缀，不影响新触发规则
 - CHANGELOG 全中文，Keep a Changelog 1.1 格式，顶部保留 `[未发布]` 段
+- README Web 部分配真实界面截图（browser-use 自动化截取，存 `assets/readme/`）
 - 新增 `requirements.txt`（CI 安装依赖用）
 - 发布内容在 `release/v3.0.0` 分支完成，走一个 PR 合入 main，之后打 tag 触发 release
 
@@ -176,6 +177,7 @@ python scripts/extract_changelog.py <tag> [--output FILE]
 ├── 安装：pip install flask garmin-fit-sdk（合并为一个代码块，CLI/Web 共用）
 ├── ### Web（推荐，详写）
 │   ├── 启动：python app.py → http://127.0.0.1:5000
+│   ├── 截图两张（见「Web 截图」小节）：工作台首页、轨迹编辑器
 │   └── 功能展开（各 1-2 句）：
 │       ├── 三种模式（daily/total/single）表单化操作，指定日期批量生成
 │       ├── 模板：表单填好 → 导出/应用，一键复用
@@ -192,12 +194,29 @@ python scripts/extract_changelog.py <tag> [--output FILE]
 其余修订点：
 
 - 「它能做什么」四层真实感机制 → 五层，新增**真实步频/步数**（#8 能力，现版未提）
+
+#### Web 截图（实施时生成）
+
+| 文件 | 内容 | README 位置 |
+|------|------|-------------|
+| `assets/readme/web_workbench.png` | 工作台首页：表单默认状态 | Web 小节启动命令之后 |
+| `assets/readme/track_editor.png` | 轨迹编辑器：Leaflet 地图 + 画笔工具栏 + 一条已绘制的操场环线 | 「添加轨迹」方式一（推荐）处 |
+
+截图流程（browser-use 自动化）：
+
+1. `python app.py` 启动（127.0.0.1:5000）
+2. 首页：视口 1600×1000 直接截图
+3. 轨迹编辑器：进入编辑器页 → 用画笔沿操场点若干点画出环线（左侧工具栏可见、右侧实时距离读数有值）→ 截图
+4. 保存至 `assets/readme/`，README 以 `<img>` 引用并设 `width="100%"`
+
+可行性已验证：轨迹编辑器默认 Leaflet 档**无需高德 Key** 即可显示地图与绘制；官方高德档（需 Key）仅作可选增强，截图用 Leaflet 档即可。
 - 「文档」列表追加 CHANGELOG 链接
 - hero SVG、免责声明、「天下苦校园跑久矣」、配置节、项目结构表：不动
 
 ## 测试计划
 
 - `python -m pytest`：现有 42 + 新增 ~5（提取脚本）全部通过
+- 两张截图人工核对：画面完整（地图/表单/工具栏可见）、无遮挡、尺寸合理
 - `python scripts/extract_changelog.py v3.0.0` 手工验证输出
 - `python -m py_compile app.py main.py`：确认 README 之外的文件未被误改（防御性检查）
 - CI 上绿 → 打 tag → 验证自动 Release 正文与 CHANGELOG 段落一致

@@ -202,6 +202,7 @@ class GenerationEngine:
             max_deviation=config.max_deviation_meters,
             smooth_factor=config.smooth_factor,
             enable_pace_fluctuation=config.enable_pace_fluctuation,
+            enable_cadence=config.enable_cadence,
         )
 
         for plan in plans:
@@ -256,6 +257,7 @@ class GenerationEngine:
             trackpoints = track_gen.generate_tcx_trackpoints(
                 geo_points, start_time, duration, pace,
                 config.enable_pace_fluctuation,
+                config.enable_cadence,
             )
 
         # 构建导出数据

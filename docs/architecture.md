@@ -44,6 +44,7 @@ Exporter (TCX)
 | `track_generator.py` | 轨迹生成（插值、随机偏移、平滑处理） |
 | `coordinate_corrector.py` | GPS坐标修正 |
 | `pace_fluctuator.py` | 配速波动模拟（热身→稳定→疲劳→冲刺） |
+| `cadence_generator.py` | 步频/步数生成（速度→步频映射、Lap 级步数积分） |
 | `helpers.py` | 通用工具函数 |
 
 ### src/planners/

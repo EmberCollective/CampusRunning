@@ -95,12 +95,17 @@ class TrackpointData:
         longitude: 经度
         altitude: 海拔高度（米）
         distance_meters: 累计距离（米）
+        run_cadence: 单脚步频（总步频/2，Garmin Cadence/RunCadence 语义，
+                     典型值 75-95）
+        speed: 瞬时速度（米/秒）
     """
     time: str
     latitude: float
     longitude: float
     altitude: float
     distance_meters: float
+    run_cadence: Optional[int] = None
+    speed: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -203,6 +208,7 @@ class GenerationConfig:
         include_track: 是否包含轨迹数据
         apply_correction: 是否应用坐标修正
         enable_pace_fluctuation: 是否启用配速波动
+        enable_cadence: 是否启用步频/步数数据自动生成
         create_zip: 是否创建 ZIP 压缩包
         points_per_km: 每公里生成的轨迹点数
         max_deviation_meters: 最大偏移距离（米）
@@ -224,6 +230,7 @@ class GenerationConfig:
     include_track: bool = True
     apply_correction: bool = True
     enable_pace_fluctuation: bool = True
+    enable_cadence: bool = True
     create_zip: bool = False
     points_per_km: int = 50
     max_deviation_meters: float = 2.0

@@ -16,7 +16,7 @@
 - Web 前端重构为专业工作台风格 (#7)
 - 指定日期批量生成（CLI 与 Web UI）(#9)
 - 内置 campusrunning-cli Agent Skill，AI 编码工具对话式直接调用 (#6)
-- 新增东区南操场轨迹
+- 新增东区南操场、南校区操场轨迹
 - 项目采用 MIT License
 
 ### 变更

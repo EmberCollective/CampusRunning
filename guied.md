@@ -2,7 +2,7 @@
 
 下面这篇指南用于指导如何使用导出过后的压缩包，来完成具体的跑步数据
 
-生成的 TCX 文件已自动包含步频/步数数据（Trackpoint 的 Cadence 与 Lap 的总步数），满足最新版 Keep 对步幅数据的校验要求
+生成的文件已自动包含步频/步数数据。**默认输出 FIT 格式**（`config/default_settings.json` 的 `output_format`，可切回 `tcx`）——Keep 的「运动数据文件导入」不解析 TCX 的任何步频字段，FIT 才能通过步数/步幅校验并正常显示步频、步数与步幅（issue #8 真机验证）。FIT 模式需要安装依赖：`pip install garmin-fit-sdk`
 
 ## 下载压缩包到手机，或者发送到手机
 

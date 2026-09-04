@@ -7,6 +7,7 @@
 ## 技术栈
 - Python 3.13+
 - Flask
+- garmin-fit-sdk（FIT 导出，Keep 导入必需；`pip install garmin-fit-sdk`）
 
 ## 关键命令
 

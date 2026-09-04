@@ -63,6 +63,7 @@ Exporter (TCX)
 | `__init__.py` | 导出器模块导出 |
 | `base.py` | 抽象导出器接口 |
 | `tcx_exporter.py` | TCX格式导出实现 |
+| `fit_exporter.py` | FIT格式导出实现（默认格式；Keep 的 TCX 导入通道不解析步频，见 issue #8） |
 
 ### src/
 

@@ -285,6 +285,7 @@ class ConfigManager:
             "min_daily_km": defaults.get("min_daily_km", 2.0),
             "max_daily_km": defaults.get("max_daily_km", 8.0),
             "enable_cadence": defaults.get("enable_cadence", True),
+            "output_format": defaults.get("output_format", "fit"),
         }
 
         if overrides:

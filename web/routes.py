@@ -472,16 +472,27 @@ def generate_dates():
         if not dates_raw or not isinstance(dates_raw, list):
             return jsonify({"error": "请至少选择一个日期"}), 400
 
-        dates = [
-            datetime.datetime.strptime(d, "%Y-%m-%d").date()
-            for d in dates_raw
-        ]
+        # 逐元素校验类型与格式，避免 TypeError/ValueError 落入兜底 500 泄露异常文本
+        dates = []
+        for d in dates_raw:
+            if not isinstance(d, str):
+                return jsonify({"error": f"日期 {d!r} 无效，应为 YYYY-MM-DD 格式的字符串"}), 400
+            try:
+                dates.append(datetime.datetime.strptime(d, "%Y-%m-%d").date())
+            except ValueError:
+                return jsonify({"error": f"日期 {d} 无效，应为 YYYY-MM-DD 格式"}), 400
+        # 去重排序：重复日期会生成同名文件相互覆盖，导致 total_files 虚高、ZIP 内出现重名条目
+        dates = sorted(set(dates))
         distance = float(data["distance"])
 
         from src.generation_engine import GenerationEngine
 
         engine = GenerationEngine(_config_manager)
         results = engine.generate_dates(dates, distance, config)
+
+        if not results:
+            # 全部日期生成失败（如开始时间晚于结束时间），不注册任务、不提供下载入口
+            return jsonify({"error": "生成失败：所有日期均未成功生成文件，请检查配速与时间设置"}), 500
 
         job_id = (
             f"gen_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -507,6 +518,10 @@ def download_files(job_id):
         return jsonify({"error": "任务不存在"}), 404
 
     results = _generation_jobs[job_id]
+
+    if not results:
+        # 任务存在但没有成功生成的文件（如全部计划失败时注册的空结果）
+        return jsonify({"error": "该任务没有可下载的文件"}), 400
 
     if len(results) == 1:
         return send_file(results[0].filepath, as_attachment=True)

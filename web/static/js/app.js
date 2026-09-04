@@ -157,16 +157,30 @@ function renderSelectedTags() {
         return;
     }
 
-    container.innerHTML = dates.map(d => {
-        // 显示为 MM-DD 星期X
+    // 用 DOM API 构建：日期字符串可能来自上传的模板文件，
+    // 只经 textContent/dataset 写入，禁止拼入 innerHTML（防存储型 XSS，与 loadTracks 同策略）
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    container.innerHTML = '';
+    dates.forEach(d => {
         const dt = new Date(d + 'T00:00:00');
-        const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-        const label = `${(dt.getMonth()+1).toString().padStart(2,'0')}-${dt.getDate().toString().padStart(2,'0')} 周${weekdays[dt.getDay()]}`;
-        return `<span class="date-tag" data-date="${d}">
-            ${label}
-            <span class="tag-remove" onclick="removeDateTag('${d}')">&times;</span>
-        </span>`;
-    }).join('');
+        // 非法日期字符串（模板中的脏数据）直接显示原文，避免渲染出 "NaN-NaN 周NaN"
+        const label = Number.isNaN(dt.getTime())
+            ? d
+            : `${(dt.getMonth()+1).toString().padStart(2,'0')}-${dt.getDate().toString().padStart(2,'0')} 周${weekdays[dt.getDay()]}`;
+
+        const tag = document.createElement('span');
+        tag.className = 'date-tag';
+        tag.dataset.date = d;
+        tag.appendChild(document.createTextNode(label));
+
+        const remove = document.createElement('span');
+        remove.className = 'tag-remove';
+        remove.textContent = '×';
+        remove.addEventListener('click', () => removeDateTag(d));
+        tag.appendChild(remove);
+
+        container.appendChild(tag);
+    });
 }
 
 function removeDateTag(dateStr) {

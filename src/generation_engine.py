@@ -238,7 +238,13 @@ class GenerationEngine:
 
         if output_format == "fit":
             # 惰性导入: garmin-fit-sdk 未安装时仅影响 FIT 模式
-            from src.exporters.fit_exporter import FitExporter
+            try:
+                from src.exporters.fit_exporter import FitExporter
+            except ImportError as exc:
+                raise ValueError(
+                    "FIT 模式需要 garmin-fit-sdk（pip install "
+                    "garmin-fit-sdk），或将 output_format 改为 tcx"
+                ) from exc
             self._exporters["fit"] = FitExporter()
             return self._exporters["fit"]
 

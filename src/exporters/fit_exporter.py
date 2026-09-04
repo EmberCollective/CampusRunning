@@ -213,11 +213,12 @@ class FitExporter(BaseExporter):
                 "position_long": cls._semicircles(tp.longitude),
                 "altitude": tp.altitude,
                 "distance": tp.distance_meters,
-                "speed": tp.speed or 0.0,
             }
+            if tp.speed is not None:
+                mesg["speed"] = tp.speed
             if tp.run_cadence is not None:
                 mesg["cadence"] = tp.run_cadence
-                if tp.speed and tp.speed > 0:
+                if tp.speed and tp.run_cadence > 0:
                     # 步幅(毫米) = 速度*60000 / 总步频
                     mesg["step_length"] = round(
                         tp.speed * 60000 / (tp.run_cadence * 2))
@@ -267,9 +268,11 @@ class FitExporter(BaseExporter):
 
         if trackpoints:
             duration = elapsed if elapsed > 0 else 1.0
-            speeds = [tp.speed or 0.0 for tp in trackpoints]
             lap["avg_speed"] = nominal_distance / duration
-            lap["max_speed"] = max(speeds)
+            valid_speeds = [
+                tp.speed for tp in trackpoints if tp.speed is not None]
+            if valid_speeds:
+                lap["max_speed"] = max(valid_speeds)
 
         metrics = compute_lap_cadence_metrics(trackpoints)
         if metrics is not None:

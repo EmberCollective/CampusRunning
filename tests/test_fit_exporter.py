@@ -153,9 +153,43 @@ class TestFitLegacyCompat:
         for rec in messages["record_mesgs"]:
             assert "cadence" not in rec
             assert "step_length" not in rec
+            # speed 缺失时应省略字段而非写 0.0
+            assert "speed" not in rec
         session = messages["session_mesgs"][0]
         assert "avg_cadence" not in session
         assert "total_cycles" not in session
+        # 无有效速度时不应出现 max_speed=0 < avg_speed 的矛盾
+        assert "max_speed" not in session
+
+    def test_zero_cadence_no_step_length(self, tmp_path):
+        """run_cadence=0 时不应计算 step_length（除零守卫）"""
+        base = datetime.datetime(2026, 9, 4, 7, 0, 0)
+        points = [
+            make_trackpoint(base, cadence=0, speed=2.0),
+            make_trackpoint(base.replace(second=30), cadence=0, speed=2.0),
+        ]
+        path = str(tmp_path / "test.fit")
+        FitExporter().export(make_export_data(points), path)
+
+        for rec in decode_file(path)["record_mesgs"]:
+            assert "step_length" not in rec
+
+
+@pytest.mark.unit
+class TestOutputFormatValidation:
+    """输出格式配置校验测试"""
+
+    def test_invalid_format_raises(self):
+        from src.core.models import GenerationConfig
+
+        with pytest.raises(ValueError, match="不支持的输出格式"):
+            GenerationConfig(output_format="TCX")
+
+    def test_valid_formats_accepted(self):
+        from src.core.models import GenerationConfig
+
+        assert GenerationConfig(output_format="fit").output_format == "fit"
+        assert GenerationConfig(output_format="tcx").output_format == "tcx"
 
 
 @pytest.mark.integration

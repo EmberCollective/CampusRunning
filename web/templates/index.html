@@ -61,6 +61,10 @@
                                 <span class="mode-name"><span class="idx">C</span>单个文件</span>
                                 <span class="mode-desc">生成一天的单个 TCX 文件</span>
                             </button>
+                            <button type="button" class="tab-button" data-mode="dates">
+                                <span class="mode-name"><span class="idx">D</span>指定日期批量</span>
+                                <span class="mode-desc">在日历中选择多个日期批量生成</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -214,6 +218,71 @@
                             <div class="run-bar">
                                 <button type="submit" class="btn btn-primary">开始生成</button>
                                 <button type="button" id="single-export-btn" class="btn btn-secondary">导出模板</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 指定日期批量模式 -->
+                <div id="dates-mode" class="mode-content">
+                    <div class="section-body">
+                        <form id="dates-form">
+                            <!-- 日历 + 已选日期 横向铺满 -->
+                            <div class="dates-cal-row">
+                                <div class="calendar-container" id="calendar-container">
+                                    <div class="calendar-header">
+                                        <button type="button" class="cal-nav-btn" id="cal-prev">&lsaquo;</button>
+                                        <span class="cal-title" id="cal-title"></span>
+                                        <button type="button" class="cal-nav-btn" id="cal-next">&rsaquo;</button>
+                                    </div>
+                                    <div class="calendar-weekdays">
+                                        <span>一</span><span>二</span><span>三</span>
+                                        <span>四</span><span>五</span><span>六</span><span>日</span>
+                                    </div>
+                                    <div class="calendar-grid" id="cal-grid"></div>
+                                    <div class="calendar-actions">
+                                        <button type="button" class="cal-action-btn" id="cal-clear">清空</button>
+                                        <button type="button" class="cal-action-btn" id="cal-select-weekdays">工作日</button>
+                                        <button type="button" class="cal-action-btn" id="cal-select-weekends">周末</button>
+                                    </div>
+                                </div>
+                                <div class="dates-side">
+                                    <label>已选日期 <span id="dates-count" class="dates-count">(0 天)</span></label>
+                                    <div class="selected-dates-tags" id="selected-dates-tags">
+                                        <span class="dates-placeholder">点击日历选择日期</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 参数行 -->
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="dates-distance">距离 (km)</label>
+                                    <input type="number" id="dates-distance" step="0.1" min="0.1" value="3.0" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="dates-min-pace">最快配速 (min/km)</label>
+                                    <input type="number" id="dates-min-pace" step="0.1" min="1" value="7.0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="dates-max-pace">最慢配速 (min/km)</label>
+                                    <input type="number" id="dates-max-pace" step="0.1" min="1" value="8.0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="dates-start-time-min">最早开始时间</label>
+                                    <input type="time" id="dates-start-time-min" value="06:00">
+                                </div>
+                                <div class="form-group">
+                                    <label for="dates-start-time-max">最晚开始时间</label>
+                                    <input type="time" id="dates-start-time-max" value="08:00">
+                                </div>
+                                <div class="form-group">
+                                    <label for="dates-output-dir">输出目录</label>
+                                    <input type="text" id="dates-output-dir" value="output">
+                                </div>
+                            </div>
+                            <div class="run-bar">
+                                <button type="submit" class="btn btn-primary">批量生成</button>
+                                <button type="button" id="dates-export-btn" class="btn btn-secondary">导出模板</button>
                             </div>
                         </form>
                     </div>

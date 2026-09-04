@@ -142,6 +142,32 @@ class GenerationEngine:
         results = self._generate_from_plans([plan], config)
         return results[0]
 
+    def generate_dates(
+        self,
+        dates: list[datetime.date],
+        distance: float,
+        config: GenerationConfig,
+    ) -> list[GenerationResult]:
+        """指定日期批量生成
+
+        Args:
+            dates: 日期列表
+            distance: 每日距离（公里）
+            config: 生成配置
+
+        Returns:
+            生成结果列表
+        """
+        logger.info(
+            "指定日期批量生成: %d 天, %.2f km/天",
+            len(dates), distance,
+        )
+
+        planner = SinglePlanner()
+        plans = [planner.plan(d, distance) for d in dates]
+
+        return self._generate_from_plans(plans, config)
+
     def _generate_from_plans(
         self,
         plans: list[DailyPlan],

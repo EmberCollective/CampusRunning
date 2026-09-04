@@ -120,6 +120,9 @@ def create_app() -> Flask:
         "/api/generate/single", "generate_single", generate_single, methods=["POST"]
     )
     app.add_url_rule(
+        "/api/generate/dates", "generate_dates", generate_dates, methods=["POST"]
+    )
+    app.add_url_rule(
         "/api/download/<job_id>", "download_files", download_files, methods=["GET"]
     )
     app.add_url_rule("/track-editor", "track_editor_page", track_editor_page)
@@ -450,6 +453,47 @@ def generate_single():
             "status": "complete",
             "total_files": 1,
             "files": [_result_to_dict(result)],
+            "download_url": f"/api/download/{job_id}",
+        })
+    except Exception as e:
+        logger.error("生成失败: %s", e, exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+def generate_dates():
+    """指定日期批量生成"""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "无效的请求数据"}), 400
+
+    try:
+        config = _parse_generate_request(data)
+        dates_raw = data.get("dates", [])
+        if not dates_raw or not isinstance(dates_raw, list):
+            return jsonify({"error": "请至少选择一个日期"}), 400
+
+        dates = [
+            datetime.datetime.strptime(d, "%Y-%m-%d").date()
+            for d in dates_raw
+        ]
+        distance = float(data["distance"])
+
+        from src.generation_engine import GenerationEngine
+
+        engine = GenerationEngine(_config_manager)
+        results = engine.generate_dates(dates, distance, config)
+
+        job_id = (
+            f"gen_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            f"_{uuid.uuid4().hex[:6]}"
+        )
+        _generation_jobs[job_id] = results
+
+        return jsonify({
+            "job_id": job_id,
+            "status": "complete",
+            "total_files": len(results),
+            "files": [_result_to_dict(r) for r in results],
             "download_url": f"/api/download/{job_id}",
         })
     except Exception as e:

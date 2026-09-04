@@ -10,6 +10,8 @@
   "calories_per_km": 60.0,
   "min_daily_km": 2.0,
   "max_daily_km": 8.0,
+  "enable_cadence": true,
+  "output_format": "fit",
   "web_host": "0.0.0.0",
   "web_port": 5000,
   "default_coordinate_correction": {

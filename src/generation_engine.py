@@ -30,6 +30,7 @@ from src.core.helpers import (
 from src.planners.daily_planner import DailyPlanner
 from src.planners.total_km_planner import TotalKmPlanner
 from src.planners.single_planner import SinglePlanner
+from src.exporters.base import BaseExporter
 from src.exporters.tcx_exporter import TcxExporter
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ class GenerationEngine:
             config_manager: 配置管理器实例
         """
         self._config_manager = config_manager
-        self._exporter = TcxExporter()
+        self._exporters: dict[str, BaseExporter] = {"tcx": TcxExporter()}
 
         logger.info("生成引擎初始化完成")
 
@@ -202,6 +203,7 @@ class GenerationEngine:
             max_deviation=config.max_deviation_meters,
             smooth_factor=config.smooth_factor,
             enable_pace_fluctuation=config.enable_pace_fluctuation,
+            enable_cadence=config.enable_cadence,
         )
 
         for plan in plans:
@@ -217,6 +219,38 @@ class GenerationEngine:
 
         logger.info("生成完成: %d/%d 个文件", len(results), len(plans))
         return results
+
+    def _get_exporter(self, output_format: str) -> BaseExporter:
+        """按输出格式获取导出器
+
+        Args:
+            output_format: 输出格式（"tcx" 或 "fit"）
+
+        Returns:
+            导出器实例
+
+        Raises:
+            ValueError: 不支持的输出格式
+        """
+        exporter = self._exporters.get(output_format)
+        if exporter is not None:
+            return exporter
+
+        if output_format == "fit":
+            # 惰性导入: garmin-fit-sdk 未安装时仅影响 FIT 模式
+            try:
+                from src.exporters.fit_exporter import FitExporter
+            except ImportError as exc:
+                raise ValueError(
+                    "FIT 模式需要 garmin-fit-sdk（pip install "
+                    "garmin-fit-sdk），或将 output_format 改为 tcx"
+                ) from exc
+            self._exporters["fit"] = FitExporter()
+            return self._exporters["fit"]
+
+        raise ValueError(
+            f"不支持的输出格式: {output_format}（可选 tcx/fit）"
+        )
 
     def _generate_single_file(
         self,
@@ -256,6 +290,7 @@ class GenerationEngine:
             trackpoints = track_gen.generate_tcx_trackpoints(
                 geo_points, start_time, duration, pace,
                 config.enable_pace_fluctuation,
+                config.enable_cadence,
             )
 
         # 构建导出数据
@@ -269,12 +304,16 @@ class GenerationEngine:
         )
 
         # 导出文件
+        exporter = self._get_exporter(config.output_format)
         output_dir = os.path.abspath(config.output_dir)
         os.makedirs(output_dir, exist_ok=True)
-        filename = f"{plan.date.strftime('%Y-%m-%d')}_{distance_km}km.tcx"
+        filename = (
+            f"{plan.date.strftime('%Y-%m-%d')}_{distance_km}km"
+            f"{exporter.get_file_extension()}"
+        )
         filepath = os.path.join(output_dir, filename)
 
-        self._exporter.export(export_data, filepath)
+        exporter.export(export_data, filepath)
 
         logger.info(
             "文件已生成: %s (%.2f km, 配速 %.2f min/km)",

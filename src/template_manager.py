@@ -172,6 +172,8 @@ class TemplateManager:
             "include_track": config_dict.include_track,
             "apply_correction": config_dict.apply_correction,
             "enable_pace_fluctuation": config_dict.enable_pace_fluctuation,
+            "enable_cadence": config_dict.enable_cadence,
+            "output_format": config_dict.output_format,
             "create_zip": config_dict.create_zip,
             "points_per_km": config_dict.points_per_km,
             "max_deviation_meters": config_dict.max_deviation_meters,

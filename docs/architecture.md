@@ -44,6 +44,7 @@ Exporter (TCX)
 | `track_generator.py` | 轨迹生成（插值、随机偏移、平滑处理） |
 | `coordinate_corrector.py` | GPS坐标修正 |
 | `pace_fluctuator.py` | 配速波动模拟（热身→稳定→疲劳→冲刺） |
+| `cadence_generator.py` | 步频/步数生成（速度→步频映射、Lap 级步数积分） |
 | `helpers.py` | 通用工具函数 |
 
 ### src/planners/
@@ -62,6 +63,7 @@ Exporter (TCX)
 | `__init__.py` | 导出器模块导出 |
 | `base.py` | 抽象导出器接口 |
 | `tcx_exporter.py` | TCX格式导出实现 |
+| `fit_exporter.py` | FIT格式导出实现（默认格式；Keep 的 TCX 导入通道不解析步频，见 issue #8） |
 
 ### src/
 

@@ -95,12 +95,17 @@ class TrackpointData:
         longitude: 经度
         altitude: 海拔高度（米）
         distance_meters: 累计距离（米）
+        run_cadence: 单脚步频（总步频/2，Garmin Cadence/RunCadence 语义，
+                     典型值 75-95）
+        speed: 瞬时速度（米/秒）
     """
     time: str
     latitude: float
     longitude: float
     altitude: float
     distance_meters: float
+    run_cadence: Optional[int] = None
+    speed: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -203,6 +208,9 @@ class GenerationConfig:
         include_track: 是否包含轨迹数据
         apply_correction: 是否应用坐标修正
         enable_pace_fluctuation: 是否启用配速波动
+        enable_cadence: 是否启用步频/步数数据自动生成
+        output_format: 输出文件格式（"fit" 或 "tcx"；Keep 的 TCX
+                       导入通道不解析步频，FIT 为默认格式）
         create_zip: 是否创建 ZIP 压缩包
         points_per_km: 每公里生成的轨迹点数
         max_deviation_meters: 最大偏移距离（米）
@@ -224,6 +232,8 @@ class GenerationConfig:
     include_track: bool = True
     apply_correction: bool = True
     enable_pace_fluctuation: bool = True
+    enable_cadence: bool = True
+    output_format: str = "fit"
     create_zip: bool = False
     points_per_km: int = 50
     max_deviation_meters: float = 2.0
@@ -235,3 +245,16 @@ class GenerationConfig:
     calories_per_km: float = 60.0
     start_date: Optional[datetime.date] = None
     end_date: Optional[datetime.date] = None
+
+    _VALID_OUTPUT_FORMATS = ("tcx", "fit")
+
+    def __post_init__(self) -> None:
+        """构造时校验关键字段取值，非法值尽早暴露
+
+        Raises:
+            ValueError: output_format 不是受支持的格式
+        """
+        if self.output_format not in self._VALID_OUTPUT_FORMATS:
+            raise ValueError(
+                f"不支持的输出格式: {self.output_format}（可选 tcx/fit）"
+            )

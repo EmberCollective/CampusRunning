@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 校园跑步数据生成器 - 主程序
-用于生成校园跑步数据的TCX格式文件
+用于生成校园跑步数据的运动数据文件（默认 FIT，兼容 TCX）
 
 作者: 猫娘幽浮喵
 功能:
-1. 根据时间范围和每日公里数范围生成TCX文件
-2. 根据时间和总公里数生成匹配数据的TCX文件
+1. 根据时间范围和每日公里数范围生成数据文件
+2. 根据时间和总公里数生成匹配数据的数据文件
 3. 配速、总公里数、跑步开始时间范围可自定义
 4. 支持多轨迹和预设模板
 """
@@ -41,9 +41,9 @@ def setup_logging(verbose: bool = False):
 
 
 def generate_by_daily_range(args, engine: GenerationEngine, template_manager: TemplateManager):
-    """根据每日公里数范围生成TCX文件"""
+    """根据每日公里数范围生成数据文件"""
     print("=" * 60)
-    print("根据每日公里数范围生成TCX文件")
+    print("根据每日公里数范围生成数据文件")
     print("=" * 60)
 
     # 构建配置
@@ -60,6 +60,8 @@ def generate_by_daily_range(args, engine: GenerationEngine, template_manager: Te
     }
     if args.track:
         overrides["track_id"] = args.track
+    if args.format:
+        overrides["output_format"] = args.format
 
     config = template_manager.apply_template(
         template_id=args.template,
@@ -74,7 +76,7 @@ def generate_by_daily_range(args, engine: GenerationEngine, template_manager: Te
     results = engine.generate_daily(start_date, end_date, args.min_km, args.max_km, config)
 
     print(f"\n任务完成！")
-    print(f"生成的TCX文件: {len(results)}个")
+    print(f"生成的文件: {len(results)}个")
     print(f"输出目录: {args.output_dir}")
     print(f"包含轨迹: {'否' if args.no_track else '是'}")
 
@@ -82,9 +84,9 @@ def generate_by_daily_range(args, engine: GenerationEngine, template_manager: Te
 
 
 def generate_by_total_km(args, engine: GenerationEngine, template_manager: TemplateManager):
-    """根据总公里数生成匹配数据的TCX文件"""
+    """根据总公里数生成匹配数据的数据文件"""
     print("=" * 60)
-    print("根据总公里数生成匹配数据的TCX文件")
+    print("根据总公里数生成匹配数据的数据文件")
     print("=" * 60)
 
     # 构建配置
@@ -105,6 +107,8 @@ def generate_by_total_km(args, engine: GenerationEngine, template_manager: Templ
     }
     if args.track:
         overrides["track_id"] = args.track
+    if args.format:
+        overrides["output_format"] = args.format
 
     config = template_manager.apply_template(
         template_id=args.template,
@@ -125,7 +129,7 @@ def generate_by_total_km(args, engine: GenerationEngine, template_manager: Templ
     print(f"  时间范围: {args.start_date} 至 {args.end_date}")
 
     print(f"\n任务完成！")
-    print(f"生成的TCX文件: {len(results)}个")
+    print(f"生成的文件: {len(results)}个")
     print(f"输出目录: {args.output_dir}")
     print(f"包含轨迹: {'否' if args.no_track else '是'}")
 
@@ -133,9 +137,9 @@ def generate_by_total_km(args, engine: GenerationEngine, template_manager: Templ
 
 
 def generate_single_file(args, engine: GenerationEngine, template_manager: TemplateManager):
-    """生成单个TCX文件"""
+    """生成单个数据文件"""
     print("=" * 60)
-    print("生成单个TCX文件")
+    print("生成单个数据文件")
     print("=" * 60)
 
     # 构建配置
@@ -148,6 +152,8 @@ def generate_single_file(args, engine: GenerationEngine, template_manager: Templ
     }
     if args.track:
         overrides["track_id"] = args.track
+    if args.format:
+        overrides["output_format"] = args.format
     if args.pace:
         # 单文件模式使用固定配速
         overrides["min_pace"] = args.pace
@@ -169,7 +175,7 @@ def generate_single_file(args, engine: GenerationEngine, template_manager: Templ
     result = engine.generate_single(date, args.distance, config)
 
     print(f"\n任务完成！")
-    print(f"生成的TCX文件: {os.path.basename(result.filepath)}")
+    print(f"生成的文件: {os.path.basename(result.filepath)}")
     print(f"输出目录: {args.output_dir}")
     print(f"包含轨迹: {'否' if args.no_track else '是'}")
 
@@ -207,7 +213,7 @@ def main():
     subparsers = parser.add_subparsers(dest='command', help='可用命令')
 
     # 每日公里数范围生成命令
-    daily_parser = subparsers.add_parser('daily', help='根据每日公里数范围生成TCX文件')
+    daily_parser = subparsers.add_parser('daily', help='根据每日公里数范围生成数据文件')
     daily_parser.add_argument('--start-date', required=True, help='开始日期 (YYYY-MM-DD)')
     daily_parser.add_argument('--end-date', required=True, help='结束日期 (YYYY-MM-DD)')
     daily_parser.add_argument('--min-km', type=float, required=True, help='最低公里数（周内基准）')
@@ -220,12 +226,13 @@ def main():
     daily_parser.add_argument('--no-track', action='store_true', help='不生成轨迹点')
     daily_parser.add_argument('--no-correction', action='store_true', help='不应用坐标修正')
     daily_parser.add_argument('--no-pace-fluctuation', action='store_true', help='不应用配速波动')
-    daily_parser.add_argument('--zip', action='store_true', help='将生成的TCX文件打包成ZIP压缩包')
+    daily_parser.add_argument('--format', choices=['tcx', 'fit'], help='输出文件格式 (默认: fit，Keep 导入请用 fit)')
+    daily_parser.add_argument('--zip', action='store_true', help='将生成的文件打包成ZIP压缩包')
     daily_parser.add_argument('--track', help='指定轨迹ID')
     daily_parser.add_argument('--template', help='指定预设模板')
 
     # 总公里数生成命令
-    total_parser = subparsers.add_parser('total', help='根据总公里数生成匹配数据的TCX文件')
+    total_parser = subparsers.add_parser('total', help='根据总公里数生成匹配数据的数据文件')
     total_parser.add_argument('--start-date', required=True, help='开始日期 (YYYY-MM-DD)')
     total_parser.add_argument('--end-date', required=True, help='结束日期 (YYYY-MM-DD)')
     total_parser.add_argument('--total-km', type=float, required=True, help='总公里数')
@@ -241,12 +248,13 @@ def main():
     total_parser.add_argument('--no-track', action='store_true', help='不生成轨迹点')
     total_parser.add_argument('--no-correction', action='store_true', help='不应用坐标修正')
     total_parser.add_argument('--no-pace-fluctuation', action='store_true', help='不应用配速波动')
-    total_parser.add_argument('--zip', action='store_true', help='将生成的TCX文件打包成ZIP压缩包')
+    total_parser.add_argument('--format', choices=['tcx', 'fit'], help='输出文件格式 (默认: fit，Keep 导入请用 fit)')
+    total_parser.add_argument('--zip', action='store_true', help='将生成的文件打包成ZIP压缩包')
     total_parser.add_argument('--track', help='指定轨迹ID')
     total_parser.add_argument('--template', help='指定预设模板')
 
     # 单个文件生成命令
-    single_parser = subparsers.add_parser('single', help='生成单个TCX文件')
+    single_parser = subparsers.add_parser('single', help='生成单个数据文件')
     single_parser.add_argument('--date', required=True, help='日期 (YYYY-MM-DD)')
     single_parser.add_argument('--distance', type=float, required=True, help='距离（公里）')
     single_parser.add_argument('--pace', type=float, help='配速（分钟/公里），如果不指定则随机生成')
@@ -255,7 +263,8 @@ def main():
     single_parser.add_argument('--no-track', action='store_true', help='不生成轨迹点')
     single_parser.add_argument('--no-correction', action='store_true', help='不应用坐标修正')
     single_parser.add_argument('--no-pace-fluctuation', action='store_true', help='不应用配速波动')
-    single_parser.add_argument('--zip', action='store_true', help='将生成的TCX文件打包成ZIP压缩包')
+    single_parser.add_argument('--format', choices=['tcx', 'fit'], help='输出文件格式 (默认: fit，Keep 导入请用 fit)')
+    single_parser.add_argument('--zip', action='store_true', help='将生成的文件打包成ZIP压缩包')
     single_parser.add_argument('--track', help='指定轨迹ID')
     single_parser.add_argument('--template', help='指定预设模板')
 

@@ -6,6 +6,7 @@ let currentJobId = null;
 document.addEventListener('DOMContentLoaded', async () => {
     initDates();
     initTabs();
+    initCalendar();
     await loadTracks();
     await loadTemplates();
     initForms();
@@ -22,6 +23,195 @@ function initDates() {
     document.getElementById('total-start-date').value = dateFormat(today);
     document.getElementById('total-end-date').value = dateFormat(weekLater);
     document.getElementById('single-date').value = dateFormat(today);
+}
+
+// ============================================================
+// 日历选择器（指定日期批量模式）
+// ============================================================
+const calendarState = {
+    currentYear: new Date().getFullYear(),
+    currentMonth: new Date().getMonth(), // 0-based
+    selectedDates: new Set(), // 存储 "YYYY-MM-DD" 格式
+};
+
+function initCalendar() {
+    renderCalendar();
+    document.getElementById('cal-prev').addEventListener('click', () => {
+        calendarState.currentMonth--;
+        if (calendarState.currentMonth < 0) {
+            calendarState.currentMonth = 11;
+            calendarState.currentYear--;
+        }
+        renderCalendar();
+    });
+    document.getElementById('cal-next').addEventListener('click', () => {
+        calendarState.currentMonth++;
+        if (calendarState.currentMonth > 11) {
+            calendarState.currentMonth = 0;
+            calendarState.currentYear++;
+        }
+        renderCalendar();
+    });
+    document.getElementById('cal-clear').addEventListener('click', () => {
+        calendarState.selectedDates.clear();
+        renderCalendar();
+        renderSelectedTags();
+    });
+    document.getElementById('cal-select-weekdays').addEventListener('click', () => {
+        selectDaysByType('weekday');
+    });
+    document.getElementById('cal-select-weekends').addEventListener('click', () => {
+        selectDaysByType('weekend');
+    });
+}
+
+function renderCalendar() {
+    const year = calendarState.currentYear;
+    const month = calendarState.currentMonth;
+
+    // 更新标题
+    const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月',
+                        '7月', '8月', '9月', '10月', '11月', '12月'];
+    document.getElementById('cal-title').textContent = `${year}年 ${monthNames[month]}`;
+
+    const grid = document.getElementById('cal-grid');
+    grid.innerHTML = '';
+
+    const today = new Date();
+    const todayStr = formatDateStr(today);
+
+    // 本月第一天是星期几（0=日,1=一,...,6=六）=> 转换为周一=0
+    const firstDay = new Date(year, month, 1);
+    let startWeekday = firstDay.getDay() - 1; // 周一=0
+    if (startWeekday < 0) startWeekday = 6; // 周日 => 6
+
+    // 本月天数
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // 上月补位
+    const prevMonthDays = new Date(year, month, 0).getDate();
+    for (let i = startWeekday - 1; i >= 0; i--) {
+        const day = prevMonthDays - i;
+        const el = document.createElement('div');
+        el.className = 'cal-day cal-empty cal-other-month';
+        el.textContent = day;
+        grid.appendChild(el);
+    }
+
+    // 本月日期
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = formatDateStr(new Date(year, month, d));
+        const el = document.createElement('div');
+        el.className = 'cal-day';
+        el.textContent = d;
+
+        // 判断是否周末（0=日, 6=六）
+        const dayOfWeek = new Date(year, month, d).getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            el.classList.add('cal-weekend');
+        }
+
+        if (dateStr === todayStr) {
+            el.classList.add('cal-today');
+        }
+
+        if (calendarState.selectedDates.has(dateStr)) {
+            el.classList.add('cal-selected');
+        }
+
+        el.addEventListener('click', () => toggleDate(dateStr, el));
+        grid.appendChild(el);
+    }
+
+    // 下月补位（补齐到6行 = 42格）
+    const totalCells = grid.children.length;
+    const remaining = totalCells <= 35 ? (35 - totalCells) : (42 - totalCells);
+    for (let i = 1; i <= remaining; i++) {
+        const el = document.createElement('div');
+        el.className = 'cal-day cal-empty cal-other-month';
+        el.textContent = i;
+        grid.appendChild(el);
+    }
+}
+
+function toggleDate(dateStr, el) {
+    if (calendarState.selectedDates.has(dateStr)) {
+        calendarState.selectedDates.delete(dateStr);
+        el.classList.remove('cal-selected');
+    } else {
+        calendarState.selectedDates.add(dateStr);
+        el.classList.add('cal-selected');
+    }
+    renderSelectedTags();
+}
+
+function renderSelectedTags() {
+    const container = document.getElementById('selected-dates-tags');
+    const countEl = document.getElementById('dates-count');
+    const dates = Array.from(calendarState.selectedDates).sort();
+
+    countEl.textContent = `(已选 ${dates.length} 天)`;
+
+    if (dates.length === 0) {
+        container.innerHTML = '<span class="dates-placeholder">点击日历上的日期进行选择</span>';
+        return;
+    }
+
+    // 用 DOM API 构建：日期字符串可能来自上传的模板文件，
+    // 只经 textContent/dataset 写入，禁止拼入 innerHTML（防存储型 XSS，与 loadTracks 同策略）
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    container.innerHTML = '';
+    dates.forEach(d => {
+        const dt = new Date(d + 'T00:00:00');
+        // 非法日期字符串（模板中的脏数据）直接显示原文，避免渲染出 "NaN-NaN 周NaN"
+        const label = Number.isNaN(dt.getTime())
+            ? d
+            : `${(dt.getMonth()+1).toString().padStart(2,'0')}-${dt.getDate().toString().padStart(2,'0')} 周${weekdays[dt.getDay()]}`;
+
+        const tag = document.createElement('span');
+        tag.className = 'date-tag';
+        tag.dataset.date = d;
+        tag.appendChild(document.createTextNode(label));
+
+        const remove = document.createElement('span');
+        remove.className = 'tag-remove';
+        remove.textContent = '×';
+        remove.addEventListener('click', () => removeDateTag(d));
+        tag.appendChild(remove);
+
+        container.appendChild(tag);
+    });
+}
+
+function removeDateTag(dateStr) {
+    calendarState.selectedDates.delete(dateStr);
+    renderSelectedTags();
+    renderCalendar(); // 刷新日历上的选中状态
+}
+
+function selectDaysByType(type) {
+    const year = calendarState.currentYear;
+    const month = calendarState.currentMonth;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dayOfWeek = new Date(year, month, d).getDay();
+        const dateStr = formatDateStr(new Date(year, month, d));
+        if (type === 'weekday' && dayOfWeek >= 1 && dayOfWeek <= 5) {
+            calendarState.selectedDates.add(dateStr);
+        } else if (type === 'weekend' && (dayOfWeek === 0 || dayOfWeek === 6)) {
+            calendarState.selectedDates.add(dateStr);
+        }
+    }
+    renderCalendar();
+    renderSelectedTags();
+}
+
+function formatDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 }
 
 // 初始化Tab切换
@@ -196,6 +386,7 @@ function applyTemplateToForms(template) {
     const hasDaily = template.daily_config && Object.keys(template.daily_config).length > 0;
     const hasTotal = template.total_config && Object.keys(template.total_config).length > 0;
     const hasSingle = template.single_config && Object.keys(template.single_config).length > 0;
+    const hasDates = template.dates_config && Object.keys(template.dates_config).length > 0;
 
     if (hasDaily) {
         switchToMode('daily');
@@ -203,6 +394,8 @@ function applyTemplateToForms(template) {
         switchToMode('total');
     } else if (hasSingle) {
         switchToMode('single');
+    } else if (hasDates) {
+        switchToMode('dates');
     }
 
     const activeMode = document.querySelector('.mode-content.active').id;
@@ -215,6 +408,8 @@ function applyTemplateToForms(template) {
         config = template.total_config;
     } else if (activeMode === 'single-mode' && template.single_config) {
         config = template.single_config;
+    } else if (activeMode === 'dates-mode' && template.dates_config) {
+        config = template.dates_config;
     } else {
         // 兼容旧格式（无模式分离）
         config = template.generation_config || {};
@@ -229,28 +424,34 @@ function applyTemplateToForms(template) {
     if (config.min_pace !== undefined) {
         document.getElementById('daily-min-pace').value = config.min_pace;
         document.getElementById('total-min-pace').value = config.min_pace;
+        document.getElementById('dates-min-pace').value = config.min_pace;
     }
     if (config.max_pace !== undefined) {
         document.getElementById('daily-max-pace').value = config.max_pace;
         document.getElementById('total-max-pace').value = config.max_pace;
+        document.getElementById('dates-max-pace').value = config.max_pace;
     }
     if (config.start_time_min !== undefined) {
         document.getElementById('daily-start-time-min').value = config.start_time_min;
         document.getElementById('total-start-time-min').value = config.start_time_min;
+        document.getElementById('dates-start-time-min').value = config.start_time_min;
     } else if (config.start_hour_min !== undefined) {
         // 向后兼容旧模板
         const minTime = String(config.start_hour_min).padStart(2, '0') + ':00';
         document.getElementById('daily-start-time-min').value = minTime;
         document.getElementById('total-start-time-min').value = minTime;
+        document.getElementById('dates-start-time-min').value = minTime;
     }
     if (config.start_time_max !== undefined) {
         document.getElementById('daily-start-time-max').value = config.start_time_max;
         document.getElementById('total-start-time-max').value = config.start_time_max;
+        document.getElementById('dates-start-time-max').value = config.start_time_max;
     } else if (config.start_hour_max !== undefined) {
         // 向后兼容旧模板
         const maxTime = String(config.start_hour_max).padStart(2, '0') + ':00';
         document.getElementById('daily-start-time-max').value = maxTime;
         document.getElementById('total-start-time-max').value = maxTime;
+        document.getElementById('dates-start-time-max').value = maxTime;
     }
 
     // 处理恒定配速checkbox（模板的enable_pace_fluctuation是true表示启用，checkbox是checked表示禁用）
@@ -319,6 +520,18 @@ function applyTemplateToForms(template) {
             document.getElementById('single-pace').value = config.pace;
         }
     }
+
+    // 指定日期批量模式字段
+    if (activeMode === 'dates-mode') {
+        if (config.distance !== undefined) {
+            document.getElementById('dates-distance').value = config.distance;
+        }
+        if (config.dates && Array.isArray(config.dates)) {
+            calendarState.selectedDates = new Set(config.dates);
+            renderCalendar();
+            renderSelectedTags();
+        }
+    }
 }
 
 // 重置表单为默认值
@@ -334,6 +547,12 @@ function resetFormsToDefaults() {
     document.getElementById('total-max-pace').value = 8.0;
     document.getElementById('total-start-time-min').value = '06:00';
     document.getElementById('total-start-time-max').value = '08:00';
+
+    // 指定日期批量模式默认值
+    document.getElementById('dates-min-pace').value = 7.0;
+    document.getElementById('dates-max-pace').value = 8.0;
+    document.getElementById('dates-start-time-min').value = '06:00';
+    document.getElementById('dates-start-time-max').value = '08:00';
 }
 
 // 初始化表单提交
@@ -341,10 +560,12 @@ function initForms() {
     document.getElementById('daily-form').addEventListener('submit', handleDailySubmit);
     document.getElementById('total-form').addEventListener('submit', handleTotalSubmit);
     document.getElementById('single-form').addEventListener('submit', handleSingleSubmit);
+    document.getElementById('dates-form').addEventListener('submit', handleDatesSubmit);
     document.getElementById('download-btn').addEventListener('click', downloadFiles);
     document.getElementById('daily-export-btn').addEventListener('click', showExportModal);
     document.getElementById('total-export-btn').addEventListener('click', showExportModal);
     document.getElementById('single-export-btn').addEventListener('click', showExportModal);
+    document.getElementById('dates-export-btn').addEventListener('click', showExportModal);
     document.getElementById('export-form').addEventListener('submit', handleExportSubmit);
     document.querySelector('#export-modal .modal-close').addEventListener('click', hideExportModal);
     document.querySelector('#export-modal .modal-cancel').addEventListener('click', hideExportModal);
@@ -409,6 +630,15 @@ function doExportTemplate(name) {
             apply_correction: data.apply_correction,
             enable_pace_fluctuation: data.enable_pace_fluctuation,
         };
+    } else if (activeMode === 'dates-mode') {
+        config = {
+            dates: data.dates,
+            distance: data.distance,
+            min_pace: data.min_pace,
+            max_pace: data.max_pace,
+            start_time_min: data.start_time_min,
+            start_time_max: data.start_time_max,
+        };
     } else {
         config = {
             pace: data.pace,
@@ -426,6 +656,7 @@ function doExportTemplate(name) {
         daily_config: activeMode === 'daily-mode' ? config : {},
         total_config: activeMode === 'total-mode' ? config : {},
         single_config: activeMode === 'single-mode' ? config : {},
+        dates_config: activeMode === 'dates-mode' ? config : {},
     };
 
     // 保存到本地缓存
@@ -453,6 +684,8 @@ function getCurrentActiveFormData() {
         return collectDailyFormData();
     } else if (activeMode === 'total-mode') {
         return collectTotalFormData();
+    } else if (activeMode === 'dates-mode') {
+        return collectDatesFormData();
     } else {
         return collectSingleFormData();
     }
@@ -543,6 +776,36 @@ function collectSingleFormData() {
         include_track: !(document.getElementById('single-no-track')?.checked ?? false),
         apply_correction: !(document.getElementById('single-no-correction')?.checked ?? false),
         enable_pace_fluctuation: !(document.getElementById('single-no-fluctuation')?.checked ?? false),
+    };
+}
+
+// 处理指定日期批量模式提交
+async function handleDatesSubmit(e) {
+    e.preventDefault();
+    if (calendarState.selectedDates.size === 0) {
+        showMessage('请至少选择一个日期', 'error');
+        return;
+    }
+    const data = collectDatesFormData();
+    await generate('dates', data);
+}
+
+// 收集指定日期批量表单数据
+function collectDatesFormData() {
+    const trackId = document.getElementById('track-select').value;
+    const templateId = document.getElementById('template-select').value;
+    const dates = Array.from(calendarState.selectedDates).sort();
+
+    return {
+        track_id: trackId,
+        template_id: templateId || undefined,
+        dates: dates,
+        distance: parseFloat(document.getElementById('dates-distance').value),
+        min_pace: parseFloat(document.getElementById('dates-min-pace').value),
+        max_pace: parseFloat(document.getElementById('dates-max-pace').value),
+        start_time_min: document.getElementById('dates-start-time-min').value || '06:00',
+        start_time_max: document.getElementById('dates-start-time-max').value || '08:00',
+        output_dir: document.getElementById('dates-output-dir').value,
     };
 }
 

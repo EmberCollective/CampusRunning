@@ -120,6 +120,9 @@ def create_app() -> Flask:
         "/api/generate/single", "generate_single", generate_single, methods=["POST"]
     )
     app.add_url_rule(
+        "/api/generate/dates", "generate_dates", generate_dates, methods=["POST"]
+    )
+    app.add_url_rule(
         "/api/download/<job_id>", "download_files", download_files, methods=["GET"]
     )
     app.add_url_rule("/track-editor", "track_editor_page", track_editor_page)
@@ -457,12 +460,68 @@ def generate_single():
         return jsonify({"error": str(e)}), 500
 
 
+def generate_dates():
+    """指定日期批量生成"""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "无效的请求数据"}), 400
+
+    try:
+        config = _parse_generate_request(data)
+        dates_raw = data.get("dates", [])
+        if not dates_raw or not isinstance(dates_raw, list):
+            return jsonify({"error": "请至少选择一个日期"}), 400
+
+        # 逐元素校验类型与格式，避免 TypeError/ValueError 落入兜底 500 泄露异常文本
+        dates = []
+        for d in dates_raw:
+            if not isinstance(d, str):
+                return jsonify({"error": f"日期 {d!r} 无效，应为 YYYY-MM-DD 格式的字符串"}), 400
+            try:
+                dates.append(datetime.datetime.strptime(d, "%Y-%m-%d").date())
+            except ValueError:
+                return jsonify({"error": f"日期 {d} 无效，应为 YYYY-MM-DD 格式"}), 400
+        # 去重排序：重复日期会生成同名文件相互覆盖，导致 total_files 虚高、ZIP 内出现重名条目
+        dates = sorted(set(dates))
+        distance = float(data["distance"])
+
+        from src.generation_engine import GenerationEngine
+
+        engine = GenerationEngine(_config_manager)
+        results = engine.generate_dates(dates, distance, config)
+
+        if not results:
+            # 全部日期生成失败（如开始时间晚于结束时间），不注册任务、不提供下载入口
+            return jsonify({"error": "生成失败：所有日期均未成功生成文件，请检查配速与时间设置"}), 500
+
+        job_id = (
+            f"gen_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            f"_{uuid.uuid4().hex[:6]}"
+        )
+        _generation_jobs[job_id] = results
+
+        return jsonify({
+            "job_id": job_id,
+            "status": "complete",
+            "total_files": len(results),
+            "files": [_result_to_dict(r) for r in results],
+            "download_url": f"/api/download/{job_id}",
+        })
+    except Exception as e:
+        logger.error("生成失败: %s", e, exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 def download_files(job_id):
     """下载生成的文件"""
     if job_id not in _generation_jobs:
         return jsonify({"error": "任务不存在"}), 404
 
     results = _generation_jobs[job_id]
+
+    if not results:
+        # 任务存在但没有成功生成的文件（如全部计划失败时注册的空结果）
+        return jsonify({"error": "该任务没有可下载的文件"}), 400
 
     if len(results) == 1:
         return send_file(results[0].filepath, as_attachment=True)

@@ -2,6 +2,9 @@
 
 let currentJobId = null;
 
+// 支持的输出格式白名单（与后端 models.py 校验保持一致）
+const OUTPUT_FORMATS = ['fit', 'tcx'];
+
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', async () => {
     initDates();
@@ -214,10 +217,10 @@ function formatDateStr(d) {
     return `${y}-${m}-${day}`;
 }
 
-// 获取当前选中的输出格式
+// 获取当前选中的输出格式（脏值兜底为默认 fit）
 function getSelectedFormat() {
     const sel = document.querySelector('.mode-content.active .output-format');
-    return sel ? sel.value : 'fit';
+    return sel && OUTPUT_FORMATS.includes(sel.value) ? sel.value : 'fit';
 }
 
 // 初始化Tab切换
@@ -426,8 +429,8 @@ function applyTemplateToForms(template) {
         document.getElementById('track-select').value = template.track_id;
     }
 
-    // 应用输出格式
-    if (config.output_format !== undefined) {
+    // 应用输出格式（白名单过滤，脏值保持默认 FIT）
+    if (OUTPUT_FORMATS.includes(config.output_format)) {
         document.querySelectorAll('.output-format').forEach(sel => {
             sel.value = config.output_format;
         });
@@ -566,6 +569,11 @@ function resetFormsToDefaults() {
     document.getElementById('dates-max-pace').value = 8.0;
     document.getElementById('dates-start-time-min').value = '06:00';
     document.getElementById('dates-start-time-max').value = '08:00';
+
+    // 输出格式重置为默认 FIT
+    document.querySelectorAll('.output-format').forEach(sel => {
+        sel.value = 'fit';
+    });
 }
 
 // 初始化表单提交

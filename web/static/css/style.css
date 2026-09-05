@@ -561,6 +561,7 @@ button { font-family: inherit; }
     .form-grid { grid-template-columns: 1fr 1fr; }
     .dates-cal-row { flex-direction: column; }
     .dates-side { width: 100%; }
+    .selected-dates-tags { max-height: 200px; }
 }
 @media (max-width: 640px) {
     .form-grid { grid-template-columns: 1fr; }

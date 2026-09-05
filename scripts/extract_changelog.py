@@ -67,14 +67,14 @@ def main(argv: list[str] | None = None) -> int:
         section = extract_section(
             CHANGELOG.read_text(encoding="utf-8"), normalize_tag(args.tag)
         )
+        if args.output is not None:
+            args.output.write_text(section + "\n", encoding="utf-8")
+        else:
+            print(section)
     except (OSError, ValueError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
         return 1
 
-    if args.output is not None:
-        args.output.write_text(section + "\n", encoding="utf-8")
-    else:
-        print(section)
     return 0
 
 

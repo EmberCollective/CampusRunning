@@ -514,7 +514,6 @@ button { font-family: inherit; }
     border: 1px solid var(--border-2);
     border-radius: var(--radius-sm);
     overflow-y: auto;
-    max-height: 200px;
 }
 .dates-placeholder {
     font-size: 11px;

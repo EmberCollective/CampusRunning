@@ -118,6 +118,8 @@ class AmapAdapter {
 
         window.addEventListener('mousemove', (e) => {
             if (!dragging) return;
+            // 拖出窗口外松开收不到 mouseup（blur 也不触发），按标准指针状态自愈
+            if ((e.buttons & 4) === 0) { dragging = false; return; }
             const dx = e.clientX - lastX;
             const dy = e.clientY - lastY;
             lastX = e.clientX;

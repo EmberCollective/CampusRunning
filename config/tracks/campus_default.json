@@ -3,30 +3,95 @@
   "name": "默认操场轨迹",
   "description": "校园主操场跑道，约400米一圈",
   "base_coordinates": [
-    {"longitude": 106.6591413213796, "latitude": 26.45129327365839},
-    {"longitude": 106.65903260437665, "latitude": 26.45160613825947},
-    {"longitude": 106.65897824587523, "latitude": 26.451793856595508},
-    {"longitude": 106.65892647586247, "latitude": 26.451993162220376},
-    {"longitude": 106.65891639149515, "latitude": 26.452180879961013},
-    {"longitude": 106.65901475450505, "latitude": 26.452278214935735},
-    {"longitude": 106.65915453353261, "latitude": 26.45238018483626},
-    {"longitude": 106.65935643657872, "latitude": 26.452410312215633},
-    {"longitude": 106.65954280861615, "latitude": 26.45237328086079},
-    {"longitude": 106.6596256405976, "latitude": 26.45232693091138},
-    {"longitude": 106.65967741059592, "latitude": 26.45218092841834},
-    {"longitude": 106.65971623810833, "latitude": 26.45203724329523},
-    {"longitude": 106.65976024262193, "latitude": 26.4518981929895},
-    {"longitude": 106.65980936669962, "latitude": 26.45171279227931},
-    {"longitude": 106.65984819419236, "latitude": 26.451585329168722},
-    {"longitude": 106.6598947871995, "latitude": 26.451420785621714},
-    {"longitude": 106.65979901266735, "latitude": 26.451334689893496},
-    {"longitude": 106.659646872243, "latitude": 26.451251259238074},
-    {"longitude": 106.65946050020943, "latitude": 26.451204908836818},
-    {"longitude": 106.65930015181345, "latitude": 26.451212730335623},
-    {"longitude": 106.65912413379829, "latitude": 26.451263715777763}
+    {
+      "longitude": 106.659176,
+      "latitude": 26.451307
+    },
+    {
+      "longitude": 106.659054,
+      "latitude": 26.451613
+    },
+    {
+      "longitude": 106.659002,
+      "latitude": 26.451798
+    },
+    {
+      "longitude": 106.658946,
+      "latitude": 26.451998
+    },
+    {
+      "longitude": 106.65891639149515,
+      "latitude": 26.452180879961013
+    },
+    {
+      "longitude": 106.658977,
+      "latitude": 26.45231
+    },
+    {
+      "longitude": 106.659143,
+      "latitude": 26.452432
+    },
+    {
+      "longitude": 106.659364,
+      "latitude": 26.452442
+    },
+    {
+      "longitude": 106.65954280861615,
+      "latitude": 26.45237328086079
+    },
+    {
+      "longitude": 106.6596,
+      "latitude": 26.452271
+    },
+    {
+      "longitude": 106.659636,
+      "latitude": 26.452156
+    },
+    {
+      "longitude": 106.659671,
+      "latitude": 26.452022
+    },
+    {
+      "longitude": 106.659702,
+      "latitude": 26.451909
+    },
+    {
+      "longitude": 106.659755,
+      "latitude": 26.451706
+    },
+    {
+      "longitude": 106.659805,
+      "latitude": 26.451538
+    },
+    {
+      "longitude": 106.659782,
+      "latitude": 26.451413
+    },
+    {
+      "longitude": 106.659735,
+      "latitude": 26.451338
+    },
+    {
+      "longitude": 106.659646872243,
+      "latitude": 26.451251259238074
+    },
+    {
+      "longitude": 106.65946050020943,
+      "latitude": 26.451204908836818
+    },
+    {
+      "longitude": 106.659296,
+      "latitude": 26.451231
+    }
   ],
   "coordinate_correction": {
-    "current_center": {"longitude": 106.6594155297, "latitude": 26.4517970862},
-    "target_center": {"longitude": 106.66302911870878, "latitude": 26.44820719269293}
+    "current_center": {
+      "longitude": 106.6594155297,
+      "latitude": 26.4517970862
+    },
+    "target_center": {
+      "longitude": 106.66302911870878,
+      "latitude": 26.44820719269293
+    }
   }
 }

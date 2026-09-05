@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" role="img" aria-labelledby="heroTitle">
-  <title id="heroTitle">校园跑步数据生成器 —— 真实轨迹 · 真实配速 · 一键生成 TCX</title>
+  <title id="heroTitle">校园跑步数据生成器 —— 真实轨迹 · 真实配速 · 一键生成 FIT/TCX</title>
 
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -47,11 +47,11 @@
   <text x="64" y="124" font-family="-apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',system-ui,sans-serif"
         font-size="46" font-weight="700" fill="#E6EDF3" letter-spacing="2">校园跑步数据生成器</text>
   <text x="64" y="170" font-family="-apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',system-ui,sans-serif"
-        font-size="21" fill="#8B949E" letter-spacing="1">真实轨迹 · 真实配速 · 一键生成 TCX</text>
+        font-size="21" fill="#8B949E" letter-spacing="1">真实轨迹 · 真实配速 · 一键生成 FIT/TCX</text>
 
   <!-- 命令行示例 -->
   <g font-family="'SF Mono','JetBrains Mono',Menlo,Consolas,'Courier New',monospace" font-size="18">
     <text x="64" y="224" fill="#3FB950">$</text>
-    <text x="86" y="224" fill="#A5B4C0">python main.py single --distance 5.0</text>
+    <text x="86" y="224" fill="#A5B4C0">python main.py single --date 2025-01-01 --distance 5.0</text>
   </g>
 </svg>

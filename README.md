@@ -15,22 +15,24 @@
 
 社区已有不少虚拟定位方案，各有取舍；本工具走了另一条路：**生成带真实操场轨迹、真实配速与步频步数的运动数据文件（默认 FIT，兼容 TCX），导入运动软件即可使用**。
 
-作者坚持为爱发电，愿普度天下苦校园跑的学子。若这个项目帮到了你，点亮 Star 便是对作者最好的鼓励 。
+作者坚持为爱发电，愿普度天下苦校园跑的学子。若这个项目帮到了你，点亮 Star 便是对作者最好的鼓励。
 
 ## 它能做什么
 
-三种生成模式，覆盖从「补一次记录」到「整学期一次配齐」：
+四种生成模式，覆盖从「补一次记录」到「整学期一次配齐」：
 
 | 模式 | 命令 | 适用场景 |
 |------|------|----------|
 | 每日范围 | `daily` | 给定日期区间，每天在公里数范围内随机生成 |
 | 总公里数 | `total` | 给定总里程，自动分配到每天（周末可为平日 1.5 倍，支持每周休息日） |
 | 单文件 | `single` | 为特定日期补一条指定里程的记录 |
+| 指定日期批量 | Web 专属 | 日历中勾选任意日期组合，逐日批量生成 |
 
-每条记录由四层机制撑起「真实感」：
+每条记录由五层机制撑起「真实感」：
 
 - **真实轨迹**——基于操场坐标生成顺时针 GPS 轨迹点，内置多条校园轨迹，也可自行添加
 - **真实配速**——热身 → 稳定 → 疲劳 → 冲刺四阶段配速波动，拒绝匀速直线
+- **真实步频步数**——按配速与里程生成符合真实分布的步频曲线，FIT 与 TCX 均写入
 - **坐标修正**——GCJ-02 系统性偏移自动校正，轨迹落在它该在的位置
 - **可视化轨迹编辑器**——Web 内在高德地图上标点绘制轨迹，一键保存为配置
 
@@ -38,7 +40,26 @@ CLI 与 Web 双入口，生成结果一致。
 
 ## 快速开始
 
-要求 Python 3.13+。
+要求 Python 3.13+，安装依赖：
+
+```bash
+pip install flask garmin-fit-sdk
+```
+
+### Web（推荐）
+
+```bash
+python app.py    # 浏览器访问 http://127.0.0.1:5000
+```
+
+![Web 工作台](assets/readme/web_workbench.png)
+
+表单化操作，所见即所得：
+
+- **四种生成模式**——每日范围 / 总公里数 / 单文件 / 指定日期批量（日历勾选）
+- **模板**——表单参数一键存成模板，下次直接套用
+- **轨迹编辑器**——高德地图上标点、画笔绘制环线，实时查看距离，保存即入轨迹库
+- **结果打包**——生成的 FIT/TCX 一键 ZIP 下载
 
 ### CLI
 
@@ -49,30 +70,16 @@ python main.py single --date 2025-01-01 --distance 5.0
 # 整月按每日范围生成
 python main.py daily --start-date 2025-01-01 --end-date 2025-01-31 --min-km 2 --max-km 5
 
-# 目标 100 km，自动分配到每天
-python main.py total --start-date 2025-01-01 --end-date 2025-01-31 --total-km 100
-
 # 组合：模板 + 指定轨迹 + 打包 ZIP
 python main.py daily --template easy_run --track campus_default --zip \
   --start-date 2025-01-01 --end-date 2025-01-07 --min-km 2 --max-km 5
-
-# 查看可用轨迹 / 模板 / 完整参数
-python main.py --list-tracks
-python main.py --list-templates
 ```
-
-> **让 AI 替你跑**——仓库已内置 Agent Skill（`.claude/skills/campusrunning-cli/`，软链入口在 `.agents/skills/`）。用 Claude Code 等 AI 编码工具打开本项目，说一句「帮我生成 9 月整月、每天 2~5 km 的跑步数据」即可，选命令、配参数这些事交给 AI，无需费脑。
 
 完整参数说明见 [API 参考](docs/api_reference.md)。
 
-### Web
+### 让 AI 替你跑
 
-```bash
-pip install flask
-python app.py    # 浏览器访问 http://127.0.0.1:5000
-```
-
-表单化操作，支持模板保存与应用、轨迹编辑器、结果 ZIP 下载。
+仓库内置 Agent Skill（`.claude/skills/campusrunning-cli/`，软链入口在 `.agents/skills/`）。用 Claude Code 等 AI 编码工具打开本项目，说一句「帮我生成 9 月整月、每天 2~5 km 的跑步数据」即可——选命令、配参数这些事交给 AI，无需费脑。
 
 ### 导入手机
 
@@ -83,6 +90,8 @@ python app.py    # 浏览器访问 http://127.0.0.1:5000
 ### 添加轨迹
 
 **方式一：Web 轨迹编辑器（推荐）**——启动 Web 后从首页进入「轨迹编辑器」，在高德地图上标点绘制轨迹、实时查看环线距离，保存后直接写入 `config/tracks/`，无需手工拾取坐标。「官方」地图档需要配置高德 JS API Key，申请步骤见[高德 Key 申请教程](docs/amap_key_guide.md)。
+
+![轨迹编辑器](assets/readme/track_editor.png)
 
 **方式二：手工编辑 JSON**——在 `config/tracks/` 下新建文件：
 
@@ -134,9 +143,10 @@ python app.py    # 浏览器访问 http://127.0.0.1:5000
 - [模板创建指南](config/templates/TEMPLATE_GUIDE.md)
 - [高德 Key 申请教程](docs/amap_key_guide.md)
 - [Keep 导入教程](guied.md)
+- [更新日志](CHANGELOG.md)
 
 ## 许可
 
 [MIT](LICENSE) © YuShen
 
-为爱发电，普度众生。若这个项目替你跑过一公里，欢迎点亮 Star ；Issue 与 PR 一律欢迎。
+为爱发电，普度众生。若这个项目替你跑过一公里，欢迎点亮 Star；Issue 与 PR 一律欢迎。

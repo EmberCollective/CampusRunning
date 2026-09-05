@@ -95,6 +95,42 @@ class AmapAdapter {
                 this._handlers.onMapMouseDown({ lat: e.lnglat.getLat(), lng: e.lnglat.getLng() });
             }
         });
+
+        this._setupMiddleDrag();
+    }
+
+    // 中键拖动：高德内置拖动只认左键（setStatus dragEnable 不作用于中键手势），
+    // 画笔锁定时的中键拖图在 Leaflet 档由引擎天然支持，官方档需手动实现。
+    // 用容器像素换算 setCenter（中心向鼠标位移反方向移动 = 地图内容跟手），不依赖 panBy 方向语义。
+    _setupMiddleDrag() {
+        const container = this.map.getContainer();
+        let lastX = 0;
+        let lastY = 0;
+        let dragging = false;
+
+        container.addEventListener('mousedown', (e) => {
+            if (e.button !== 1) return;
+            e.preventDefault();  // 阻止中键自动滚动
+            dragging = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - lastX;
+            const dy = e.clientY - lastY;
+            lastX = e.clientX;
+            lastY = e.clientY;
+            const centerPx = this.map.lngLatToContainer(this.map.getCenter());
+            const next = this.map.containerToLngLat(
+                new this._AMap.Pixel(centerPx.getX() - dx, centerPx.getY() - dy));
+            this.map.setCenter(next);
+        });
+
+        const stop = () => { dragging = false; };
+        window.addEventListener('mouseup', stop);
+        window.addEventListener('blur', stop);  // 切窗丢 mouseup 时终止，避免回窗后粘滞拖动
     }
 
     // 激活地图：恢复视角（AMap zoom 仅支持整数）

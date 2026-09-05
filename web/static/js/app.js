@@ -214,6 +214,12 @@ function formatDateStr(d) {
     return `${y}-${m}-${day}`;
 }
 
+// 获取当前选中的输出格式
+function getSelectedFormat() {
+    const sel = document.querySelector('.mode-content.active .output-format');
+    return sel ? sel.value : 'fit';
+}
+
 // 初始化Tab切换
 function initTabs() {
     const tabButtons = document.querySelectorAll('.tab-button');
@@ -732,6 +738,7 @@ function collectDailyFormData() {
         include_track: !(document.getElementById('daily-no-track')?.checked ?? false),
         apply_correction: !(document.getElementById('daily-no-correction')?.checked ?? false),
         enable_pace_fluctuation: !(document.getElementById('daily-no-fluctuation')?.checked ?? false),
+        output_format: getSelectedFormat(),
     };
 }
 
@@ -755,6 +762,7 @@ function collectTotalFormData() {
         start_time_min: document.getElementById('total-start-time-min').value || '06:00',
         start_time_max: document.getElementById('total-start-time-max').value || '08:00',
         output_dir: document.getElementById('total-output-dir').value,
+        output_format: getSelectedFormat(),
     };
 }
 
@@ -776,6 +784,7 @@ function collectSingleFormData() {
         include_track: !(document.getElementById('single-no-track')?.checked ?? false),
         apply_correction: !(document.getElementById('single-no-correction')?.checked ?? false),
         enable_pace_fluctuation: !(document.getElementById('single-no-fluctuation')?.checked ?? false),
+        output_format: getSelectedFormat(),
     };
 }
 
@@ -806,6 +815,7 @@ function collectDatesFormData() {
         start_time_min: document.getElementById('dates-start-time-min').value || '06:00',
         start_time_max: document.getElementById('dates-start-time-max').value || '08:00',
         output_dir: document.getElementById('dates-output-dir').value,
+        output_format: getSelectedFormat(),
     };
 }
 

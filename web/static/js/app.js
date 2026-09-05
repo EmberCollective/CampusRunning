@@ -523,8 +523,11 @@ function applyTemplateToForms(template) {
 
     // 指定日期批量模式字段
     if (activeMode === 'dates-mode') {
-        if (config.distance !== undefined) {
-            document.getElementById('dates-distance').value = config.distance;
+        if (config.min_km !== undefined) {
+            document.getElementById('dates-min-km').value = config.min_km;
+        }
+        if (config.max_km !== undefined) {
+            document.getElementById('dates-max-km').value = config.max_km;
         }
         if (config.dates && Array.isArray(config.dates)) {
             calendarState.selectedDates = new Set(config.dates);
@@ -549,6 +552,8 @@ function resetFormsToDefaults() {
     document.getElementById('total-start-time-max').value = '08:00';
 
     // 指定日期批量模式默认值
+    document.getElementById('dates-min-km').value = 2.0;
+    document.getElementById('dates-max-km').value = 5.0;
     document.getElementById('dates-min-pace').value = 7.0;
     document.getElementById('dates-max-pace').value = 8.0;
     document.getElementById('dates-start-time-min').value = '06:00';
@@ -633,7 +638,8 @@ function doExportTemplate(name) {
     } else if (activeMode === 'dates-mode') {
         config = {
             dates: data.dates,
-            distance: data.distance,
+            min_km: data.min_km,
+            max_km: data.max_km,
             min_pace: data.min_pace,
             max_pace: data.max_pace,
             start_time_min: data.start_time_min,
@@ -800,7 +806,8 @@ function collectDatesFormData() {
         track_id: trackId,
         template_id: templateId || undefined,
         dates: dates,
-        distance: parseFloat(document.getElementById('dates-distance').value),
+        min_km: parseFloat(document.getElementById('dates-min-km').value),
+        max_km: parseFloat(document.getElementById('dates-max-km').value),
         min_pace: parseFloat(document.getElementById('dates-min-pace').value),
         max_pace: parseFloat(document.getElementById('dates-max-pace').value),
         start_time_min: document.getElementById('dates-start-time-min').value || '06:00',

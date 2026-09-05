@@ -426,6 +426,13 @@ function applyTemplateToForms(template) {
         document.getElementById('track-select').value = template.track_id;
     }
 
+    // 应用输出格式
+    if (config.output_format !== undefined) {
+        document.querySelectorAll('.output-format').forEach(sel => {
+            sel.value = config.output_format;
+        });
+    }
+
     // 通用字段（配速、时间）
     if (config.min_pace !== undefined) {
         document.getElementById('daily-min-pace').value = config.min_pace;
@@ -618,6 +625,7 @@ function doExportTemplate(name) {
             include_track: data.include_track,
             apply_correction: data.apply_correction,
             enable_pace_fluctuation: data.enable_pace_fluctuation,
+            output_format: data.output_format,
         };
     } else if (activeMode === 'total-mode') {
         config = {
@@ -635,6 +643,7 @@ function doExportTemplate(name) {
             include_track: data.include_track,
             apply_correction: data.apply_correction,
             enable_pace_fluctuation: data.enable_pace_fluctuation,
+            output_format: data.output_format,
         };
     } else if (activeMode === 'dates-mode') {
         config = {
@@ -644,6 +653,7 @@ function doExportTemplate(name) {
             max_pace: data.max_pace,
             start_time_min: data.start_time_min,
             start_time_max: data.start_time_max,
+            output_format: data.output_format,
         };
     } else {
         config = {
@@ -651,6 +661,7 @@ function doExportTemplate(name) {
             include_track: data.include_track,
             apply_correction: data.apply_correction,
             enable_pace_fluctuation: data.enable_pace_fluctuation,
+            output_format: data.output_format,
         };
     }
 

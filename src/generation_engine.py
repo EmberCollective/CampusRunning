@@ -146,26 +146,29 @@ class GenerationEngine:
     def generate_dates(
         self,
         dates: list[datetime.date],
-        distance: float,
+        min_km: float,
+        max_km: float,
         config: GenerationConfig,
     ) -> list[GenerationResult]:
         """指定日期批量生成
 
         Args:
             dates: 日期列表
-            distance: 每日距离（公里）
+            min_km: 最低公里数
+            max_km: 最高公里数
             config: 生成配置
 
         Returns:
             生成结果列表
         """
         logger.info(
-            "指定日期批量生成: %d 天, %.2f km/天",
-            len(dates), distance,
+            "指定日期批量生成: %d 天, %.2f-%.2f km/天",
+            len(dates), min_km, max_km,
         )
 
+        import random
         planner = SinglePlanner()
-        plans = [planner.plan(d, distance) for d in dates]
+        plans = [planner.plan(d, round(random.uniform(min_km, max_km), 2)) for d in dates]
 
         return self._generate_from_plans(plans, config)
 

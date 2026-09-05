@@ -485,12 +485,13 @@ def generate_dates():
                 return jsonify({"error": f"日期 {d} 无效，应为 YYYY-MM-DD 格式"}), 400
         # 去重排序：重复日期会生成同名文件相互覆盖，导致 total_files 虚高、ZIP 内出现重名条目
         dates = sorted(set(dates))
-        distance = float(data["distance"])
+        min_km = float(data["min_km"])
+        max_km = float(data["max_km"])
 
         from src.generation_engine import GenerationEngine
 
         engine = GenerationEngine(_config_manager)
-        results = engine.generate_dates(dates, distance, config)
+        results = engine.generate_dates(dates, min_km, max_km, config)
 
         if not results:
             # 全部日期生成失败（如开始时间晚于结束时间），不注册任务、不提供下载入口

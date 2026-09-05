@@ -214,6 +214,12 @@ function formatDateStr(d) {
     return `${y}-${m}-${day}`;
 }
 
+// 获取当前选中的输出格式
+function getSelectedFormat() {
+    const sel = document.querySelector('.mode-content.active .output-format');
+    return sel ? sel.value : 'fit';
+}
+
 // 初始化Tab切换
 function initTabs() {
     const tabButtons = document.querySelectorAll('.tab-button');
@@ -420,6 +426,13 @@ function applyTemplateToForms(template) {
         document.getElementById('track-select').value = template.track_id;
     }
 
+    // 应用输出格式
+    if (config.output_format !== undefined) {
+        document.querySelectorAll('.output-format').forEach(sel => {
+            sel.value = config.output_format;
+        });
+    }
+
     // 通用字段（配速、时间）
     if (config.min_pace !== undefined) {
         document.getElementById('daily-min-pace').value = config.min_pace;
@@ -612,6 +625,7 @@ function doExportTemplate(name) {
             include_track: data.include_track,
             apply_correction: data.apply_correction,
             enable_pace_fluctuation: data.enable_pace_fluctuation,
+            output_format: data.output_format,
         };
     } else if (activeMode === 'total-mode') {
         config = {
@@ -629,6 +643,7 @@ function doExportTemplate(name) {
             include_track: data.include_track,
             apply_correction: data.apply_correction,
             enable_pace_fluctuation: data.enable_pace_fluctuation,
+            output_format: data.output_format,
         };
     } else if (activeMode === 'dates-mode') {
         config = {
@@ -638,6 +653,7 @@ function doExportTemplate(name) {
             max_pace: data.max_pace,
             start_time_min: data.start_time_min,
             start_time_max: data.start_time_max,
+            output_format: data.output_format,
         };
     } else {
         config = {
@@ -645,6 +661,7 @@ function doExportTemplate(name) {
             include_track: data.include_track,
             apply_correction: data.apply_correction,
             enable_pace_fluctuation: data.enable_pace_fluctuation,
+            output_format: data.output_format,
         };
     }
 
@@ -732,6 +749,7 @@ function collectDailyFormData() {
         include_track: !(document.getElementById('daily-no-track')?.checked ?? false),
         apply_correction: !(document.getElementById('daily-no-correction')?.checked ?? false),
         enable_pace_fluctuation: !(document.getElementById('daily-no-fluctuation')?.checked ?? false),
+        output_format: getSelectedFormat(),
     };
 }
 
@@ -755,6 +773,7 @@ function collectTotalFormData() {
         start_time_min: document.getElementById('total-start-time-min').value || '06:00',
         start_time_max: document.getElementById('total-start-time-max').value || '08:00',
         output_dir: document.getElementById('total-output-dir').value,
+        output_format: getSelectedFormat(),
     };
 }
 
@@ -776,6 +795,7 @@ function collectSingleFormData() {
         include_track: !(document.getElementById('single-no-track')?.checked ?? false),
         apply_correction: !(document.getElementById('single-no-correction')?.checked ?? false),
         enable_pace_fluctuation: !(document.getElementById('single-no-fluctuation')?.checked ?? false),
+        output_format: getSelectedFormat(),
     };
 }
 
@@ -806,6 +826,7 @@ function collectDatesFormData() {
         start_time_min: document.getElementById('dates-start-time-min').value || '06:00',
         start_time_max: document.getElementById('dates-start-time-max').value || '08:00',
         output_dir: document.getElementById('dates-output-dir').value,
+        output_format: getSelectedFormat(),
     };
 }
 

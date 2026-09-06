@@ -16,6 +16,7 @@ except ImportError:
     print("错误: Flask 未安装。请运行: pip install flask")
     sys.exit(1)
 
+from src.paths import get_config_dir
 from web.routes import create_app
 
 
@@ -25,7 +26,7 @@ def load_web_config() -> tuple[str, int]:
     Returns:
         (host, port) 元组
     """
-    config_path = os.path.join(os.path.dirname(__file__), "config", "default_settings.json")
+    config_path = os.path.join(get_config_dir(), "default_settings.json")
     if os.path.isfile(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)

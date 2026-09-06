@@ -3,14 +3,87 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # 手动触发：不打 tag 也能干跑 Windows 构建验证产物（release job 会自动跳过）
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  # Windows 桌面版构建：pytest -> PyInstaller 便携目录 -> zip -> Inno Setup 安装包 -> SHA256
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    # 构建只需读代码与上传产物；创建 Release 的写权限留给下方 release job
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          # 桌面依赖也纳入缓存 key，避免 requirements-desktop.txt 变更后命中过期缓存
+          cache-dependency-path: |
+            requirements.txt
+            requirements-desktop.txt
+      # 桌面打包需要 pywebview 等额外依赖（requirements-desktop.txt）
+      - run: pip install -r requirements.txt -r requirements-desktop.txt
+      - run: python -m pytest
+      # onedir 打包，产出 dist/CampusRunningGenerator/（GUI + CLI 双入口）
+      - run: pyinstaller campus_running.spec --noconfirm --clean
+      # 版本号：tag 触发时 GITHUB_REF_NAME 形如 v1.2.3；workflow_dispatch 干跑时
+      # 是分支名（不以 v 开头），统一兜底为 0.0.0-dev，
+      # 保证 iss 与产物文件名始终拿到合法版本字符串
+      - name: 计算产物版本号
+        shell: bash
+        run: |
+          VER="${GITHUB_REF_NAME}"
+          [[ "$VER" == v* ]] || VER="0.0.0-dev"
+          echo "APP_VERSION=${VER}" >> "${GITHUB_ENV}"
+      # 便携版 zip：整目录压缩、解压即用；输出到 dist/ 与安装包同目录，
+      # 使 upload-artifact 以 dist 为根、下载后三个产物平铺便于 release 直接引用
+      - name: 打包便携版 zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/CampusRunningGenerator -DestinationPath "dist/CampusRunningGen-${env:APP_VERSION}-win64.zip"
+      # Inno Setup 6（choco 包名 innosetup）
+      - run: choco install innosetup -y
+      # /D 注入版本号覆盖 iss 内默认值（iss 内有 #ifndef 守卫），产出
+      # dist/CampusRunningGen-Setup-<版本>-win64.exe（per-user 免管理员安装包）
+      - name: 构建 Inno Setup 安装包
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${env:APP_VERSION}" installer.iss
+      # 两个产物的 SHA256，格式与 sha256sum -c 兼容：<hash>＋两空格＋文件名，
+      # LF 换行、无 BOM
+      - name: 生成 SHA256 校验和
+        shell: pwsh
+        run: |
+          $files = @(
+            "dist/CampusRunningGen-${env:APP_VERSION}-win64.zip",
+            "dist/CampusRunningGen-Setup-${env:APP_VERSION}-win64.exe"
+          )
+          $lines = foreach ($f in $files) {
+            "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $f).Hash, (Split-Path -Leaf $f)
+          }
+          [IO.File]::WriteAllText("dist/SHA256SUMS.txt", ($lines -join "`n") + "`n")
+      # 干跑（workflow_dispatch）时也可从 Actions 页面手动下载产物检查
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-desktop
+          path: |
+            dist/CampusRunningGen-${{ env.APP_VERSION }}-win64.zip
+            dist/CampusRunningGen-Setup-${{ env.APP_VERSION }}-win64.exe
+            dist/SHA256SUMS.txt
+
+  # 发版：保留原有 pytest + extract_changelog 逻辑，下载 Windows 产物后
+  # 创建带附件的 Release（仅 tag 触发时执行，干跑不建 Release）
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: build-windows
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -20,6 +93,15 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m pytest
       - run: python scripts/extract_changelog.py "${GITHUB_REF_NAME}" --output release_notes.md
+      # 下载构建产物到当前目录（三个文件平铺，见 build-windows 的上传说明）
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-desktop
+      # 附件用「文件#显示名」语法命名，安装版排在最前
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release_notes.md
+        run: >-
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release_notes.md
+          "CampusRunningGen-Setup-${GITHUB_REF_NAME}-win64.exe#Windows 安装版（推荐）"
+          "CampusRunningGen-${GITHUB_REF_NAME}-win64.zip#Windows 便携版（解压即用）"
+          "SHA256SUMS.txt#校验文件"

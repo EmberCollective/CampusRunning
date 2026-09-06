@@ -10,10 +10,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     initDates();
     initTabs();
     initCalendar();
+    loadAppVersion();
     await loadTracks();
     await loadTemplates();
     initForms();
 });
+
+// 加载并展示应用版本号（来自 /api/version 的 Python 侧元数据）
+// 版本号是非关键装饰信息：请求失败时静默降级，元素保持留空，不弹错误提示
+async function loadAppVersion() {
+    try {
+        const response = await fetch('/api/version');
+        if (!response.ok) return;
+        const data = await response.json();
+        const el = document.getElementById('app-version');
+        if (el && data.version) {
+            el.textContent = `v${data.version}`;
+            el.title = data.name || '';
+        }
+    } catch (error) {
+        // 静默降级，保持留空
+    }
+}
 
 // 初始化日期默认值
 function initDates() {

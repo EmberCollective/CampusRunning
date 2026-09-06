@@ -8,11 +8,12 @@
 import datetime
 import logging
 import os
+import time
 import uuid
 import zipfile
 from typing import Optional
 
-from flask import Flask, render_template, request, jsonify, send_file, abort
+from flask import Flask, render_template, request, jsonify, send_file, abort, after_this_request
 
 from src.config_manager import ConfigManager
 from src.template_manager import TemplateManager
@@ -368,6 +369,8 @@ def generate_daily():
         engine = GenerationEngine(_config_manager)
         results = engine.generate_daily(start, end, min_km, max_km, config)
 
+        _cleanup_old_jobs()
+
         job_id = (
             f"gen_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
             f"_{uuid.uuid4().hex[:6]}"
@@ -410,6 +413,8 @@ def generate_total():
         engine = GenerationEngine(_config_manager)
         results = engine.generate_total(start, end, total_km, config)
 
+        _cleanup_old_jobs()
+
         job_id = (
             f"gen_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
             f"_{uuid.uuid4().hex[:6]}"
@@ -443,6 +448,8 @@ def generate_single():
 
         engine = GenerationEngine(_config_manager)
         result = engine.generate_single(date, distance, config)
+
+        _cleanup_old_jobs()
 
         job_id = (
             f"gen_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -493,6 +500,8 @@ def generate_dates():
         engine = GenerationEngine(_config_manager)
         results = engine.generate_dates(dates, min_km, max_km, config)
 
+        _cleanup_old_jobs()
+
         if not results:
             # 全部日期生成失败（如开始时间晚于结束时间），不注册任务、不提供下载入口
             return jsonify({"error": "生成失败：所有日期均未成功生成文件，请检查配速与时间设置"}), 500
@@ -515,10 +524,52 @@ def generate_dates():
         return jsonify({"error": str(e)}), 500
 
 
+def _cleanup_old_jobs(max_age_seconds: int = 3600) -> None:
+    """清理过期的生成任务，释放内存和临时文件
+
+    Args:
+        max_age_seconds: 任务最大存活时间（秒），默认 1 小时
+    """
+    now = time.time()
+    expired_ids = []
+
+    for job_id in _generation_jobs:
+        # job_id 格式: gen_YYYYMMDD_HHMMSS_xxxxxx
+        try:
+            ts_str = job_id.split("_")[1] + job_id.split("_")[2]
+            job_ts = datetime.datetime.strptime(ts_str, "%Y%m%d%H%M%S").timestamp()
+            if now - job_ts > max_age_seconds:
+                expired_ids.append(job_id)
+        except (IndexError, ValueError):
+            # 格式不匹配的异常任务直接清理
+            expired_ids.append(job_id)
+
+    for job_id in expired_ids:
+        results = _generation_jobs.pop(job_id, None)
+        if results:
+            # 清理可能残留的 ZIP 临时文件
+            try:
+                zip_path = os.path.join(
+                    os.path.dirname(results[0].filepath),
+                    f"{job_id}.zip",
+                )
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                    logger.debug("已清理临时 ZIP: %s", zip_path)
+            except Exception as e:
+                logger.debug("清理临时 ZIP 失败: %s", e)
+
+    if expired_ids:
+        logger.info("已清理 %d 个过期任务", len(expired_ids))
+
+
 def download_files(job_id):
     """下载生成的文件"""
+    # 每次下载前清理过期任务
+    _cleanup_old_jobs()
+
     if job_id not in _generation_jobs:
-        return jsonify({"error": "任务不存在"}), 404
+        return jsonify({"error": "任务不存在或已过期，请重新生成"}), 404
 
     results = _generation_jobs[job_id]
 
@@ -527,16 +578,38 @@ def download_files(job_id):
         return jsonify({"error": "该任务没有可下载的文件"}), 400
 
     if len(results) == 1:
-        return send_file(results[0].filepath, as_attachment=True)
+        filepath = results[0].filepath
+        if not os.path.exists(filepath):
+            _generation_jobs.pop(job_id, None)
+            return jsonify({"error": "文件已过期，请重新生成"}), 410
+        return send_file(filepath, as_attachment=True)
 
     # 多文件打包为 ZIP
     zip_path = os.path.join(
         os.path.dirname(results[0].filepath),
         f"{job_id}.zip",
     )
+
+    # 验证源文件存在
+    missing = [r for r in results if not os.path.exists(r.filepath)]
+    if missing:
+        _generation_jobs.pop(job_id, None)
+        return jsonify({"error": "部分文件已过期，请重新生成"}), 410
+
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for r in results:
             zf.write(r.filepath, os.path.basename(r.filepath))
+
+    # send_file 对普通文件是同步读取，响应构建完成后才触发回调，时序安全
+    @after_this_request
+    def remove_zip(response):
+        """请求结束后删除临时 ZIP 文件"""
+        try:
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+        except OSError as e:
+            logger.debug("删除临时 ZIP 失败: %s", e)
+        return response
 
     return send_file(zip_path, as_attachment=True)
 

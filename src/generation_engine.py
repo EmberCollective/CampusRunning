@@ -11,6 +11,7 @@ import logging
 import os
 from typing import Optional
 
+from src import paths
 from src.config_manager import ConfigManager
 from src.core.models import (
     DailyPlan,
@@ -306,9 +307,12 @@ class GenerationEngine:
             trackpoints=trackpoints,
         )
 
-        # 导出文件
+        # 导出文件（相对路径锚定 get_output_root：源码模式为 CWD、
+        # frozen 模式为 exe 旁可写目录；绝对路径经 join 天然透传）
         exporter = self._get_exporter(config.output_format)
-        output_dir = os.path.abspath(config.output_dir)
+        output_dir = os.path.abspath(
+            os.path.join(paths.get_output_root(), config.output_dir)
+        )
         os.makedirs(output_dir, exist_ok=True)
         filename = (
             f"{plan.date.strftime('%Y-%m-%d')}_{distance_km}km"

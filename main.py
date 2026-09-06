@@ -19,12 +19,19 @@ import datetime
 import logging
 
 # 解决Windows控制台中文乱码问题
+# 注：用 reconfigure 原地改编码而非 detach 重建——detach 会使原流
+# 进入失效态，PyInstaller frozen 退出期 flush 旧流时将抛
+# "underlying buffer has been detached"（源码模式无此问题）
 if sys.platform == 'win32':
-    import codecs
-    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
-    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except (AttributeError, ValueError):
+        # 非标准流环境（被重定向或替换），保持原编码即可
+        pass
 
 # 导入自定义模块
+from src.paths import get_config_dir
 from src.config_manager import ConfigManager
 from src.template_manager import TemplateManager
 from src.generation_engine import GenerationEngine
@@ -274,8 +281,7 @@ def main():
     setup_logging(args.verbose)
 
     # 初始化管理器
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    config_manager = ConfigManager(os.path.join(project_root, "config"))
+    config_manager = ConfigManager(get_config_dir())
     template_manager = TemplateManager(config_manager)
     engine = GenerationEngine(config_manager)
 

@@ -1,0 +1,43 @@
+# UTF-8
+#
+# PyInstaller 版本资源文件（传给 pyinstaller 的 --version 参数）。
+# 发版时需同步更新：filevers / prodvers 四元组，以及 FileVersion / ProductVersion 字符串。
+#
+# 语言与代码页：简体中文 (0804) + Unicode (1200 = 0x04b0)
+# 参考文档：https://pyinstaller.org/en/stable/usage.html#cmdoption-version
+
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    # filevers/prodvers: (主版本, 次版本, 修订号, 构建号)，须与发布 tag 一致
+    filevers=(3, 1, 0, 0),
+    prodvers=(3, 1, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,  # VOS_NT_WINDOWS32
+    fileType=0x1,  # VFT_APP
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          '080404b0',
+          [
+            StringStruct('CompanyName', 'EmberCollective'),
+            StringStruct('FileDescription', '校园跑步数据生成器（桌面版）'),
+            StringStruct('FileVersion', '3.1.0.0'),
+            StringStruct('InternalName', 'CampusRunningGen'),
+            StringStruct('LegalCopyright', ''),
+            StringStruct('OriginalFilename', 'CampusRunningGen.exe'),
+            StringStruct('ProductName', '校园跑步数据生成器'),
+            StringStruct('ProductVersion', '3.1.0.0')
+          ]
+        )
+      ]
+    ),
+    VarFileInfo(
+      [VarStruct('Translation', [2052, 1200])]
+    )
+  ]
+)

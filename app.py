@@ -53,7 +53,8 @@ def main():
     print("按 Ctrl+C 停止服务器")
     print("=" * 50)
 
-    app.run(debug=True, host=host, port=port)
+    # use_reloader=False 防止多次生成后因文件句柄/内存累积导致进程崩溃
+    app.run(debug=True, host=host, port=port, use_reloader=False)
 
 
 if __name__ == "__main__":

@@ -396,8 +396,8 @@ document.getElementById('save-form').addEventListener('submit', handleSaveSubmit
 
 // ===== 初始化 =====
 (async function init() {
-    // 地图引擎与搜索（同步初始化，Leaflet 立即可用）
-    MapEngine.init();
+    // 地图引擎与搜索（异步初始化，需先加载高德 Key 配置）
+    await MapEngine.init();
     initSearchBox();
 
     try {

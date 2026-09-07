@@ -140,6 +140,8 @@ def create_app() -> Flask:
     )
     # 与 GET /api/tracks（endpoint "list_tracks"）同路径不同方法，endpoint 名必须不同
     app.add_url_rule("/api/tracks", "save_track_route", save_track, methods=["POST"])
+    # 高德 Key 配置 API
+    app.add_url_rule("/api/amap-key", "get_amap_key", get_amap_key, methods=["GET"])
 
     return app
 
@@ -152,6 +154,30 @@ def index():
 def get_version():
     """返回应用版本信息（数据来自 src/__init__.py 的 __version__）"""
     return jsonify({"name": APP_NAME, "version": __version__})
+
+
+def get_amap_key():
+    """返回高德地图 Key 配置（从 config/amap_key.json 读取）
+
+    Returns:
+        包含 key 和 securityJsCode 的 JSON 响应
+    """
+    config_dir = paths.get_config_dir()
+    key_file = os.path.join(config_dir, "amap_key.json")
+
+    if not os.path.isfile(key_file):
+        return jsonify({"key": "", "securityJsCode": ""})
+
+    try:
+        with open(key_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return jsonify({
+            "key": data.get("key", ""),
+            "securityJsCode": data.get("securityJsCode", "")
+        })
+    except Exception as e:
+        logger.error("读取高德 Key 配置失败: %s", e)
+        return jsonify({"key": "", "securityJsCode": ""})
 
 
 def list_tracks():

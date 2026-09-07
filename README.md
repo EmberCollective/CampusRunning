@@ -50,6 +50,8 @@ pip install flask garmin-fit-sdk
 
 不想装 Python？从 [GitHub Releases](https://github.com/YuShenLiu06/CampusRunning/releases) 下载安装包（`CampusRunningGen-Setup-<版本>-win64.exe`）或便携 zip，安装 / 解压后双击即用，功能与 Web 版一致。系统要求、SmartScreen 提示与数据位置说明见[桌面版文档](docs/desktop-packaging.md)。
 
+> **高德地图配置**：桌面版中使用「官方」地图档或地址搜索功能时，推荐通过配置文件设置高德 Key（见[高德 Key 申请教程](docs/amap_key_guide.md)的「桌面版配置」章节），以避免 WebView2 的 localStorage 持久化问题。
+
 ### Web（推荐）
 
 ```bash

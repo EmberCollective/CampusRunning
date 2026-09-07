@@ -217,6 +217,9 @@ const MapEngine = {
     _clearKeys() {
         localStorage.removeItem(AMAP_KEY_STORAGE);
         localStorage.removeItem(AMAP_SCODE_STORAGE);
+        // 同时清除服务器配置缓存，确保清除操作立即生效
+        _serverAmapKey = '';
+        _serverAmapScode = '';
         document.getElementById('amap-key-input').value = '';
         document.getElementById('amap-scode-input').value = '';
         document.getElementById('settings-note').textContent = '已清除。';
@@ -234,7 +237,13 @@ const MapEngine = {
 function openSettings() {
     document.getElementById('amap-key-input').value = getAmapKey();
     document.getElementById('amap-scode-input').value = getAmapScode();
-    document.getElementById('settings-note').textContent = '';
+    // 当服务器配置生效时，提示用户来源
+    const note = document.getElementById('settings-note');
+    if (_serverAmapKey) {
+        note.textContent = '当前使用配置文件中的 Key（config/amap_key.json）。在此清除后刷新页面将重新加载配置文件。';
+    } else {
+        note.textContent = '';
+    }
     document.getElementById('settings-modal').style.display = '';
 }
 

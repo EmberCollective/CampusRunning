@@ -6,6 +6,7 @@
 """
 
 import datetime
+import json
 import logging
 import os
 import time
@@ -175,7 +176,7 @@ def get_amap_key():
             "key": data.get("key", ""),
             "securityJsCode": data.get("securityJsCode", "")
         })
-    except Exception as e:
+    except (json.JSONDecodeError, OSError) as e:
         logger.error("读取高德 Key 配置失败: %s", e)
         return jsonify({"key": "", "securityJsCode": ""})
 

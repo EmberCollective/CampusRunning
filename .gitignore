@@ -42,3 +42,6 @@ build/
 !.claude/skills/
 # Claude Code 会话临时文件（截图等）
 .claude-tmp/
+
+# 排除高德 Key 配置文件（含用户凭据，避免意外提交）
+config/amap_key.json

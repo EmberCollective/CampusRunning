@@ -6,6 +6,12 @@
 
 （新变更先积累在此段落，发布时改写为版本号并补充日期。）
 
+## [3.1.0-pr.2] - 2026-09-07
+
+### 变更
+
+- Release 附件改为英文命名并明确标记 x86_64 架构：Windows Installer (x86_64, recommended) / Windows Portable (x86_64) / SHA256 Checksums (#22)
+
 ## [3.1.0-pr.1] - 2026-09-07
 
 首个 Windows 桌面版预发布（Windows x86_64 / 64 位构建，暂无 ARM64 版本）。

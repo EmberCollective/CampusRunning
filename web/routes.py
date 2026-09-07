@@ -6,6 +6,7 @@
 """
 
 import datetime
+import json
 import logging
 import os
 import time
@@ -15,6 +16,7 @@ from typing import Optional
 
 from flask import Flask, render_template, request, jsonify, send_file, abort, after_this_request
 
+from src import __version__, paths
 from src.config_manager import ConfigManager
 from src.template_manager import TemplateManager
 from src.core.models import (
@@ -27,6 +29,9 @@ from src.core.models import (
 from src.core.track_analyzer import TrackAnalyzer
 
 logger = logging.getLogger(__name__)
+
+# 产品名称（与页面标题一致，经 /api/version 提供给前端展示）
+APP_NAME = "校园跑步数据生成器"
 
 # 全局状态
 _config_manager: Optional[ConfigManager] = None
@@ -81,8 +86,8 @@ def create_app() -> Flask:
     """
     global _config_manager, _template_manager
 
-    # 计算项目根目录（app.py 所在目录）
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # 只读资源根目录（源码模式为仓库根，frozen 模式为打包资源目录）
+    project_root = paths.get_resource_root()
     template_folder = os.path.join(project_root, "web", "templates")
     static_folder = os.path.join(project_root, "web", "static")
 
@@ -92,11 +97,12 @@ def create_app() -> Flask:
         static_folder=static_folder,
     )
 
-    _config_manager = ConfigManager(os.path.join(project_root, "config"))
+    _config_manager = ConfigManager(paths.get_config_dir())
     _template_manager = TemplateManager(_config_manager)
 
     # 注册路由
     app.add_url_rule("/", "index", index)
+    app.add_url_rule("/api/version", "get_version", get_version, methods=["GET"])
     app.add_url_rule("/api/tracks", "list_tracks", list_tracks, methods=["GET"])
     app.add_url_rule(
         "/api/tracks/<track_id>", "get_track", get_track, methods=["GET"]
@@ -135,6 +141,8 @@ def create_app() -> Flask:
     )
     # 与 GET /api/tracks（endpoint "list_tracks"）同路径不同方法，endpoint 名必须不同
     app.add_url_rule("/api/tracks", "save_track_route", save_track, methods=["POST"])
+    # 高德 Key 配置 API
+    app.add_url_rule("/api/amap-key", "get_amap_key", get_amap_key, methods=["GET"])
 
     return app
 
@@ -142,6 +150,35 @@ def create_app() -> Flask:
 def index():
     """渲染主页面"""
     return render_template("index.html")
+
+
+def get_version():
+    """返回应用版本信息（数据来自 src/__init__.py 的 __version__）"""
+    return jsonify({"name": APP_NAME, "version": __version__})
+
+
+def get_amap_key():
+    """返回高德地图 Key 配置（从 config/amap_key.json 读取）
+
+    Returns:
+        包含 key 和 securityJsCode 的 JSON 响应
+    """
+    config_dir = paths.get_config_dir()
+    key_file = os.path.join(config_dir, "amap_key.json")
+
+    if not os.path.isfile(key_file):
+        return jsonify({"key": "", "securityJsCode": ""})
+
+    try:
+        with open(key_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return jsonify({
+            "key": data.get("key", ""),
+            "securityJsCode": data.get("securityJsCode", "")
+        })
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("读取高德 Key 配置失败: %s", e)
+        return jsonify({"key": "", "securityJsCode": ""})
 
 
 def list_tracks():

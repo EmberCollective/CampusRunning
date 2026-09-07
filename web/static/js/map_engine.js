@@ -13,12 +13,32 @@
 const AMAP_KEY_STORAGE = 'te_amap_key';
 const AMAP_SCODE_STORAGE = 'te_amap_scode';
 
+// 从服务器配置文件读取的 Key（优先级高于 localStorage）
+let _serverAmapKey = '';
+let _serverAmapScode = '';
+
+// 初始化：从服务器加载高德 Key 配置
+async function initAmapKeyFromServer() {
+    try {
+        const response = await fetch('/api/amap-key');
+        if (response.ok) {
+            const data = await response.json();
+            _serverAmapKey = data.key || '';
+            _serverAmapScode = data.securityJsCode || '';
+        }
+    } catch (e) {
+        console.warn('无法从服务器加载高德 Key 配置:', e);
+    }
+}
+
 function getAmapKey() {
-    return localStorage.getItem(AMAP_KEY_STORAGE) || '';
+    // 优先使用服务器配置，其次使用 localStorage
+    return _serverAmapKey || localStorage.getItem(AMAP_KEY_STORAGE) || '';
 }
 
 function getAmapScode() {
-    return localStorage.getItem(AMAP_SCODE_STORAGE) || '';
+    // 优先使用服务器配置，其次使用 localStorage
+    return _serverAmapScode || localStorage.getItem(AMAP_SCODE_STORAGE) || '';
 }
 
 function hasAmapKey() {
@@ -32,7 +52,10 @@ const MapEngine = {
     loading: false,                // 官方引擎加载防重入
     _dragEnabled: true,            // 拖动平移状态（画笔工具禁用），切换档位后需重放
 
-    init() {
+    async init() {
+        // 先从服务器加载高德 Key 配置
+        await initAmapKeyFromServer();
+
         this.adapters.leaflet = new LeafletAdapter('map-leaflet');
         this.adapters.leaflet.setBaseMode('classic');
         this._bindSwitchButtons();
@@ -194,6 +217,9 @@ const MapEngine = {
     _clearKeys() {
         localStorage.removeItem(AMAP_KEY_STORAGE);
         localStorage.removeItem(AMAP_SCODE_STORAGE);
+        // 同时清除服务器配置缓存，确保清除操作立即生效
+        _serverAmapKey = '';
+        _serverAmapScode = '';
         document.getElementById('amap-key-input').value = '';
         document.getElementById('amap-scode-input').value = '';
         document.getElementById('settings-note').textContent = '已清除。';
@@ -211,7 +237,13 @@ const MapEngine = {
 function openSettings() {
     document.getElementById('amap-key-input').value = getAmapKey();
     document.getElementById('amap-scode-input').value = getAmapScode();
-    document.getElementById('settings-note').textContent = '';
+    // 当服务器配置生效时，提示用户来源
+    const note = document.getElementById('settings-note');
+    if (_serverAmapKey) {
+        note.textContent = '当前使用配置文件中的 Key（config/amap_key.json）。在此清除后刷新页面将重新加载配置文件。';
+    } else {
+        note.textContent = '';
+    }
     document.getElementById('settings-modal').style.display = '';
 }
 

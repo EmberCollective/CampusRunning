@@ -11,8 +11,10 @@
 <body>
     <!-- 应用顶栏 -->
     <header class="topbar">
-        <span class="app-icon">CR</span>
+        <img class="app-icon" src="/static/img/app-icon.png" alt="校园跑步数据生成器图标">
         <h1>校园跑步数据生成器</h1>
+        <!-- 版本号由前端经 /api/version 异步填充，加载失败时保持留空 -->
+        <span class="mono-tag app-version" id="app-version"></span>
         <span class="mono-tag">FIT / TCX · GCJ-02</span>
         <div class="topbar-side">
             <a href="/track-editor" class="link-btn">轨迹编辑器 &rarr;</a>

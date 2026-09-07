@@ -109,6 +109,6 @@ jobs:
             FLAGS="--prerelease"
           fi
           gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release_notes.md ${FLAGS} \
-            "CampusRunningGen-Setup-${GITHUB_REF_NAME}-win64.exe#Windows 安装版（推荐）" \
-            "CampusRunningGen-${GITHUB_REF_NAME}-win64.zip#Windows 便携版（解压即用）" \
-            "SHA256SUMS.txt#校验文件"
+            "CampusRunningGen-Setup-${GITHUB_REF_NAME}-win64.exe#Windows Installer (x86_64, recommended)" \
+            "CampusRunningGen-${GITHUB_REF_NAME}-win64.zip#Windows Portable (x86_64)" \
+            "SHA256SUMS.txt#SHA256 Checksums"

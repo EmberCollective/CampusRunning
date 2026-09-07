@@ -93,6 +93,7 @@ def frozen_env(tmp_path, monkeypatch):
         sys, "executable", str(exe_dir / "CampusRunningGen.exe"), raising=False
     )
     monkeypatch.setattr(paths, "_writable_base_cache", None)
+    monkeypatch.setattr(paths, "_config_seeded", False)
     return resource_root, exe_dir
 
 
@@ -114,6 +115,16 @@ def test_frozen_config_dir_seeds_defaults(frozen_env):
     assert (exe_dir / "config" / "default_settings.json").exists()
     assert (exe_dir / "config" / "tracks" / "t1.json").exists()
     assert not (exe_dir / "config" / "templates" / "GUIDE.md").exists()
+
+
+def test_frozen_config_dir_seeds_once(frozen_env):
+    """播种每进程一次：删除播种产物后再次取目录不会重新播种"""
+    _, exe_dir = frozen_env
+    assert paths.get_config_dir() == str(exe_dir / "config")
+    seeded_file = exe_dir / "config" / "default_settings.json"
+    seeded_file.unlink()
+    paths.get_config_dir()
+    assert not seeded_file.exists()
 
 
 def test_frozen_seed_never_overwrites_user_files(frozen_env):

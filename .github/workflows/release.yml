@@ -30,6 +30,17 @@ jobs:
       # 桌面打包需要 pywebview 等额外依赖（requirements-desktop.txt）
       - run: pip install -r requirements.txt -r requirements-desktop.txt
       - run: python -m pytest
+      # 版本号三处同步：从 tag 生成（src/__init__.py / version_info.txt /
+      # installer.iss），替代发版前的手工同步；干跑（非 tag 触发）时跳过
+      - name: 同步版本号
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" == v* ]]; then
+            python scripts/sync_version.py "$TAG"
+          else
+            echo "非 tag 触发（${TAG}），跳过版本同步"
+          fi
       # onedir 打包，产出 dist/CampusRunningGenerator/（GUI + CLI 双入口）
       - run: pyinstaller campus_running.spec --noconfirm --clean
       # 版本号：tag 触发时 GITHUB_REF_NAME 形如 v1.2.3；workflow_dispatch 干跑时

@@ -12,6 +12,10 @@
 
 - Release 附件改为英文命名并明确标记 x86_64 架构：Windows Installer (x86_64, recommended) / Windows Portable (x86_64) / SHA256 Checksums (#22)
 
+### 修复
+
+- 打包链安全与健壮性加固：本地高德凭据（config/amap_key.json）不再被打进安装包；版本号改由 CI 从 tag 自动生成三处同步；桌面端口探测、单实例检查等边界问题修复 (#24)
+
 ## [3.1.0-pr.1] - 2026-09-07
 
 首个 Windows 桌面版预发布（Windows x86_64 / 64 位构建，暂无 ARM64 版本）。

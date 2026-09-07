@@ -111,12 +111,22 @@ button { font-family: inherit; }
     background: var(--surface);
     border-bottom: 1px solid var(--border);
 }
+.app-icon-link {
+    flex: none;
+    display: block;
+    line-height: 0;
+}
 .app-icon {
     width: 22px; height: 22px; flex: none;
     border-radius: 5px;
     border: 1px solid var(--border);
     object-fit: cover;
     display: block;
+}
+.app-icon-link .app-icon { cursor: pointer; }
+.app-icon-link:hover .app-icon {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
 .topbar h1 { font-size: 13.5px; font-weight: 700; }
 .topbar .mono-tag { margin-left: 2px; }

@@ -15,10 +15,10 @@
 ; ---------------------------------------------------------------------------
 
 #define MyAppName "校园跑步数据生成器"
-; 版本号：默认 3.1.0（跟随发布 tag，次版本号递增）；CI 可用
+; 版本号：默认 3.1.0-pr.1（跟随发布 tag，预发布用 -pr.N 后缀）；CI 可用
 ; ISCC /DMyAppVersion=v<tag> 注入覆盖
 #ifndef MyAppVersion
-#define MyAppVersion "3.1.0"
+#define MyAppVersion "3.1.0-pr.1"
 #endif
 #define MyAppPublisher "EmberCollective"
 #define MyAppExeName "CampusRunningGen.exe"
@@ -41,6 +41,10 @@ OutputBaseFilename=CampusRunningGen-Setup-{#MyAppVersion}-win64
 SetupIconFile=assets\icon.ico
 ; 运行时解析到已安装的 exe，卸载列表图标即刻生效
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; 安装与卸载完成后通知 Explorer 刷新关联与图标缓存（内部即
+; SHChangeNotify(SHCNE_ASSOCCHANGED)）：同路径覆盖升级时 exe 图标
+; 已更新，但 shell 图标缓存不会随之失效，快捷方式/任务栏会显示旧图
+ChangesAssociations=yes
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

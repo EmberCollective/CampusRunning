@@ -98,10 +98,17 @@ jobs:
         with:
           name: windows-desktop
       # 附件用「文件#显示名」语法命名，安装版排在最前
-      - env:
+      - name: 创建 Release
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release_notes.md
-          "CampusRunningGen-Setup-${GITHUB_REF_NAME}-win64.exe#Windows 安装版（推荐）"
-          "CampusRunningGen-${GITHUB_REF_NAME}-win64.zip#Windows 便携版（解压即用）"
-          "SHA256SUMS.txt#校验文件"
+        run: |
+          # 语义化版本的预发布 tag（如 v3.1.0-pr.1）含连字符：
+          # 不加 --prerelease 会被当作正式版发布并抢占 latest
+          FLAGS=""
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            FLAGS="--prerelease"
+          fi
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release_notes.md ${FLAGS} \
+            "CampusRunningGen-Setup-${GITHUB_REF_NAME}-win64.exe#Windows 安装版（推荐）" \
+            "CampusRunningGen-${GITHUB_REF_NAME}-win64.zip#Windows 便携版（解压即用）" \
+            "SHA256SUMS.txt#校验文件"

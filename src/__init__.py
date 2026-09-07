@@ -15,7 +15,8 @@ from .exporters.tcx_exporter import TcxExporter
 
 # 版本号单一来源：跟随发布 tag（次版本号递增），与打包元数据
 # （version_info.txt / installer.iss / CI 注入的 /DMyAppVersion）保持一致
-__version__ = "3.1.0"
+# 预发布 tag 形如 v3.1.0-pr.N（pr = pre-release，语义化版本连字符段）
+__version__ = "3.1.0-pr.1"
 __author__ = "猫娘幽浮喵"
 
 __all__ = [

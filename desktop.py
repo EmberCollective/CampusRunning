@@ -137,9 +137,12 @@ def _check_single_instance() -> bool:
     """
     if sys.platform != "win32":
         return True
-    # 返回句柄被刻意忽略；GetLastError 必须紧邻调用，中间不得夹其他 ctypes 调用
-    ctypes.windll.kernel32.CreateMutexW(None, False, _MUTEX_NAME)
-    if ctypes.windll.kernel32.GetLastError() != _ERROR_ALREADY_EXISTS:
+    # use_last_error=True：ctypes 在调用返回瞬间捕获 GetLastError 快照，
+    # 避免共享 windll 缓存实例时被后续 ctypes 内部调用污染
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    # 返回句柄被刻意忽略；互斥体句柄随进程生命周期持有，退出由系统回收
+    kernel32.CreateMutexW(None, False, _MUTEX_NAME)
+    if ctypes.get_last_error() != _ERROR_ALREADY_EXISTS:
         return True
     logger.warning("互斥体已存在，程序已在运行，拒绝重复启动")
     _fatal("程序已在运行", "校园跑步数据生成器已经打开，请查看任务栏中的已有窗口。")
@@ -165,7 +168,8 @@ def _pick_port(preferred: int) -> int:
                 sock.bind((_DESKTOP_HOST, port))
             except OSError:
                 continue
-            return port
+            # bind(0) 时系统随机分配端口，统一读回实际绑定端口
+            return int(sock.getsockname()[1])
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind((_DESKTOP_HOST, 0))
         return int(sock.getsockname()[1])

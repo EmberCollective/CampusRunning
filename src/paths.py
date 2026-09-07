@@ -21,11 +21,15 @@ import logging
 import os
 import shutil
 import sys
+import threading
 
 logger = logging.getLogger(__name__)
 
 # frozen 模式下可写基目录缓存（避免每次调用都做写探测）
 _writable_base_cache: str | None = None
+
+# frozen 模式默认配置播种标志（每进程播种一次；测试经 monkeypatch 重置）
+_config_seeded: bool = False
 
 # exe 目录不可写时的回退目录名（位于 %LOCALAPPDATA% 下）
 _FALLBACK_DIR_NAME = "CampusRunningDataGeneration"
@@ -94,8 +98,11 @@ def _probe_writable(directory: str) -> bool:
     """
     if not os.path.isdir(directory):
         return False
-    # 文件名附加 pid：并发首调时避免两线程操作同一探测文件
-    probe_path = os.path.join(directory, f".write_probe_{os.getpid()}")
+    # 文件名附加 pid + 线程 id：同进程多线程并发首调时不会互踩
+    # 同一探测文件（一方 remove 后另一方 remove 抛 FileNotFoundError）
+    probe_path = os.path.join(
+        directory, f".write_probe_{os.getpid()}_{threading.get_ident()}"
+    )
     try:
         with open(probe_path, "w", encoding="utf-8") as f:
             f.write("probe")
@@ -198,15 +205,19 @@ def get_config_dir() -> str:
     """获取配置目录
 
     源码模式返回 仓库根/config（与收口前行为一致，无任何副作用）；
-    frozen 模式返回 可写基目录/config，并先播种默认配置。
+    frozen 模式返回 可写基目录/config，并播种默认配置（每进程一次，
+    之后直接返回缓存结果，避免每个 HTTP 请求都重复扫描资源目录）。
 
     Returns:
         配置目录绝对路径
     """
+    global _config_seeded
     if not is_frozen():
         return os.path.join(_get_source_root(), "config")
     config_dir = os.path.join(get_writable_base(), "config")
-    _seed_default_config(config_dir)
+    if not _config_seeded:
+        _seed_default_config(config_dir)
+        _config_seeded = True
     return config_dir
 
 

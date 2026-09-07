@@ -46,7 +46,13 @@ GUI_DATAS = [
     ("web/templates", "web/templates"),
     ("web/static", "web/static"),
 ]
-GUI_DATAS += [(f, "config") for f in sorted(glob.glob("config/*.json"))]
+GUI_DATAS += [
+    (f, "config")
+    for f in sorted(glob.glob("config/*.json"))
+    # amap_key.json 是用户本地高德凭据（docs/amap_key_guide.md），
+    # 仅存在于开发者机器，绝不能打进分发包随安装包分发
+    if os.path.basename(f) != "amap_key.json"
+]
 GUI_DATAS += [(f, "config/tracks") for f in sorted(glob.glob("config/tracks/*.json"))]
 GUI_DATAS += [(f, "config/templates") for f in sorted(glob.glob("config/templates/*.json"))]
 GUI_DATAS += collect_data_files("webview")
@@ -125,8 +131,8 @@ exe_gui = EXE(
     console=False,  # GUI：不弹黑框
 )
 
-# main.py 开头对 sys.stdout 做 UTF-8 重包（detach），无控制台会直接崩溃，
-# CLI 入口必须 console=True
+# main.py 开头对 sys.stdout/stderr 做 UTF-8 reconfigure（非标准流环境由
+# try/except 兜底，不会崩溃）；CLI 需要真实控制台交互输出，必须 console=True
 exe_cli = EXE(
     pyz,
     a_cli.scripts,

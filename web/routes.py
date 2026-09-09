@@ -143,6 +143,7 @@ def create_app() -> Flask:
     app.add_url_rule("/api/tracks", "save_track_route", save_track, methods=["POST"])
     # 高德 Key 配置 API
     app.add_url_rule("/api/amap-key", "get_amap_key", get_amap_key, methods=["GET"])
+    app.add_url_rule("/api/amap-key", "save_amap_key", save_amap_key, methods=["POST"])
 
     return app
 
@@ -179,6 +180,47 @@ def get_amap_key():
     except (json.JSONDecodeError, OSError) as e:
         logger.error("读取高德 Key 配置失败: %s", e)
         return jsonify({"key": "", "securityJsCode": ""})
+
+
+def save_amap_key():
+    """保存高德地图 Key 配置到 config/amap_key.json
+
+    Request body:
+        {"key": "...", "securityJsCode": "..."}
+
+    Returns:
+        保存结果 JSON 响应
+    """
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({"error": "无效的请求数据"}), 400
+
+    config_dir = paths.get_config_dir()
+    key_file = os.path.join(config_dir, "amap_key.json")
+
+    key = str(data.get("key") or "").strip()
+    scode = str(data.get("securityJsCode") or "").strip()
+
+    # key 为空时删除配置文件
+    if not key:
+        if os.path.isfile(key_file):
+            try:
+                os.remove(key_file)
+                logger.info("已清除高德 Key 配置文件")
+            except OSError as e:
+                logger.error("删除高德 Key 配置失败: %s", e)
+                return jsonify({"error": "清除配置失败"}), 500
+        return jsonify({"status": "cleared"})
+
+    try:
+        os.makedirs(config_dir, exist_ok=True)
+        with open(key_file, "w", encoding="utf-8") as f:
+            json.dump({"key": key, "securityJsCode": scode}, f, ensure_ascii=False, indent=2)
+        logger.info("高德 Key 配置已保存")
+        return jsonify({"status": "saved"})
+    except OSError as e:
+        logger.error("保存高德 Key 配置失败: %s", e)
+        return jsonify({"error": "保存配置失败"}), 500
 
 
 def list_tracks():

@@ -186,7 +186,7 @@ const MapEngine = {
         });
     },
 
-    _saveKeys() {
+    async _saveKeys() {
         const key = document.getElementById('amap-key-input').value.trim();
         const scode = document.getElementById('amap-scode-input').value.trim();
         const note = document.getElementById('settings-note');
@@ -204,17 +204,34 @@ const MapEngine = {
             localStorage.removeItem(AMAP_SCODE_STORAGE);
         }
 
+        // 更新服务端缓存，确保当前会话立即生效
+        _serverAmapKey = key;
+        _serverAmapScode = scode;
+
+        // 同步保存到服务端配置文件
+        let serverMsg = '';
+        try {
+            const resp = await fetch('/api/amap-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, securityJsCode: scode }),
+            });
+            if (!resp.ok) serverMsg = '（服务端保存失败，刷新页面后 Key 可能丢失）';
+        } catch (e) {
+            serverMsg = '（服务端保存失败，刷新页面后 Key 可能丢失）';
+        }
+
         // 引擎已加载后凭据变更不热重载（loader 不重复请求）
         if (this.adapters.amap && keyChanged) {
-            note.textContent = '已保存。检测到 Key 变更，刷新页面后生效。';
+            note.textContent = '已保存。检测到 Key 变更，刷新页面后生效。' + serverMsg;
         } else {
-            note.textContent = '已保存。';
+            note.textContent = '已保存。' + serverMsg;
         }
         this._updateSwitchStates();
         if (typeof updateSearchState === 'function') updateSearchState();
     },
 
-    _clearKeys() {
+    async _clearKeys() {
         localStorage.removeItem(AMAP_KEY_STORAGE);
         localStorage.removeItem(AMAP_SCODE_STORAGE);
         // 同时清除服务器配置缓存，确保清除操作立即生效
@@ -222,7 +239,20 @@ const MapEngine = {
         _serverAmapScode = '';
         document.getElementById('amap-key-input').value = '';
         document.getElementById('amap-scode-input').value = '';
-        document.getElementById('settings-note').textContent = '已清除。';
+
+        // 同步清除服务端配置文件
+        let serverMsg = '';
+        try {
+            const resp = await fetch('/api/amap-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: '', securityJsCode: '' }),
+            });
+            if (!resp.ok) serverMsg = '（服务端清除失败）';
+        } catch (e) {
+            serverMsg = '（服务端清除失败）';
+        }
+        document.getElementById('settings-note').textContent = '已清除。' + serverMsg;
 
         // 若正处于官方档，切回经典档
         if (this.mode === 'amap') {

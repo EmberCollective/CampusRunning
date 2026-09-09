@@ -34,6 +34,8 @@ jobs:
       # installer.iss），替代发版前的手工同步；干跑（非 tag 触发）时跳过
       - name: 同步版本号
         shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           TAG="${GITHUB_REF_NAME}"
           if [[ "$TAG" == v* ]]; then

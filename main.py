@@ -14,6 +14,7 @@
 
 import os
 import sys
+import json
 import argparse
 import datetime
 import logging
@@ -207,6 +208,64 @@ def list_templates(template_manager: TemplateManager):
         print(f"  {tmpl['id']}: {tmpl['name']} - {tmpl['description']}")
 
 
+def manage_amap_key(args):
+    """管理高德地图 Key 配置"""
+    config_dir = get_config_dir()
+    key_file = os.path.join(config_dir, "amap_key.json")
+
+    # --show: 显示当前配置
+    if args.show:
+        if not os.path.isfile(key_file):
+            print("当前未配置高德 Key")
+            return
+        try:
+            with open(key_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            print(f"Key:          {data.get('key', '(未设置)')}")
+            print(f"安全密钥:     {data.get('securityJsCode', '(未设置)')}")
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"读取配置失败: {e}")
+        return
+
+    # --clear: 清除配置
+    if args.clear:
+        if os.path.isfile(key_file):
+            try:
+                os.remove(key_file)
+                print("已清除高德 Key 配置")
+            except OSError as e:
+                print(f"清除失败: {e}")
+        else:
+            print("当前未配置高德 Key，无需清除")
+        return
+
+    # --key 传参或交互式输入
+    key = args.key
+    scode = args.security_code
+
+    if not key:
+        # 未指定 --key 时进入交互模式（忽略单独传入的 --security-code）
+        print("请输入高德地图 API 配置（申请教程见 docs/amap_key_guide.md）")
+        key = input("Key: ").strip()
+        if not key:
+            print("Key 不能为空，已取消")
+            return
+        scode_input = input("安全密钥 (securityJsCode，可留空): ").strip()
+        scode = scode_input or ""
+
+    if not scode:
+        scode = ""
+
+    # 保存配置
+    try:
+        os.makedirs(config_dir, exist_ok=True)
+        with open(key_file, "w", encoding="utf-8") as f:
+            json.dump({"key": key, "securityJsCode": scode}, f, ensure_ascii=False, indent=2)
+        print(f"高德 Key 配置已保存到 {key_file}")
+    except OSError as e:
+        print(f"保存失败: {e}")
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='校园跑步数据生成器')
@@ -275,6 +334,13 @@ def main():
     single_parser.add_argument('--track', help='指定轨迹ID')
     single_parser.add_argument('--template', help='指定预设模板')
 
+    # 高德 Key 管理命令
+    key_parser = subparsers.add_parser('set-key', help='管理高德地图 API Key 配置')
+    key_parser.add_argument('--key', help='高德 JS API Key')
+    key_parser.add_argument('--security-code', help='高德安全密钥 (securityJsCode)')
+    key_parser.add_argument('--show', action='store_true', help='显示当前保存的 Key 配置')
+    key_parser.add_argument('--clear', action='store_true', help='清除保存的 Key 配置')
+
     args = parser.parse_args()
 
     # 设置日志
@@ -301,6 +367,8 @@ def main():
         generate_by_total_km(args, engine, template_manager)
     elif args.command == 'single':
         generate_single_file(args, engine, template_manager)
+    elif args.command == 'set-key':
+        manage_amap_key(args)
     else:
         parser.print_help()
 

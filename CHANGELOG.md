@@ -16,6 +16,7 @@
 
 - Release 附件改为英文命名并明确标记 x86_64 架构：Windows Installer (x86_64, recommended) / Windows Portable (x86_64) / SHA256 Checksums (#22)
 - 替换应用图标为新设计（使用 scripts/make_icon.py 从源图片生成多尺寸 ICO）(#27)
+- 高德 Key 配置自动持久化：前端设置弹窗保存/清除时同步写入服务端 amap_key.json，CLI 新增 `set-key` 子命令 (#29)
 
 ### 修复
 

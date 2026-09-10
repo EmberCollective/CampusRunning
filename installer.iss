@@ -18,7 +18,7 @@
 ; 版本号：默认 3.1.0-pr.2（跟随发布 tag，预发布用 -pr.N 后缀）；CI 可用
 ; ISCC /DMyAppVersion=v<tag> 注入覆盖
 #ifndef MyAppVersion
-#define MyAppVersion "3.1.0-pr.2"
+#define MyAppVersion "3.1.0"
 #endif
 #define MyAppPublisher "EmberCollective"
 #define MyAppExeName "CampusRunningGen.exe"

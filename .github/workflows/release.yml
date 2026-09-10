@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  # 手动触发：不打 tag 也能干跑 Windows 构建验证产物（release job 会自动跳过）
+  # 手动触发：不打 tag 也能干跑 Windows / macOS 构建验证产物（release job 会自动跳过）
   workflow_dispatch:
 
 permissions:
@@ -90,12 +90,78 @@ jobs:
             dist/CampusRunningGen-Setup-${{ env.APP_VERSION }}-win64.exe
             dist/SHA256SUMS.txt
 
-  # 发版：保留原有 pytest + extract_changelog 逻辑，下载 Windows 产物后
+  # macOS 桌面版构建：pytest -> PyInstaller arm64 onedir -> 验证架构/签名/CLI -> zip -> SHA256
+  build-macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-desktop.txt
+      # macos-15 必须提供原生 arm64 runner；若 GitHub 标签未来改回 x64，
+      # 宁可构建失败也不能悄悄发布架构不符的产物
+      - name: 确认 runner 是 arm64
+        run: |
+          arch="$(uname -m)"
+          echo "runner architecture: ${arch}"
+          test "${arch}" = "arm64"
+      - run: pip install -r requirements.txt -r requirements-desktop.txt
+      - run: python -m pytest
+      - name: 同步版本号
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" == v* ]]; then
+            python scripts/sync_version.py "$TAG"
+          else
+            echo "非 tag 触发（${TAG}），跳过版本同步"
+          fi
+      - run: pyinstaller campus_running.spec --noconfirm --clean
+      - name: 计算产物版本号
+        run: |
+          VER="${GITHUB_REF_NAME}"
+          [[ "$VER" == v* ]] || VER="0.0.0-dev"
+          echo "APP_VERSION=${VER}" >> "${GITHUB_ENV}"
+      - name: 验证构建产物
+        run: |
+          test -x dist/CampusRunningGenerator/CampusRunningGen
+          test -x dist/CampusRunningGenerator/CampusRunningGenCLI
+          test "$(lipo -archs dist/CampusRunningGenerator/CampusRunningGen)" = "arm64"
+          test "$(lipo -archs dist/CampusRunningGenerator/CampusRunningGenCLI)" = "arm64"
+          codesign --verify --deep --strict dist/CampusRunningGenerator/CampusRunningGen
+          codesign --verify --deep --strict dist/CampusRunningGenerator/CampusRunningGenCLI
+          dist/CampusRunningGenerator/CampusRunningGenCLI --list-tracks > /dev/null
+      # ditto 会保留 POSIX 可执行权限与资源元数据；--keepParent 让解压后仍是
+      # 一个完整目录，不会把二进制散落到当前文件夹
+      - name: 打包 macOS zip
+        run: |
+          ditto -c -k --keepParent dist/CampusRunningGenerator \
+            "dist/CampusRunningGen-${APP_VERSION}-macos-arm64.zip"
+      - name: 生成 SHA256 校验和
+        run: |
+          cd dist
+          shasum -a 256 "CampusRunningGen-${APP_VERSION}-macos-arm64.zip" > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-desktop-arm64
+          path: |
+            dist/CampusRunningGen-${{ env.APP_VERSION }}-macos-arm64.zip
+            dist/SHA256SUMS.txt
+
+  # 发版：保留原有 pytest + extract_changelog 逻辑，下载双平台产物后
   # 创建带附件的 Release（仅 tag 触发时执行，干跑不建 Release）
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: build-windows
+    needs: [build-windows, build-macos]
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v6
@@ -106,10 +172,15 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m pytest
       - run: python scripts/extract_changelog.py "${GITHUB_REF_NAME}" --output release_notes.md
-      # 下载构建产物到当前目录（三个文件平铺，见 build-windows 的上传说明）
+      # 两个 artifact 各自放到独立目录，避免同名 SHA256SUMS.txt 覆盖
       - uses: actions/download-artifact@v4
         with:
           name: windows-desktop
+          path: release-assets/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-desktop-arm64
+          path: release-assets/macos
       # 附件用「文件#显示名」语法命名，安装版排在最前
       - name: 创建 Release
         env:
@@ -122,6 +193,8 @@ jobs:
             FLAGS="--prerelease"
           fi
           gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release_notes.md ${FLAGS} \
-            "CampusRunningGen-Setup-${GITHUB_REF_NAME}-win64.exe#Windows Installer (x86_64, recommended)" \
-            "CampusRunningGen-${GITHUB_REF_NAME}-win64.zip#Windows Portable (x86_64)" \
-            "SHA256SUMS.txt#SHA256 Checksums"
+            "release-assets/windows/CampusRunningGen-Setup-${GITHUB_REF_NAME}-win64.exe#Windows Installer (x86_64, recommended)" \
+            "release-assets/windows/CampusRunningGen-${GITHUB_REF_NAME}-win64.zip#Windows Portable (x86_64)" \
+            "release-assets/macos/CampusRunningGen-${GITHUB_REF_NAME}-macos-arm64.zip#macOS Portable (arm64)" \
+            "release-assets/windows/SHA256SUMS.txt#SHA256 Checksums (Windows x86_64)" \
+            "release-assets/macos/SHA256SUMS.txt#SHA256 Checksums (macOS arm64)"

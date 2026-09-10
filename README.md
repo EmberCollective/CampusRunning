@@ -40,21 +40,25 @@ CLI 与 Web 双入口，生成结果一致。
 
 ## 快速开始
 
-要求 Python 3.13+，安装依赖：
+### 桌面版（推荐 · 即开即用）
 
-```bash
-pip install flask garmin-fit-sdk
-```
+**无需 Python 环境**，从 [GitHub Releases](https://github.com/YuShenLiu06/CampusRunning/releases) 下载即用：
 
-### 桌面版（Windows / macOS arm64）
+| 平台 | 下载文件 | 说明 |
+|------|----------|------|
+| Windows | `CampusRunningGen-Setup-<版本>-win64.exe` | 安装包（推荐）或便携 zip |
+| macOS (Apple Silicon) | `CampusRunningGen-<版本>-macos-arm64.zip` | 解压即用 |
 
-不想装 Python？从 [GitHub Releases](https://github.com/YuShenLiu06/CampusRunning/releases) 下载 Windows 安装包（`CampusRunningGen-Setup-<版本>-win64.exe`）或便携 zip；Apple Silicon Mac 下载 `CampusRunningGen-<版本>-macos-arm64.zip` 并解压运行。功能与 Web 版一致。系统要求、SmartScreen / Gatekeeper 提示与数据位置说明见[桌面版文档](docs/desktop-packaging.md)。
+功能与 Web 版完全一致。系统要求、SmartScreen / Gatekeeper 提示与数据位置说明见[桌面版文档](docs/desktop-packaging.md)。
 
 > **高德地图配置**：桌面版中使用「官方」地图档或地址搜索功能时，推荐通过配置文件设置高德 Key（见[高德 Key 申请教程](docs/amap_key_guide.md)的「桌面版配置」章节），以避免 WebView2 的 localStorage 持久化问题。
 
-### Web（推荐）
+### Web
+
+需要 Python 3.13+，安装依赖后启动：
 
 ```bash
+pip install flask garmin-fit-sdk
 python app.py    # 浏览器访问 http://127.0.0.1:5000
 ```
 

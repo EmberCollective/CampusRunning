@@ -1,21 +1,30 @@
-# 桌面版（Windows）使用与打包说明
+# 桌面版（Windows / macOS arm64）使用与打包说明
 
-桌面版把 Web 工作台装进一个原生窗口（pywebview + 系统 WebView2），双击即用，**无需安装 Python**。功能与 `python app.py` 启动的 Web 版完全一致，另附一个命令行版 `CampusRunningGenCLI.exe`。
+桌面版把 Web 工作台装进一个原生窗口（Windows 使用 pywebview + WebView2，macOS 使用 pywebview + WKWebView），双击即用，**无需安装 Python**。功能与 `python app.py` 启动的 Web 版完全一致，另附命令行版（Windows 为 `CampusRunningGenCLI.exe`，macOS 为 `CampusRunningGenCLI`）。
 
 ## 获取方式
 
 | 方式 | 下载 | 适合谁 |
 | ------ | ------ | -------- |
 | 安装版 | Release 页的 `CampusRunningGen-Setup-<版本>-win64.exe` | 普通用户，图形化安装向导 |
-| 便携版 | Release 页的 `CampusRunningGen-v<版本>-win64.zip` | 免安装、可放 U 盘、删除文件夹即卸载 |
+| 便携版 | Release 页的 `CampusRunningGen-v<版本>-win64.zip` | Windows 免安装、可放 U 盘、删除文件夹即卸载 |
+| macOS 便携版 | Release 页的 `CampusRunningGen-v<版本>-macos-arm64.zip` | Apple Silicon Mac，解压后运行目录内程序 |
 | 源码运行 | 克隆仓库后 `python desktop.py` | 开发者，见[构建指南](#构建指南开发者) |
 
 下载入口：[GitHub Releases](https://github.com/EmberCollective/CampusRunning/releases)
 
 ## 系统要求
 
+### Windows
+
 - Windows 10 / 11（64 位）
 - **WebView2 运行时**：Windows 11 与保持更新的 Windows 10 通常已内置，无需额外操作。若缺失，程序会自动降级——用系统默认浏览器打开 Web 界面，功能不受影响，**不阻断使用**。也可手动安装 [WebView2 Evergreen Bootstrapper](https://developer.microsoft.com/microsoft-edge/webview2/) 获得完整桌面窗口体验。
+
+### macOS
+
+- Apple Silicon（arm64）Mac
+- 解压 zip 后，在 `CampusRunningGenerator` 目录中运行 `./CampusRunningGen` 启动 GUI，或运行 `./CampusRunningGenCLI` 使用命令行
+- 未配置 Apple 开发者证书签名与公证；首次打开如遇 Gatekeeper 提示，右键程序选择「打开」，或在「系统设置 → 隐私与安全性」中允许
 
 ### 联网说明
 
@@ -43,7 +52,7 @@
 
 ### SmartScreen / 杀软提示
 
-安装包与可执行文件目前**没有代码签名**，首次运行时 Windows SmartScreen 可能弹出「已保护你的电脑」提示：
+Windows 安装包与可执行文件目前**没有代码签名**，首次运行时 SmartScreen 可能弹出「已保护你的电脑」提示：
 
 1. 点击「更多信息」
 2. 点击「仍要运行」
@@ -58,16 +67,21 @@
 Get-FileHash .\CampusRunningGen-Setup-v1.0.0-win64.exe -Algorithm SHA256
 ```
 
-比对结果与 Release 页公示值一致即可放心使用。
+比对结果与 Release 页公示值一致即可放心使用。macOS 可使用：
+
+```bash
+shasum -a 256 CampusRunningGen-v1.0.0-macos-arm64.zip
+```
 
 ## 数据位置
 
 | 版本 | config/ 与 output/ 所在 |
 | ------ | -------------------------- |
-| 便携版 | exe 同级目录（运行后自动出现） |
+| Windows 便携版 | exe 同级目录（运行后自动出现） |
+| macOS 便携版 | 可执行文件同级目录（运行后自动出现） |
 | 安装版 | `%LOCALAPPDATA%\CampusRunningDataGeneration` |
 
-- **便携版即拷即用**：整个文件夹可放 U 盘携带，配置与生成结果随文件夹走；删除文件夹即完全卸载，无注册表残留。
+- **便携版即拷即用**：Windows 整个文件夹可放 U 盘携带；macOS 可移动整个 `CampusRunningGenerator` 文件夹。配置与生成结果随文件夹走；删除文件夹即完全卸载，Windows 无注册表残留。
 - **回退机制**：若 exe 所在目录不可写（如放在 `C:\Program Files` 下直接运行），便携版也会自动改用 `%LOCALAPPDATA%\CampusRunningDataGeneration` 存放数据。
 
 ## 恢复出厂默认
@@ -94,6 +108,7 @@ Get-FileHash .\CampusRunningGen-Setup-v1.0.0-win64.exe -Algorithm SHA256
 ```bash
 python -m venv .venv
 source .venv/Scripts/activate    # Windows Git Bash；CMD 用 .venv\Scripts\activate.bat
+# macOS / Linux 使用：source .venv/bin/activate
 pip install -r requirements.txt -r requirements-desktop.txt
 ```
 
@@ -107,8 +122,8 @@ pyinstaller campus_running.spec --noconfirm --clean
 
 ```text
 dist/CampusRunningGenerator/
-├── CampusRunningGen.exe        # 桌面窗口版（无控制台）
-├── CampusRunningGenCLI.exe     # 命令行版（控制台）
+├── CampusRunningGen.exe        # Windows 桌面窗口版（无控制台；macOS 为 CampusRunningGen）
+├── CampusRunningGenCLI.exe     # Windows 命令行版（控制台；macOS 为 CampusRunningGenCLI）
 └── _internal/                  # 运行时依赖，与 exe 同发同删
 ```
 
@@ -140,4 +155,4 @@ python desktop.py
 
 ### CI 自动发布
 
-向仓库推送 `v*` 格式的 tag（如 `v1.0.0`）即触发 `.github/workflows/release.yml`：自动完成打包、生成安装包与便携 zip，并附 sha256 校验值发布到 [GitHub Releases](https://github.com/EmberCollective/CampusRunning/releases)。日常开发无需手动执行上述构建步骤。
+向仓库推送 `v*` 格式的 tag（如 `v1.0.0`）即触发 `.github/workflows/release.yml`：自动完成 Windows 安装包、Windows 便携 zip 与 macOS arm64 便携 zip 构建，并附 sha256 校验值发布到 [GitHub Releases](https://github.com/EmberCollective/CampusRunning/releases)。日常开发无需手动执行上述构建步骤。

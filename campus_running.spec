@@ -6,8 +6,9 @@
     pyinstaller campus_running.spec --noconfirm --clean
 
 产物：dist/CampusRunningGenerator/
-    CampusRunningGen.exe      桌面 GUI（noconsole，入口 desktop.py）
-    CampusRunningGenCLI.exe   命令行工具（console，入口 main.py）
+    Windows: CampusRunningGen.exe / CampusRunningGenCLI.exe
+    macOS:   CampusRunningGen / CampusRunningGenCLI
+    _internal/                Python 运行时、依赖库与数据文件
     _internal/                Python 运行时、依赖库与数据文件
 
 关键选择：
@@ -22,6 +23,7 @@
 
 import glob
 import os
+import sys
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
@@ -29,7 +31,11 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 # 可选资源：图标 / 版本资源文件由并行任务生成，存在则启用，缺失则回退默认
 # ---------------------------------------------------------------------------
 ICON = "assets/icon.ico" if os.path.exists("assets/icon.ico") else None
-VERSION = "version_info.txt" if os.path.exists("version_info.txt") else None
+VERSION = (
+    "version_info.txt"
+    if sys.platform == "win32" and os.path.exists("version_info.txt")
+    else None
+)
 
 # venv 中遗留的未用包与测试依赖，一律不进产物
 EXCLUDES = [
@@ -40,7 +46,7 @@ EXCLUDES = [
 # ---------------------------------------------------------------------------
 # GUI 数据文件：Web 模板与静态资源、轨迹/模板配置（仅 .json，
 # 排除 TEMPLATE_GUIDE.md），以及 pywebview 内嵌的平台 JS/HTML 资源
-# （缺它 EdgeChromium 后端无法渲染页面）
+# （Windows 缺 EdgeChromium、macOS 缺 cocoa 后端资源时无法渲染页面）
 # ---------------------------------------------------------------------------
 GUI_DATAS = [
     ("web/templates", "web/templates"),
@@ -62,11 +68,13 @@ GUI_DATAS += collect_data_files("webview")
 # - src.exporters.fit_exporter、src.generation_engine 等在 web/routes.py
 #   中为函数级延迟导入，collect_submodules("src") 兜底收集全部子模块
 GUI_HIDDENIMPORTS = (
-    ["webview.platforms.edgechromium"]
-    + collect_submodules("webview")
+    collect_submodules("webview")
     + collect_submodules("src")
     + collect_submodules("web")
 )
+# EdgeChromium 仅存在于 Windows 后端；macOS 使用 cocoa/WKWebView 后端。
+if sys.platform == "win32":
+    GUI_HIDDENIMPORTS.insert(0, "webview.platforms.edgechromium")
 
 
 def _dedup(toc):

@@ -2,34 +2,9 @@
 
 本项目所有显著变更记录于此。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
 ## [3.1.0] - 2026-09-10
-
-### 新增
-
-- macOS arm64 桌面便携版：Release 工作流新增原生 arm64 构建、架构与签名校验、CLI smoke test 及 SHA256 校验文件
-
-### 修复
-
-- macOS Dock 图标显示为系统默认 exec 图标：打包新增 CampusRunningGen.app（Info.plist 引用内嵌 icon.icns），Release 附件改为打包 .app（CLI 位于 Contents/MacOS）；scripts/make_icon.py 新增多尺寸 ICNS 生成
-- Windows 图标各尺寸视觉不一致：assets/icon.ico 的 16-128px 帧仍为旧程序绘制设计、仅 256px 为新设计，现全部尺寸统一由 256px 新设计帧缩放生成（exe 与安装器共用该文件）
-
-## [3.1.0-pr.2] - 2026-09-09
-
-### 新增
-
-- 应用图标点击跳转 GitHub 主页：顶栏图标包裹链接，浏览器中新标签页打开，桌面版（WebView2）下请求落到系统默认浏览器 (#26)
-
-### 变更
-
-- Release 附件改为英文命名并明确标记 x86_64 架构：Windows Installer (x86_64, recommended) / Windows Portable (x86_64) / SHA256 Checksums (#22)
-- 替换应用图标为新设计（使用 scripts/make_icon.py 从源图片生成多尺寸 ICO）(#27)
-- 高德 Key 配置自动持久化：前端设置弹窗保存/清除时同步写入服务端 amap_key.json，CLI 新增 `set-key` 子命令 (#29)
-
-### 修复
-
-- 打包链安全与健壮性加固：本地高德凭据（config/amap_key.json）不再被打进安装包；版本号改由 CI 从 tag 自动生成三处同步；桌面端口探测、单实例检查等边界问题修复 (#25)
-
-## [3.1.0-pr.1] - 2026-09-07
 
 首个 Windows 桌面版预发布（Windows x86_64 / 64 位构建，暂无 ARM64 版本）。
 
@@ -40,13 +15,21 @@
 - 桌面端高德 Key 配置支持：安装后无需改代码即可使用自己的地图 Key (#21)
 - 版本号 API（/api/version）与前端应用图标展示 (#21)
 - 黑白极简风格新版应用图标 (#21)
-
-### 变更
-
-- 文件路径收口至 src/paths.py，统一源码与 PyInstaller frozen 环境的目录解析 (#21)
+- macOS arm64 桌面便携版：Release 工作流新增原生 arm64 构建、架构与签名校验、CLI smoke test 及 SHA256 校验文件
+- 应用图标点击跳转 GitHub 主页：顶栏图标包裹链接，浏览器中新标签页打开，桌面版（WebView2）下请求落到系统默认浏览器 (#26)
 
 ### 修复
 
+- macOS Dock 图标显示为系统默认 exec 图标：打包新增 CampusRunningGen.app（Info.plist 引用内嵌 icon.icns），Release 附件改为打包 .app（CLI 位于 Contents/MacOS）；scripts/make_icon.py 新增多尺寸 ICNS 生成
+- Windows 图标各尺寸视觉不一致：assets/icon.ico 的 16-128px 帧仍为旧程序绘制设计、仅 256px 为新设计，现全部尺寸统一由 256px 新设计帧缩放生成（exe 与安装器共用该文件）
+- 打包链安全与健壮性加固：本地高德凭据（config/amap_key.json）不再被打进安装包；版本号改由 CI 从 tag 自动生成三处同步；桌面端口探测、单实例检查等边界问题修复 (#25)
+
+### 变更
+
+- Release 附件改为英文命名并明确标记 x86_64 架构：Windows Installer (x86_64, recommended) / Windows Portable (x86_64) / SHA256 Checksums (#22)
+- 替换应用图标为新设计（使用 scripts/make_icon.py 从源图片生成多尺寸 ICO）(#27)
+- 高德 Key 配置自动持久化：前端设置弹窗保存/清除时同步写入服务端 amap_key.json，CLI 新增 `set-key` 子命令 (#29)
+- 文件路径收口至 src/paths.py，统一源码与 PyInstaller frozen 环境的目录解析 (#21)
 - Windows 图标缓存不刷新导致升级后快捷方式/任务栏仍显示旧图标的问题（安装完成后自动广播刷新）(#21)
 
 ## [3.0.0] - 2026-09-05

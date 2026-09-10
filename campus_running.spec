@@ -10,6 +10,10 @@
     macOS:   CampusRunningGen / CampusRunningGenCLI
     _internal/                Python 运行时、依赖库与数据文件
     _internal/                Python 运行时、依赖库与数据文件
+macOS 额外产出 dist/CampusRunningGen.app（GUI）：
+    Dock/Finder 图标来自 .app 的 Info.plist → Resources/icon.icns，
+    裸 onedir 可执行文件只会显示系统默认 exec 图标；分发包以 .app 为准，
+    CLI 位于 CampusRunningGen.app/Contents/MacOS/CampusRunningGenCLI
 
 关键选择：
 - onedir 而非 onefile：Web 静态资源（Leaflet 等）与轨迹配置较多，
@@ -23,6 +27,7 @@
 
 import glob
 import os
+import re
 import sys
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
@@ -31,11 +36,24 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 # 可选资源：图标 / 版本资源文件由并行任务生成，存在则启用，缺失则回退默认
 # ---------------------------------------------------------------------------
 ICON = "assets/icon.ico" if os.path.exists("assets/icon.ico") else None
+ICON_MAC = (
+    "assets/icon.icns"
+    if sys.platform == "darwin" and os.path.exists("assets/icon.icns")
+    else None
+)
 VERSION = (
     "version_info.txt"
     if sys.platform == "win32" and os.path.exists("version_info.txt")
     else None
 )
+
+# macOS .app 的 CFBundleShortVersionString：从 src/__init__.py 读取，
+# 不直接 import src（会连带执行 core/exporters 的重型导入）
+APP_VERSION = re.search(
+    r'^__version__\s*=\s*"([^"]+)"',
+    open("src/__init__.py", encoding="utf-8").read(),
+    re.MULTILINE,
+).group(1)
 
 # venv 中遗留的未用包与测试依赖，一律不进产物
 EXCLUDES = [
@@ -165,3 +183,23 @@ coll = COLLECT(
     upx=False,
     name="CampusRunningGenerator",
 )
+
+# macOS：COLLECT 只产出裸 onedir 目录，Dock 无法从中取图标；
+# 必须 BUNDLE 出 .app（Info.plist 的 CFBundleIconFile 指向内嵌 icns）。
+# BUNDLE 会把 coll 的全部内容收进 .app，两个入口都在 Contents/MacOS 下，
+# 裸 COLLECT 目录仍会照常产出，仅作构建中间产物、不进入分发包。
+if sys.platform == "darwin":
+    app = BUNDLE(
+        coll,
+        exe_gui,
+        name="CampusRunningGen.app",
+        icon=ICON_MAC,
+        version=APP_VERSION,
+        bundle_identifier="io.github.yushenliu06.campusrunninggen",
+        info_plist={
+            "CFBundleName": "CampusRunningGen",
+            "CFBundleDisplayName": "CampusRunningGen",
+            "NSHighResolutionCapable": True,
+            "LSApplicationCategoryType": "public.app-category.utilities",
+        },
+    )

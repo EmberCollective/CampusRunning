@@ -36,6 +36,12 @@ desktop.log*
 dist/
 build/
 *.spec.bak
+# 本地带版本号的构建/缓存目录（dist-local-v3.1.0-pr.2 之类）与
+# PyInstaller 增量缓存、平台专用虚拟环境
+dist-local-*/
+build-local-*/
+.pyinstaller-cache/
+.venv*/
 
 # 排除 .claude 本地配置，但保留项目级 skills（供 AI 代理使用）
 .claude/*

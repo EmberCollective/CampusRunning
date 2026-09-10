@@ -8,6 +8,11 @@
 
 - macOS arm64 桌面便携版：Release 工作流新增原生 arm64 构建、架构与签名校验、CLI smoke test 及 SHA256 校验文件
 
+### 修复
+
+- macOS Dock 图标显示为系统默认 exec 图标：打包新增 CampusRunningGen.app（Info.plist 引用内嵌 icon.icns），Release 附件改为打包 .app（CLI 位于 Contents/MacOS）；scripts/make_icon.py 新增多尺寸 ICNS 生成
+- Windows 图标各尺寸视觉不一致：assets/icon.ico 的 16-128px 帧仍为旧程序绘制设计、仅 256px 为新设计，现全部尺寸统一由 256px 新设计帧缩放生成（exe 与安装器共用该文件）
+
 ## [3.1.0-pr.2] - 2026-09-09
 
 ### 新增

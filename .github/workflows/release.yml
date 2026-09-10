@@ -90,7 +90,7 @@ jobs:
             dist/CampusRunningGen-Setup-${{ env.APP_VERSION }}-win64.exe
             dist/SHA256SUMS.txt
 
-  # macOS 桌面版构建：pytest -> PyInstaller arm64 onedir -> 验证架构/签名/CLI -> zip -> SHA256
+  # macOS 桌面版构建：pytest -> PyInstaller arm64 .app（含 Dock 图标） -> 验证架构/签名/CLI -> zip -> SHA256
   build-macos:
     runs-on: macos-15
     timeout-minutes: 30
@@ -132,18 +132,21 @@ jobs:
           echo "APP_VERSION=${VER}" >> "${GITHUB_ENV}"
       - name: 验证构建产物
         run: |
-          test -x dist/CampusRunningGenerator/CampusRunningGen
-          test -x dist/CampusRunningGenerator/CampusRunningGenCLI
-          test "$(lipo -archs dist/CampusRunningGenerator/CampusRunningGen)" = "arm64"
-          test "$(lipo -archs dist/CampusRunningGenerator/CampusRunningGenCLI)" = "arm64"
-          codesign --verify --deep --strict dist/CampusRunningGenerator/CampusRunningGen
-          codesign --verify --deep --strict dist/CampusRunningGenerator/CampusRunningGenCLI
-          dist/CampusRunningGenerator/CampusRunningGenCLI --list-tracks > /dev/null
-      # ditto 会保留 POSIX 可执行权限与资源元数据；--keepParent 让解压后仍是
-      # 一个完整目录，不会把二进制散落到当前文件夹
+          APP="dist/CampusRunningGen.app"
+          test -x "$APP/Contents/MacOS/CampusRunningGen"
+          test -x "$APP/Contents/MacOS/CampusRunningGenCLI"
+          test "$(lipo -archs "$APP/Contents/MacOS/CampusRunningGen")" = "arm64"
+          test "$(lipo -archs "$APP/Contents/MacOS/CampusRunningGenCLI")" = "arm64"
+          # 图标必须随包分发且被 Info.plist 引用，缺失时 Dock 只显示默认 exec 图标
+          test -f "$APP/Contents/Resources/icon.icns"
+          test "$(plutil -extract CFBundleIconFile raw "$APP/Contents/Info.plist")" = "icon.icns"
+          codesign --verify --deep --strict "$APP"
+          "$APP/Contents/MacOS/CampusRunningGenCLI" --list-tracks > /dev/null
+      # ditto 会保留 POSIX 可执行权限、资源元数据与 .app 结构（含签名）；
+      # --keepParent 让解压后仍是完整 .app，双击即用
       - name: 打包 macOS zip
         run: |
-          ditto -c -k --keepParent dist/CampusRunningGenerator \
+          ditto -c -k --keepParent dist/CampusRunningGen.app \
             "dist/CampusRunningGen-${APP_VERSION}-macos-arm64.zip"
       - name: 生成 SHA256 校验和
         run: |

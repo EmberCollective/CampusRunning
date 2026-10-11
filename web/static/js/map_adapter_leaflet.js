@@ -7,9 +7,16 @@ const TRACK_ACCENT = '#3B5BD7';
 
 class LeafletAdapter {
     // containerId: 地图容器元素 id
-    constructor(containerId) {
+    // opts.interactive === false 时创建只读地图（生成器预览卡）：禁用全部交互，
+    // 且不注册 click/mousedown（_handlers 恒为 null，事件即使触发也无处可去）
+    constructor(containerId, opts = {}) {
+        const interactive = opts.interactive !== false;
         // zoomControl 关闭：默认缩放按钮位于左上角，会与搜索框重叠；缩放用滚轮/双击或「适配视野」
-        this.map = L.map(containerId, { center: [26.4205, 106.6713], zoom: 17, minZoom: 3, maxZoom: 20, zoomControl: false });
+        const mapOptions = { center: [26.4205, 106.6713], zoom: 17, minZoom: 3, maxZoom: 20, zoomControl: false };
+        if (!interactive) {
+            Object.assign(mapOptions, { dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false });
+        }
+        this.map = L.map(containerId, mapOptions);
 
         // 三档瓦片源预定义（高德瓦片直连免 Key；不立即全部 add，由 setBaseMode 决定挂载）
         // maxNativeZoom 18：高德瓦片仅部分区域有 z19/z20 数据，其余空白；超过 18 一律复用
@@ -30,6 +37,13 @@ class LeafletAdapter {
         this._handlers = null;     // renderTrack 注入的事件回调集
         this._currentBase = null;  // 当前已挂载的瓦片层数组
 
+        if (interactive) {
+            this._bindEditorEvents();
+        }
+    }
+
+    // 编辑器交互事件绑定（只读实例跳过：主页预览卡无画笔/拖点语义）
+    _bindEditorEvents() {
         // 地图空白处点击 → onMapClick（顶点/中点点击不冒泡到 map）
         this.map.on('click', (e) => {
             if (this._handlers) {
@@ -95,10 +109,10 @@ class LeafletAdapter {
         this.map.flyTo([lat, lng], zoom);
     }
 
-    // 缩放至轨迹范围（无点时不动作）
-    fitTrack(points) {
+    // 缩放至轨迹范围（无点时不动作）；padding 可配——小尺寸地图（预览卡）需更小的内边距
+    fitTrack(points, padding = [30, 30]) {
         if (points.length > 0) {
-            this.map.fitBounds(L.latLngBounds(points.map((p) => [p.lat, p.lng])), { padding: [30, 30] });
+            this.map.fitBounds(L.latLngBounds(points.map((p) => [p.lat, p.lng])), { padding: padding });
         }
     }
 
@@ -157,6 +171,37 @@ class LeafletAdapter {
                 handle.on('click', () => handlers.onMidpointClick(i, mid));
                 this.midpointLayer.addLayer(handle);
             }
+        }
+    }
+
+    // 只读轨迹轮廓渲染（生成器预览卡）：只画主线 + 闭合虚线 + 起点圆点，
+    // 不画顶点/中点、不注入 _handlers；起点 interactive:false 保证点击穿透到外层链接
+    renderOutline(points) {
+        this.vertexLayer.clearLayers();
+        this.lineLayer.clearLayers();
+        this.midpointLayer.clearLayers();
+
+        const n = points.length;
+
+        if (n >= 2) {
+            L.polyline(points.map((p) => [p.lat, p.lng]), { color: TRACK_ACCENT, weight: 3, interactive: false }).addTo(this.lineLayer);
+        }
+
+        // 闭合虚线（末点→首点），与 renderTrack 保持同一视觉语言
+        if (n >= 3) {
+            L.polyline([points[n - 1], points[0]], { color: TRACK_ACCENT, weight: 2, dashArray: '6 6', opacity: 0.6, interactive: false }).addTo(this.lineLayer);
+        }
+
+        // 起点标记：白边 + 主题色填充
+        if (n >= 1) {
+            L.circleMarker([points[0].lat, points[0].lng], {
+                radius: 4,
+                color: '#fff',
+                weight: 2,
+                fillColor: TRACK_ACCENT,
+                fillOpacity: 1,
+                interactive: false
+            }).addTo(this.vertexLayer);
         }
     }
 }

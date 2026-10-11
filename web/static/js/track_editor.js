@@ -174,9 +174,14 @@ async function handleLoad() {
         showMessage('请先选择一个轨迹', 'error');
         return;
     }
+    await loadTrackById(id);
+}
 
+// 按轨迹 id 拉取坐标并载入画布（「加载到地图」按钮与 URL ?track= 参数共用）
+async function loadTrackById(id) {
     try {
-        const response = await fetch(`/api/tracks/${id}/coords`);
+        // id 可能来自 URL 查询参数（手改地址栏），编码防特殊字符破坏路径
+        const response = await fetch(`/api/tracks/${encodeURIComponent(id)}/coords`);
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));
             showMessage(err.error || `加载失败 (${response.status})`, 'error');
@@ -412,6 +417,15 @@ document.getElementById('save-form').addEventListener('submit', handleSaveSubmit
     activeCorrection = defaultCorrection;
 
     await refreshTrackSelect();
+
+    // URL ?track= 参数：从生成器预览卡跳入时自动加载指定轨迹。
+    // 必须在 refreshTrackSelect 重建 options 之后赋值，否则被占位选项覆盖。
+    const trackParam = new URLSearchParams(window.location.search).get('track');
+    if (trackParam) {
+        document.getElementById('load-track-select').value = trackParam;
+        await loadTrackById(trackParam);
+    }
+
     updateCorrectionNote();
     updateButtonStates();
     updateStats();

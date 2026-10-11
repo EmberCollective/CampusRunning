@@ -147,7 +147,7 @@ button { font-family: inherit; }
 /* ============================================================
    生成器：工作台布局
    ============================================================ */
-.gen-frame { max-width: 1160px; margin: 0 auto; padding: 18px 20px 8px; }
+.gen-frame { max-width: 1720px; margin: 0 auto; padding: 18px 20px 8px; }
 
 .workbench {
     display: grid;
@@ -564,6 +564,84 @@ button { font-family: inherit; }
     margin-left: 4px;
 }
 
+/* ============================================================
+   轨迹预览卡片（左栏内嵌迷你地图，点击进入轨迹编辑器）
+   ============================================================ */
+.track-preview-card {
+    display: block;
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    background: var(--field);
+    overflow: hidden;
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color .12s, box-shadow .12s;
+}
+.track-preview-card:hover,
+.track-preview-card:focus-visible {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);  /* 与 select:focus 同一强调语言 */
+}
+.track-preview-card:focus-visible { outline: none; }
+
+.preview-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 9px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+}
+.preview-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* 右上读数槽：默认显示圈程，hover 原地换字「编辑 ↗」编码点击行为（同槽换字，无布局跳动） */
+.preview-lap,
+.preview-edit {
+    flex: none;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--accent);
+}
+.preview-edit { display: none; }
+.track-preview-card:hover .preview-lap,
+.track-preview-card:focus-visible .preview-lap { display: none; }
+.track-preview-card:hover .preview-edit,
+.track-preview-card:focus-visible .preview-edit { display: inline; }
+
+/* 地图舞台：绝对定位保证 Leaflet 初始化即有确定高度（同编辑器 #map-leaflet 模式） */
+.preview-map-wrap { position: relative; height: 176px; background: #E8EAEE; }
+#preview-map { position: absolute; inset: 0; background: #E8EAEE; }
+
+/* 空 / 加载中 / 失败 三态覆盖层（[hidden] 切换；display:flex 会压过 UA 的 hidden，需显式关闭） */
+.preview-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-3);
+}
+.preview-overlay[hidden] { display: none; }
+
+/* 迷你图覆盖：整卡可点 + 紧凑 attribution */
+.track-preview-card .leaflet-container { cursor: pointer; font: inherit; background: #E8EAEE; }
+.track-preview-card .leaflet-control-attribution {
+    font-size: 9px;
+    padding: 0 4px;
+    background: rgba(255,255,255,.75);
+}
+
 /* 响应式 */
 @media (max-width: 960px) {
     .workbench { grid-template-columns: 1fr; }
@@ -577,4 +655,13 @@ button { font-family: inherit; }
     .run-bar { flex-direction: column; }
     .run-bar .btn { min-width: 0; }
     .statusbar { flex-wrap: wrap; gap: 10px; }
+}
+
+/* 宽屏（≥1440px）：加宽左栏 / 表单 4 列 / 收窄会被拉伸的元素 */
+@media (min-width: 1440px) {
+    .workbench { grid-template-columns: 300px 1fr; }
+    .form-grid { grid-template-columns: repeat(4, 1fr); gap: 12px 16px; }
+    .calendar-container { max-width: 620px; }
+    .dates-side { width: 260px; }
+    .run-bar .btn-primary { flex: none; min-width: 200px; }
 }

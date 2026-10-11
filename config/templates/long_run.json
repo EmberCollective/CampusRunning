@@ -3,11 +3,23 @@
   "name": "长距离跑",
   "description": "长距离耐力训练",
   "track_id": "",
-  "generation_config": {
-    "min_pace": 6.5,
+  "total_config": {
+    "min_pace": 6.0,
     "max_pace": 7.5,
+    "weekend_factor": 1.5,
+    "min_daily_km": 5.0,
+    "max_daily_km": 15.0,
+    "rest_days_per_week": 1
+  },
+  "generation_config": {
+    "min_pace": 6.0,
+    "max_pace": 7.5,
+    "weekend_factor": 1.5,
+    "min_daily_km": 5.0,
+    "max_daily_km": 15.0,
+    "rest_days_per_week": 1,
+    "enable_pace_fluctuation": true,
     "max_deviation_meters": 2.0,
-    "smooth_factor": 0.3,
-    "enable_pace_fluctuation": true
+    "smooth_factor": 0.3
   }
 }

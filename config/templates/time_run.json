@@ -1,11 +1,21 @@
 {
   "id": "time_run",
   "name": "时间跑",
-  "description": "按时间范围生成跑步数据，适合定时训练",
+  "description": "固定时间窗的日常训练，适合定时训练",
   "track_id": "",
+  "daily_config": {
+    "min_km": 3.0,
+    "max_km": 5.0,
+    "min_pace": 7.0,
+    "max_pace": 8.0,
+    "start_time_min": "06:00",
+    "start_time_max": "06:30"
+  },
   "generation_config": {
     "min_pace": 7.0,
     "max_pace": 8.0,
+    "start_time_min": "06:00",
+    "start_time_max": "06:30",
     "enable_pace_fluctuation": true,
     "max_deviation_meters": 2.0,
     "smooth_factor": 0.3

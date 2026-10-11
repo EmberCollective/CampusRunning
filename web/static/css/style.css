@@ -391,7 +391,8 @@ button { font-family: inherit; }
     user-select: none;
 }
 .dates-side {
-    width: 200px; flex: none;
+    /* 220px：保证中屏一行至少容纳 2 个标签（200px 时差 1px 只剩 1 个/行） */
+    width: 220px; flex: none;
     display: flex; flex-direction: column; gap: 6px;
 }
 .dates-side label {
@@ -518,6 +519,8 @@ button { font-family: inherit; }
     flex: 1;
     display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;
     min-height: 0;
+    /* 展开态高度封顶，超出滚动，避免大量日期把整页撑高 */
+    max-height: 200px;
     padding: 8px;
     background: var(--field);
     border: 1px solid var(--border-2);
@@ -551,6 +554,21 @@ button { font-family: inherit; }
     line-height: 1;
 }
 .date-tag .tag-remove:hover { color: var(--danger); background: var(--danger-dim); }
+
+/* 「+N 天 / 收起」切换按钮：置于标签盒下方、滚动容器之外，始终可见且键盘可达 */
+.tag-toggle-btn {
+    align-self: flex-start;
+    padding: 2px 8px;
+    background: var(--field);
+    border: 1px solid var(--border-2);
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all .1s;
+}
+.tag-toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 @keyframes tag-in {
     from { opacity: 0; transform: scale(.9); }
@@ -651,7 +669,6 @@ button { font-family: inherit; }
     .form-grid { grid-template-columns: 1fr 1fr; }
     .dates-cal-row { flex-direction: column; }
     .dates-side { width: 100%; }
-    .selected-dates-tags { max-height: 200px; }
 }
 @media (max-width: 640px) {
     .form-grid { grid-template-columns: 1fr; }

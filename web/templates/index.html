@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>校园跑步数据生成器</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" media="print" onload="this.media='all'">
 </head>
@@ -39,6 +40,22 @@
                             <select id="track-select">
                                 <option value="campus_default">加载中...</option>
                             </select>
+                        </div>
+                        <div class="setting-item">
+                            <label>轨迹预览 PREVIEW</label>
+                            <!-- 整卡为链接：点击进入轨迹编辑器并自动加载该轨迹（?track=）；
+                                 真实 <a> 保证中键/Cmd+点击可新标签打开 -->
+                            <a id="track-preview-card" class="track-preview-card" href="/track-editor" title="在轨迹编辑器中查看 / 编辑">
+                                <div class="preview-head">
+                                    <span class="preview-name" id="preview-name">&mdash;</span>
+                                    <span class="preview-lap" id="preview-lap"></span>
+                                    <span class="preview-edit" id="preview-edit">编辑 &nearr;</span>
+                                </div>
+                                <div class="preview-map-wrap">
+                                    <div id="preview-map"></div>
+                                    <div class="preview-overlay" id="preview-overlay" hidden><span id="preview-overlay-text"></span></div>
+                                </div>
+                            </a>
                         </div>
                         <div class="setting-item">
                             <label for="template-select">预设模板</label>
@@ -384,6 +401,11 @@
         </div>
     </div>
 
+    <!-- 顺序：Leaflet（本地 vendored）→ 适配器 → 预览模块 → 页面逻辑；
+         不加载 map_engine/amap 适配器（引用编辑器专属 DOM，主页会抛错） -->
+    <script src="/static/vendor/leaflet/leaflet.js"></script>
+    <script src="/static/js/map_adapter_leaflet.js"></script>
+    <script src="/static/js/track_preview.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

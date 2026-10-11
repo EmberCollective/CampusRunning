@@ -620,10 +620,13 @@ button { font-family: inherit; }
 .preview-map-wrap { position: relative; height: 176px; background: #E8EAEE; }
 #preview-map { position: absolute; inset: 0; background: #E8EAEE; }
 
-/* 空 / 加载中 / 失败 三态覆盖层（[hidden] 切换；display:flex 会压过 UA 的 hidden，需显式关闭） */
+/* 空 / 加载中 / 失败 三态覆盖层（[hidden] 切换；display:flex 会压过 UA 的 hidden，需显式关闭）。
+   z-index 1100：盖过 Leaflet 瓦片窗格(400)与控件(1000)——地图初始化后切换轨迹时
+   加载/失败/空态必须显示在活地图之上 */
 .preview-overlay {
     position: absolute;
     inset: 0;
+    z-index: 1100;
     display: flex;
     align-items: center;
     justify-content: center;

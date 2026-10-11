@@ -5,6 +5,9 @@ let currentJobId = null;
 // 支持的输出格式白名单（与后端 models.py 校验保持一致）
 const OUTPUT_FORMATS = ['fit', 'tcx'];
 
+// 轨迹元数据缓存：id -> {name, lap_distance_km}（来自 /api/tracks，预览卡片表头用）
+const trackMetaCache = new Map();
+
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', async () => {
     initDates();
@@ -274,8 +277,24 @@ async function loadTracks() {
         // 用 DOM API 构建（name 来自 JSON 文件的任意文本，禁止拼入 innerHTML 防存储型 XSS）
         select.replaceChildren();
         tracks.forEach(t => select.add(new Option(`${t.name} (${t.lap_distance_km}km/圈)`, t.id)));
+
+        trackMetaCache.clear();
+        tracks.forEach(t => trackMetaCache.set(t.id, t));
+        updateTrackPreview();
     } catch (error) {
         showMessage('加载轨迹列表失败: ' + error.message, 'error');
+    }
+}
+
+// 同步左栏轨迹预览卡片到当前下拉选择（列表加载完成、手动切换、模板应用后调用）
+function updateTrackPreview() {
+    if (typeof TrackPreview === 'undefined') return;  // 预览脚本加载失败时优雅降级
+    const trackId = document.getElementById('track-select').value;
+    const meta = trackMetaCache.get(trackId);
+    if (trackId && meta) {
+        TrackPreview.show(trackId, meta);
+    } else {
+        TrackPreview.reset();
     }
 }
 
@@ -445,6 +464,7 @@ function applyTemplateToForms(template) {
     // 应用轨迹选择
     if (template.track_id) {
         document.getElementById('track-select').value = template.track_id;
+        updateTrackPreview();  // 程序化设 value 不触发 change 事件，需显式刷新预览
     }
 
     // 应用输出格式（白名单过滤，脏值保持默认 FIT）
@@ -601,6 +621,7 @@ function resetFormsToDefaults() {
 
 // 初始化表单提交
 function initForms() {
+    document.getElementById('track-select').addEventListener('change', updateTrackPreview);
     document.getElementById('daily-form').addEventListener('submit', handleDailySubmit);
     document.getElementById('total-form').addEventListener('submit', handleTotalSubmit);
     document.getElementById('single-form').addEventListener('submit', handleSingleSubmit);

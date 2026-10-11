@@ -1,13 +1,23 @@
 {
   "id": "interval",
   "name": "间歇跑",
-  "description": "间歇训练，配速变化较大",
+  "description": "高强度间歇训练",
   "track_id": "",
+  "total_config": {
+    "min_pace": 4.5,
+    "max_pace": 5.5,
+    "weekend_factor": 1.2,
+    "min_daily_km": 3.0,
+    "max_daily_km": 10.0
+  },
   "generation_config": {
-    "min_pace": 5.5,
-    "max_pace": 8.0,
+    "min_pace": 4.5,
+    "max_pace": 5.5,
+    "weekend_factor": 1.2,
+    "min_daily_km": 3.0,
+    "max_daily_km": 10.0,
+    "enable_pace_fluctuation": false,
     "max_deviation_meters": 1.5,
-    "smooth_factor": 0.2,
-    "enable_pace_fluctuation": true
+    "smooth_factor": 0.2
   }
 }

@@ -58,6 +58,10 @@ const calendarState = {
     selectedDates: new Set(), // 存储 "YYYY-MM-DD" 格式
 };
 
+// 折叠态最多展示的日期标签数：超出部分收进「+N 天」，点击展开（issue #43）
+const MAX_COLLAPSED_TAGS = 8;
+let datesTagsExpanded = false;
+
 function initCalendar() {
     renderCalendar();
     document.getElementById('cal-prev').addEventListener('click', () => {
@@ -177,15 +181,23 @@ function renderSelectedTags() {
     countEl.textContent = `(已选 ${dates.length} 天)`;
 
     if (dates.length === 0) {
+        datesTagsExpanded = false;
+        document.getElementById('dates-tags-toggle')?.remove();
         container.innerHTML = '<span class="dates-placeholder">点击日历上的日期进行选择</span>';
         return;
+    }
+
+    // 数量回落到阈值内时自动回到折叠态
+    if (dates.length <= MAX_COLLAPSED_TAGS) {
+        datesTagsExpanded = false;
     }
 
     // 用 DOM API 构建：日期字符串可能来自上传的模板文件，
     // 只经 textContent/dataset 写入，禁止拼入 innerHTML（防存储型 XSS，与 loadTracks 同策略）
     const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
     container.innerHTML = '';
-    dates.forEach(d => {
+    const visibleDates = datesTagsExpanded ? dates : dates.slice(0, MAX_COLLAPSED_TAGS);
+    visibleDates.forEach(d => {
         const dt = new Date(d + 'T00:00:00');
         // 非法日期字符串（模板中的脏数据）直接显示原文，避免渲染出 "NaN-NaN 周NaN"
         const label = Number.isNaN(dt.getTime())
@@ -205,6 +217,28 @@ function renderSelectedTags() {
 
         container.appendChild(tag);
     });
+
+    // 超出阈值时在标签盒下方显示「+N 天 / 收起」切换按钮。
+    // 置于滚动容器外：<button> 键盘可达，展开大量日期时不会被滚出视口
+    let toggleBtn = document.getElementById('dates-tags-toggle');
+    if (dates.length > MAX_COLLAPSED_TAGS) {
+        if (!toggleBtn) {
+            toggleBtn = document.createElement('button');
+            toggleBtn.type = 'button';
+            toggleBtn.id = 'dates-tags-toggle';
+            toggleBtn.className = 'tag-toggle-btn';
+            toggleBtn.addEventListener('click', () => {
+                datesTagsExpanded = !datesTagsExpanded;
+                renderSelectedTags();
+            });
+            container.parentElement.appendChild(toggleBtn);
+        }
+        toggleBtn.textContent = datesTagsExpanded
+            ? '收起'
+            : `+${dates.length - MAX_COLLAPSED_TAGS} 天`;
+    } else {
+        toggleBtn?.remove();
+    }
 }
 
 function removeDateTag(dateStr) {
@@ -594,12 +628,18 @@ function applyTemplateToForms(template) {
 // 重置表单为默认值
 function resetFormsToDefaults() {
     // 每日模式默认值
+    document.getElementById('daily-min-km').value = 2.0;
+    document.getElementById('daily-max-km').value = 5.0;
     document.getElementById('daily-min-pace').value = 7.0;
     document.getElementById('daily-max-pace').value = 8.0;
     document.getElementById('daily-start-time-min').value = '06:00';
     document.getElementById('daily-start-time-max').value = '08:00';
 
     // 总公里数模式默认值
+    document.getElementById('total-weekend-factor').value = 1.5;
+    document.getElementById('total-min-daily').value = 2.0;
+    document.getElementById('total-max-daily').value = 8.0;
+    document.getElementById('total-rest-days').value = 1;
     document.getElementById('total-min-pace').value = 7.0;
     document.getElementById('total-max-pace').value = 8.0;
     document.getElementById('total-start-time-min').value = '06:00';

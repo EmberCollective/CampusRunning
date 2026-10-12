@@ -347,32 +347,34 @@
                 <div class="section-body" style="padding-top:0;">
                     <div id="message" class="message"></div>
                 </div>
+
+                <!-- 生成结果：按钮正下方，超限内部滚动 (#49) -->
+                <div class="section-body" style="padding-top:0;">
+                    <section id="results-section" class="results-section">
+                        <div class="results-head">
+                            <span class="group-label" style="margin:0;"><span class="step-no">03</span>生成结果 OUTPUT</span>
+                            <span class="mono-tag">FIT / TCX EXPORT</span>
+                            <button id="download-btn" class="btn btn-primary btn-sm" disabled>下载文件</button>
+                        </div>
+                        <div class="results-scroll">
+                            <table class="results-table">
+                                <thead>
+                                    <tr>
+                                        <th>日期</th>
+                                        <th>距离</th>
+                                        <th>配速</th>
+                                        <th>时长</th>
+                                        <th>卡路里</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="results-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
             </main>
         </div>
-
-        <!-- 输出区 -->
-        <section id="results-section" class="panel output-sec results-section">
-            <div class="section-head">
-                <span class="group-label" style="margin:0;"><span class="step-no">03</span>生成结果 OUTPUT</span>
-                <span class="mono-tag" style="margin-left:auto;">FIT / TCX EXPORT</span>
-                <button id="download-btn" class="btn btn-primary btn-sm" disabled>下载文件</button>
-            </div>
-            <div class="section-body">
-                <table class="results-table">
-                    <thead>
-                        <tr>
-                            <th>日期</th>
-                            <th>距离</th>
-                            <th>配速</th>
-                            <th>时长</th>
-                            <th>卡路里</th>
-                        </tr>
-                    </thead>
-                    <tbody id="results-body">
-                    </tbody>
-                </table>
-            </div>
-        </section>
 
         <!-- 状态条 -->
         <div class="statusbar">

@@ -90,7 +90,7 @@ jobs:
             dist/CampusRunningGen-Setup-${{ env.APP_VERSION }}-win64.exe
             dist/SHA256SUMS-windows.txt
 
-  # macOS 桌面版构建：pytest -> PyInstaller arm64 .app（含 Dock 图标） -> 验证架构/签名/CLI -> zip -> SHA256
+  # macOS 桌面版构建：pytest -> PyInstaller arm64 .app（含 Dock 图标） -> 验证架构/签名/CLI -> zip/PKG -> SHA256
   build-macos:
     runs-on: macos-15
     timeout-minutes: 30
@@ -141,22 +141,45 @@ jobs:
           test -f "$APP/Contents/Resources/icon.icns"
           test "$(plutil -extract CFBundleIconFile raw "$APP/Contents/Info.plist")" = "icon.icns"
           codesign --verify --deep --strict "$APP"
-          "$APP/Contents/MacOS/CampusRunningGenCLI" --list-tracks > /dev/null
+          # 冒烟测试必须用裸 COLLECT 目录的 CLI，不能跑 .app 内的：CLI 首跑会把
+          # 默认配置播种到 exe 旁（Contents/MacOS/config），在签名之后向 .app 添
+          # 加文件会破坏资源封印，用户侧表现为 Gatekeeper「已损坏，应移到废纸
+          # 篓」且「仍要打开」按钮永不出现（v3.1.0/v3.1.1 即受此影响）
+          dist/CampusRunningGenerator/CampusRunningGenCLI --list-tracks > /dev/null
+          # 冒烟后兜底复验：确保进入分发包的 .app 签名未被任何步骤破坏
+          codesign --verify --deep --strict "$APP"
       # ditto 会保留 POSIX 可执行权限、资源元数据与 .app 结构（含签名）；
       # --keepParent 让解压后仍是完整 .app，双击即用
       - name: 打包 macOS zip
         run: |
           ditto -c -k --keepParent dist/CampusRunningGen.app \
             "dist/CampusRunningGen-${APP_VERSION}-macos-arm64.zip"
+      # PKG 安装版：安装到 /Applications。未签名 pkg 首次打开需用户解除一次拦截
+      # （系统设置 → 隐私与安全性 → 仍要打开），但安装出的 app 不带隔离标记，
+      # 之后双击即用——比 zip 便携版（app 带隔离标记）少一道持续门槛
+      - name: 打包 macOS PKG 安装包
+        run: |
+          mkdir -p pkg-root
+          cp -R dist/CampusRunningGen.app pkg-root/
+          # tag 形如 v3.1.2（干跑为 0.0.0-dev），pkgbuild --version 去掉前导 v
+          pkgbuild \
+            --root pkg-root \
+            --identifier io.github.yushenliu06.campusrunninggen \
+            --version "${APP_VERSION#v}" \
+            --install-location /Applications \
+            "dist/CampusRunningGen-Setup-${APP_VERSION}-macos-arm64.pkg"
       - name: 生成 SHA256 校验和
         run: |
           cd dist
-          shasum -a 256 "CampusRunningGen-${APP_VERSION}-macos-arm64.zip" > SHA256SUMS-macos.txt
+          shasum -a 256 \
+            "CampusRunningGen-${APP_VERSION}-macos-arm64.zip" \
+            "CampusRunningGen-Setup-${APP_VERSION}-macos-arm64.pkg" > SHA256SUMS-macos.txt
       - uses: actions/upload-artifact@v4
         with:
           name: macos-desktop-arm64
           path: |
             dist/CampusRunningGen-${{ env.APP_VERSION }}-macos-arm64.zip
+            dist/CampusRunningGen-Setup-${{ env.APP_VERSION }}-macos-arm64.pkg
             dist/SHA256SUMS-macos.txt
 
   # 发版：保留原有 pytest + extract_changelog 逻辑，下载双平台产物后
@@ -198,6 +221,7 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release_notes.md ${FLAGS} \
             "release-assets/windows/CampusRunningGen-Setup-${GITHUB_REF_NAME}-win64.exe#Windows Installer (x86_64, recommended)" \
             "release-assets/windows/CampusRunningGen-${GITHUB_REF_NAME}-win64.zip#Windows Portable (x86_64)" \
+            "release-assets/macos/CampusRunningGen-Setup-${GITHUB_REF_NAME}-macos-arm64.pkg#macOS Installer (arm64, recommended)" \
             "release-assets/macos/CampusRunningGen-${GITHUB_REF_NAME}-macos-arm64.zip#macOS Portable (arm64)" \
             "release-assets/windows/SHA256SUMS-windows.txt#SHA256 Checksums (Windows x86_64)" \
             "release-assets/macos/SHA256SUMS-macos.txt#SHA256 Checksums (macOS arm64)"

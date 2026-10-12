@@ -47,9 +47,10 @@ CLI 与 Web 双入口，生成结果一致。
 | 平台 | 下载文件 | 说明 |
 |------|----------|------|
 | Windows | `CampusRunningGen-Setup-<版本>-win64.exe` | 安装包（推荐）或便携 zip |
-| macOS (Apple Silicon) | `CampusRunningGen-<版本>-macos-arm64.zip` | 解压即用 |
+| macOS (Apple Silicon) | `CampusRunningGen-Setup-<版本>-macos-arm64.pkg` | 安装包（推荐），放行一次后安装即用 |
+| macOS (Apple Silicon) | `CampusRunningGen-v<版本>-macos-arm64.zip` | 便携版，解压后需执行 xattr 放行 |
 
-功能与 Web 版完全一致。系统要求、SmartScreen / Gatekeeper 提示与数据位置说明见[桌面版文档](docs/desktop-packaging.md)。
+功能与 Web 版完全一致。系统要求、SmartScreen / Gatekeeper 放行方法与数据位置说明见[桌面版文档](docs/desktop-packaging.md)。
 
 > **高德地图配置**：桌面版中使用「官方」地图档或地址搜索功能时，推荐通过配置文件设置高德 Key（见[高德 Key 申请教程](docs/amap_key_guide.md)的「桌面版配置」章节），以避免 WebView2 的 localStorage 持久化问题。
 

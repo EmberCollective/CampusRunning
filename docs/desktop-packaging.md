@@ -6,9 +6,10 @@
 
 | 方式 | 下载 | 适合谁 |
 | ------ | ------ | -------- |
-| 安装版 | Release 页的 `CampusRunningGen-Setup-<版本>-win64.exe` | 普通用户，图形化安装向导 |
-| 便携版 | Release 页的 `CampusRunningGen-v<版本>-win64.zip` | Windows 免安装、可放 U 盘、删除文件夹即卸载 |
-| macOS 便携版 | Release 页的 `CampusRunningGen-v<版本>-macos-arm64.zip` | Apple Silicon Mac，解压后运行目录内程序 |
+| Windows 安装版 | Release 页的 `CampusRunningGen-Setup-<版本>-win64.exe` | 普通用户，图形化安装向导 |
+| Windows 便携版 | Release 页的 `CampusRunningGen-v<版本>-win64.zip` | 免安装、可放 U 盘、删除文件夹即卸载 |
+| macOS 安装版 | Release 页的 `CampusRunningGen-Setup-<版本>-macos-arm64.pkg` | Apple Silicon Mac，标准安装体验（推荐） |
+| macOS 便携版 | Release 页的 `CampusRunningGen-v<版本>-macos-arm64.zip` | Apple Silicon Mac，免安装、可放 U 盘 |
 | 源码运行 | 克隆仓库后 `python desktop.py` | 开发者，见[构建指南](#构建指南开发者) |
 
 下载入口：[GitHub Releases](https://github.com/EmberCollective/CampusRunning/releases)
@@ -23,8 +24,9 @@
 ### macOS
 
 - Apple Silicon（arm64）Mac
-- 解压 zip 后，在 `CampusRunningGenerator` 目录中运行 `./CampusRunningGen` 启动 GUI，或运行 `./CampusRunningGenCLI` 使用命令行
-- 未配置 Apple 开发者证书签名与公证；首次打开如遇 Gatekeeper 提示，右键程序选择「打开」，或在「系统设置 → 隐私与安全性」中允许
+- **安装版（推荐）**：双击 pkg 安装到 `/Applications`。首次打开安装包若被拦截，按[Gatekeeper 放行](#macos-gatekeeper-放行)操作一次；安装出的应用不带隔离标记，之后双击即用
+- **便携版**：解压 zip 得到 `CampusRunningGen.app`，放行后双击运行；命令行版位于 `CampusRunningGen.app/Contents/MacOS/CampusRunningGenCLI`
+- 未配置 Apple 开发者证书签名与公证，首次使用的放行操作均源于此（详见下文）
 
 ### 联网说明
 
@@ -59,6 +61,15 @@ Windows 安装包与可执行文件目前**没有代码签名**，首次运行�
 
 部分杀毒软件也可能对未签名程序告警，放行即可。
 
+### macOS Gatekeeper 放行
+
+安装包与 app 均未签名未公证，新版 macOS 首次使用会被 Gatekeeper 拦截，需人工放行一次：
+
+- **安装版（pkg）**：双击被拦截时，打开「系统设置 → 隐私与安全性」，点击「仍要打开」；或在终端对 pkg 执行 `xattr -d com.apple.quarantine CampusRunningGen-Setup-*.pkg` 后再双击。安装完成后 `/Applications` 中的应用**不再需要任何放行操作**
+- **便携版（zip）**：解压后在终端执行 `xattr -dr com.apple.quarantine CampusRunningGen.app`，再双击 app
+- macOS 15 起已移除「右键 → 打开」绕过方式；若弹窗为「已损坏，应移到废纸篓」（签名校验失败类），系统设置里**不会**出现「仍要打开」按钮，只能用上述 `xattr` 命令
+- 「仍要打开」按钮只会在刚被拦截后短暂出现在「隐私与安全性」页面最底部，重新下载或隔一段时间后失效，找不到时直接用 `xattr` 命令最稳妥
+
 ### 校验 sha256
 
 每个 Release 页面会公示全部附件的 sha256 值。下载后建议核对：
@@ -77,9 +88,10 @@ shasum -a 256 CampusRunningGen-v1.0.0-macos-arm64.zip
 
 | 版本 | config/ 与 output/ 所在 |
 | ------ | -------------------------- |
+| Windows 安装版 | `%LOCALAPPDATA%\CampusRunningDataGeneration` |
 | Windows 便携版 | exe 同级目录（运行后自动出现） |
 | macOS 便携版 | 可执行文件同级目录（运行后自动出现） |
-| 安装版 | `%LOCALAPPDATA%\CampusRunningDataGeneration` |
+| macOS 安装版 | `~/CampusRunningDataGeneration`（`/Applications` 下程序目录不可写时自动回退） |
 
 - **便携版即拷即用**：Windows 整个文件夹可放 U 盘携带；macOS 可移动整个 `CampusRunningGenerator` 文件夹。配置与生成结果随文件夹走；删除文件夹即完全卸载，Windows 无注册表残留。
 - **回退机制**：若 exe 所在目录不可写（如放在 `C:\Program Files` 下直接运行），便携版也会自动改用 `%LOCALAPPDATA%\CampusRunningDataGeneration` 存放数据。
@@ -139,11 +151,32 @@ dist/CampusRunningGenerator/
 
 ### 4. zip 便携包
 
-PowerShell：
+Windows（PowerShell）：
 
 ```powershell
 Compress-Archive -Path dist/CampusRunningGenerator -DestinationPath dist/CampusRunningGen-v<版本>-win64.zip
 ```
+
+macOS（保留可执行权限与签名，解压后仍是完整 .app）：
+
+```bash
+ditto -c -k --keepParent dist/CampusRunningGen.app dist/CampusRunningGen-v<版本>-macos-arm64.zip
+```
+
+### 5. macOS PKG 安装包
+
+```bash
+mkdir -p pkg-root
+cp -R dist/CampusRunningGen.app pkg-root/
+pkgbuild \
+  --root pkg-root \
+  --identifier io.github.yushenliu06.campusrunninggen \
+  --version <版本，不带前导 v> \
+  --install-location /Applications \
+  dist/CampusRunningGen-Setup-v<版本>-macos-arm64.pkg
+```
+
+注意：打包前确认 `.app` 签名完好（`codesign --verify --deep --strict`），且**不要**直接运行 `.app` 内的 CLI 做测试——其首跑会把默认配置播种到 `Contents/MacOS/config/`，破坏签名资源封印（冒烟测试请用裸 COLLECT 目录 `dist/CampusRunningGenerator/CampusRunningGenCLI`）。
 
 ### 源码方式运行桌面窗口
 
@@ -155,4 +188,4 @@ python desktop.py
 
 ### CI 自动发布
 
-向仓库推送 `v*` 格式的 tag（如 `v1.0.0`）即触发 `.github/workflows/release.yml`：自动完成 Windows 安装包、Windows 便携 zip 与 macOS arm64 便携 zip 构建，并附 sha256 校验值发布到 [GitHub Releases](https://github.com/EmberCollective/CampusRunning/releases)。日常开发无需手动执行上述构建步骤。
+向仓库推送 `v*` 格式的 tag（如 `v1.0.0`）即触发 `.github/workflows/release.yml`：自动完成 Windows 安装包、Windows 便携 zip、macOS arm64 PKG 安装包与 macOS arm64 便携 zip 构建，并附 sha256 校验值发布到 [GitHub Releases](https://github.com/EmberCollective/CampusRunning/releases)。日常开发无需手动执行上述构建步骤。

@@ -972,6 +972,11 @@ function showResults(result) {
 
     section.classList.add('show');
     downloadBtn.disabled = false;
+
+    // 新一轮结果从顶部展示，并将结果块平滑带入视野 (#49)
+    const scrollBox = section.querySelector('.results-scroll');
+    if (scrollBox) scrollBox.scrollTop = 0;
+    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // 格式化时长

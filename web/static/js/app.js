@@ -17,6 +17,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadTracks();
     await loadTemplates();
     initForms();
+
+    // 窗口尺寸变化时重算结果卡高度上限（未显示结果时函数内部自会跳过）(#49)
+    window.addEventListener('resize', updateResultsScrollHeight);
 });
 
 // 加载并展示应用版本号（来自 /api/version 的 Python 侧元数据）
@@ -296,6 +299,9 @@ function initTabs() {
                     content.classList.add('active');
                 }
             });
+
+            // 表单高度随模式变化，结果卡上限需重算 (#49)
+            updateResultsScrollHeight();
         });
     });
 }
@@ -974,9 +980,29 @@ function showResults(result) {
     downloadBtn.disabled = false;
 
     // 新一轮结果从顶部展示，并将结果块平滑带入视野 (#49)
+    updateResultsScrollHeight();
     const scrollBox = section.querySelector('.results-scroll');
     if (scrollBox) scrollBox.scrollTop = 0;
     section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// 结果滚动区高度上限：撑到最高时卡片底边与左栏（02 生成模式）底边对齐 (#49)。
+// 上限取决于左栏与当前表单的实际高度，纯 CSS 无法表达，故由 JS 动态设定；
+// 单列布局或剩余空间不足时清除内联样式，回退到 CSS 默认 40vh。
+const RESULTS_MIN_SCROLL_HEIGHT = 200;
+
+function updateResultsScrollHeight() {
+    const section = document.getElementById('results-section');
+    const scrollBox = section && section.querySelector('.results-scroll');
+    const side = document.querySelector('.cfg-side');
+    if (!section || !scrollBox || !side || !section.classList.contains('show')) return;
+
+    // 滚动区底边到卡片底边的间距（内边距+边框，与内容无关，可现场测得）
+    const below = section.getBoundingClientRect().bottom - scrollBox.getBoundingClientRect().bottom;
+    const available = side.getBoundingClientRect().bottom - scrollBox.getBoundingClientRect().top - below;
+    scrollBox.style.maxHeight = available >= RESULTS_MIN_SCROLL_HEIGHT
+        ? `${Math.floor(available)}px`
+        : '';
 }
 
 // 格式化时长

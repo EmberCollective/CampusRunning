@@ -291,6 +291,8 @@ button { font-family: inherit; }
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 14px;
+    /* scrollIntoView 时避让 sticky 顶栏（48px + 余量） */
+    scroll-margin-top: 56px;
 }
 .results-section.show { display: block; }
 

@@ -46,8 +46,8 @@ CLI 与 Web 双入口，生成结果一致。
 
 | 平台 | 下载文件 | 说明 |
 |------|----------|------|
-| Windows | `CampusRunningGen-Setup-<版本>-win64.exe` | 安装包（推荐）或便携 zip |
-| macOS (Apple Silicon) | `CampusRunningGen-Setup-<版本>-macos-arm64.pkg` | 安装包（推荐），放行一次后安装即用 |
+| Windows | `CampusRunningGen-Setup-v<版本>-win64.exe` | 安装包（推荐）或便携 zip |
+| macOS (Apple Silicon) | `CampusRunningGen-Setup-v<版本>-macos-arm64.pkg` | 安装包（推荐），放行一次后安装即用 |
 | macOS (Apple Silicon) | `CampusRunningGen-v<版本>-macos-arm64.zip` | 便携版，解压后需执行 xattr 放行 |
 
 功能与 Web 版完全一致。系统要求、SmartScreen / Gatekeeper 放行方法与数据位置说明见[桌面版文档](docs/desktop-packaging.md)。

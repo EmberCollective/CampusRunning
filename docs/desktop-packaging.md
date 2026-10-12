@@ -6,9 +6,9 @@
 
 | 方式 | 下载 | 适合谁 |
 | ------ | ------ | -------- |
-| Windows 安装版 | Release 页的 `CampusRunningGen-Setup-<版本>-win64.exe` | 普通用户，图形化安装向导 |
+| Windows 安装版 | Release 页的 `CampusRunningGen-Setup-v<版本>-win64.exe` | 普通用户，图形化安装向导 |
 | Windows 便携版 | Release 页的 `CampusRunningGen-v<版本>-win64.zip` | 免安装、可放 U 盘、删除文件夹即卸载 |
-| macOS 安装版 | Release 页的 `CampusRunningGen-Setup-<版本>-macos-arm64.pkg` | Apple Silicon Mac，标准安装体验（推荐） |
+| macOS 安装版 | Release 页的 `CampusRunningGen-Setup-v<版本>-macos-arm64.pkg` | Apple Silicon Mac，标准安装体验（推荐） |
 | macOS 便携版 | Release 页的 `CampusRunningGen-v<版本>-macos-arm64.zip` | Apple Silicon Mac，免安装、可放 U 盘 |
 | 源码运行 | 克隆仓库后 `python desktop.py` | 开发者，见[构建指南](#构建指南开发者) |
 
@@ -147,7 +147,7 @@ dist/CampusRunningGenerator/
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 ```
 
-产物：`dist/CampusRunningGen-Setup-<版本>-win64.exe`
+产物：`dist/CampusRunningGen-Setup-v<版本>-win64.exe`
 
 ### 4. zip 便携包
 

@@ -261,6 +261,88 @@ test('shapeOutlines 对未规范化的图形自动夹紧', () => {
     near(G.primitiveLength(G.shapeOutlines(s)[0]), G.MIN_DIM_M, 1e-9, '夹紧后底边长');
 });
 
+// ===== 打点 =====
+section('按间距打点');
+
+const RECT = () => ({ id: 'r', type: 'rect', center: { lat: 26.4205, lng: 106.6713 }, width: 100, height: 60, rotation: 0 });
+const CIRCLE = () => ({ id: 'c', type: 'circle', center: { lat: 26.4205, lng: 106.6713 }, width: 120, height: 120, rotation: 0 });
+const STADIUM = () => ({ id: 's', type: 'stadium', center: { lat: 26.4205, lng: 106.6713 }, width: 157.39, height: 73, rotation: 0 });
+
+test('矩形 100x60 @ 10 m 生成 32 点（10+6+10+6）', () => {
+    near(G.shapeToLoop(RECT(), 10).length, 32, 0, '点数');
+});
+
+test('矩形四角都在点集内', () => {
+    const loop = G.shapeToLoop(RECT(), 10);
+    const corners = G.shapeOutlines(RECT()).map((p) => p.from);
+    corners.forEach((c) => {
+        const want = G.localToGeo(RECT().center, c.x, c.y, 0);
+        const hit = loop.some((p) => G.haversineMeters(p, want) < 0.01);
+        true_(hit, `角点 (${c.x},${c.y}) 应在生成点集内`);
+    });
+});
+
+test('圆形 R=60 @ 10 m 生成 38 点，且每点距中心 60 m', () => {
+    const loop = G.shapeToLoop(CIRCLE(), 10);
+    near(loop.length, 38, 0, '点数');
+    loop.forEach((p, i) => {
+        const d = G.haversineMeters(CIRCLE().center, p);
+        true_(Math.abs(d - 60) <= 0.5, `第 ${i} 点距中心 ${d}，应 ≈60`);
+    });
+});
+
+test('操场 84.39/36.5 @ 10 m 生成 38 点（8+11+8+11）', () => {
+    near(G.shapeToLoop(STADIUM(), 10).length, 38, 0, '点数');
+});
+
+test('点数随尺寸单调增长', () => {
+    const small = G.shapeToLoop(RECT(), 10).length;
+    const big = G.shapeToLoop({ ...RECT(), width: 200, height: 120 }, 10).length;
+    true_(big > small, `放大后点数应增加：小 ${small} 大 ${big}`);
+});
+
+test('间距减半则点数约翻倍', () => {
+    const a = G.shapeToLoop(CIRCLE(), 10).length;
+    const b = G.shapeToLoop(CIRCLE(), 5).length;
+    true_(b >= a * 1.9 && b <= a * 2.1, `期望约 ${a * 2}，实际 ${b}`);
+});
+
+test('超大图形自动抬高间距，点数封顶 MAX_POINTS', () => {
+    const loop = G.shapeToLoop({ ...RECT(), width: 5000, height: 5000 }, 3);
+    true_(loop.length <= G.MAX_POINTS, `点数 ${loop.length} 应 <= ${G.MAX_POINTS}`);
+    near(loop.length, G.MAX_POINTS, 0, '应按周长平分到恰好上限');
+});
+
+test('间距被夹紧到 [MIN_SPACING, MAX_SPACING]', () => {
+    near(G.shapeToLoop(CIRCLE(), 0.001).length, G.shapeToLoop(CIRCLE(), G.MIN_SPACING).length, 0, '过小间距夹到下限');
+    near(G.shapeToLoop(CIRCLE(), 9999).length, G.shapeToLoop(CIRCLE(), G.MAX_SPACING).length, 0, '过大间距夹到上限');
+});
+
+test('末点与首点之间没有缺口（矩形 @ 10 m 应为 10 m）', () => {
+    const loop = G.shapeToLoop(RECT(), 10);
+    const gap = G.haversineMeters(loop[loop.length - 1], loop[0]);
+    true_(Math.abs(gap - 10) < 0.2, `缺口 ${gap}，应 ≈10`);
+});
+
+test('旋转 90 度后经纬跨度互换', () => {
+    const loop = G.shapeToLoop({ ...RECT(), rotation: Math.PI / 2 }, 10);
+    const lats = loop.map((p) => p.lat);
+    const lngs = loop.map((p) => p.lng);
+    const latSpan = (Math.max(...lats) - Math.min(...lats)) * G.M_PER_DEG_LAT;
+    const lngSpan = (Math.max(...lngs) - Math.min(...lngs)) * G.mPerDegLng(RECT().center.lat);
+    true_(Math.abs(latSpan - 100) < 1, `南北跨度 ${latSpan}，应 ≈100`);
+    true_(Math.abs(lngSpan - 60) < 1, `东西跨度 ${lngSpan}，应 ≈60`);
+});
+
+test('旋转不改变点数', () => {
+    near(G.shapeToLoop({ ...RECT(), rotation: 1.1 }, 10).length, G.shapeToLoop(RECT(), 10).length, 0, '点数');
+});
+
+test('未规范化的过小图形也能正常打点', () => {
+    const loop = G.shapeToLoop({ ...RECT(), width: 1, height: 1 }, 10);
+    true_(loop.length >= 3, `至少 3 点，实际 ${loop.length}`);
+});
+
 // ===== 汇总 =====
 console.log(`\n${passed} 个用例通过，${failed} 个失败`);
 if (failed > 0) process.exitCode = 1;

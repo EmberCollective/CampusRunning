@@ -197,12 +197,45 @@ function shapePerimeter(shape) {
     return shapeOutlines(shape).reduce((sum, p) => sum + primitiveLength(p), 0);
 }
 
+// ===== 按间距打点（设计文档 §3.2 / §3.3）=====
+//
+//   每段采样数 n = max(1, round(段长 / 间距))，取 t = 0, 1/n, …, (n-1)/n
+//   取 n 个点而不含 t = 1，避免与下一段的首点重复
+//
+// 这个式子保证：① 顶点与切点必然落在点上（矩形四角、操场直道与弯道切点都是某段的 t = 0）；
+// ② 点数严格随尺寸线性增长；③ 每段至少 1 点，不会出现空段。
+//
+// 点数封顶：先夹紧间距到 [MIN_SPACING, MAX_SPACING]，再按周长抬高间距，
+// 保证手滑拖出极大图形（或把间距拉到 3 m）也不会生成上万点。
+function shapeToLoop(shape, spacing) {
+    const s = normalizeShape(shape);
+    const prims = shapeOutlines(s);
+    const perimeter = prims.reduce((sum, p) => sum + primitiveLength(p), 0);
+
+    let effective = Math.min(Math.max(spacing, MIN_SPACING), MAX_SPACING);
+    if (perimeter > 0 && perimeter / effective > MAX_POINTS) {
+        effective = perimeter / MAX_POINTS;
+    }
+
+    const loop = [];
+    prims.forEach((p) => {
+        const len = primitiveLength(p);
+        const n = Math.max(1, Math.round(len / effective));
+        for (let i = 0; i < n; i++) {
+            const local = primitivePoint(p, i / n);
+            loop.push(localToGeo(s.center, local.x, local.y, s.rotation));
+        }
+    });
+    return loop;
+}
+
 // Node 单测入口（浏览器下 module 未定义，整块跳过）
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         EARTH_RADIUS_M, M_PER_DEG_LAT, MIN_DIM_M, MIN_SPACING, MAX_SPACING, MAX_POINTS,
         haversineMeters, mPerDegLng, projectLocal, unprojectLocal, localToGeo,
         lockDims, normalizeShape, makeDefaultShape,
-        shapeOutlines, primitiveLength, primitivePoint, shapePerimeter
+        shapeOutlines, primitiveLength, primitivePoint, shapePerimeter,
+        shapeToLoop
     };
 }

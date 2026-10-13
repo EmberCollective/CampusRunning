@@ -105,11 +105,104 @@ function makeDefaultShape(type, center, id) {
     };
 }
 
+// ===== 轮廓分解（局部米坐标，统一逆时针，首尾闭合）=====
+//
+// 基元结构（设计文档 §3.1）：
+//   { kind: 'line', from: {x,y}, to: {x,y} }
+//   { kind: 'arc', from: {x,y}, to: {x,y}, center: {x,y}, radius, startAngle, sweep }   // 弧度，逆时针为正
+//
+// from/to 是**所有**基元的通用字段（圆弧的 from/to 由圆心半径与起止角推出），
+// 这样遍历端点、拼闭合多边形、判断首尾相接都不需要按 kind 分支。
+//
+// 三个图形的起点（即生成点列的第一个点，编辑器会把它标成「起点」）：
+//   矩形  西南角 (-w/2, -h/2)
+//   圆形  正东 (R, 0)
+//   操场  左起下 (-L/2, -R)
+
+const TWO_PI = Math.PI * 2;
+
+// 按圆心、半径、起始角、扫角造一个圆弧基元，并补出 from/to
+function arcPrimitive(center, radius, startAngle, sweep) {
+    return {
+        kind: 'arc',
+        center,
+        radius,
+        startAngle,
+        sweep,
+        from: {
+            x: center.x + radius * Math.cos(startAngle),
+            y: center.y + radius * Math.sin(startAngle)
+        },
+        to: {
+            x: center.x + radius * Math.cos(startAngle + sweep),
+            y: center.y + radius * Math.sin(startAngle + sweep)
+        }
+    };
+}
+
+function shapeOutlines(shape) {
+    const s = normalizeShape(shape);
+    const w = s.width;
+    const h = s.height;
+
+    if (s.type === 'rect') {
+        const x = w / 2;
+        const y = h / 2;
+        return [
+            { kind: 'line', from: { x: -x, y: -y }, to: { x: x, y: -y } },
+            { kind: 'line', from: { x: x, y: -y }, to: { x: x, y: y } },
+            { kind: 'line', from: { x: x, y: y }, to: { x: -x, y: y } },
+            { kind: 'line', from: { x: -x, y: y }, to: { x: -x, y: -y } }
+        ];
+    }
+
+    if (s.type === 'circle') {
+        return [arcPrimitive({ x: 0, y: 0 }, w / 2, 0, TWO_PI)];
+    }
+
+    if (s.type === 'stadium') {
+        const radius = h / 2;
+        const straight = w - h;   // 直道长度；normalizeShape 已保证 >= 0
+        return [
+            { kind: 'line', from: { x: -straight / 2, y: -radius }, to: { x: straight / 2, y: -radius } },
+            arcPrimitive({ x: straight / 2, y: 0 }, radius, -Math.PI / 2, Math.PI),
+            { kind: 'line', from: { x: straight / 2, y: radius }, to: { x: -straight / 2, y: radius } },
+            arcPrimitive({ x: -straight / 2, y: 0 }, radius, Math.PI / 2, Math.PI)
+        ];
+    }
+
+    throw new Error('未知图形类型: ' + s.type);
+}
+
+function primitiveLength(p) {
+    if (p.kind === 'line') {
+        return Math.hypot(p.to.x - p.from.x, p.to.y - p.from.y);
+    }
+    return Math.abs(p.radius * p.sweep);
+}
+
+// t ∈ [0,1]：直线按线性插值，圆弧按角度插值（因此采样点严格落在弧上）
+function primitivePoint(p, t) {
+    if (p.kind === 'line') {
+        return {
+            x: p.from.x + (p.to.x - p.from.x) * t,
+            y: p.from.y + (p.to.y - p.from.y) * t
+        };
+    }
+    const a = p.startAngle + p.sweep * t;
+    return { x: p.center.x + p.radius * Math.cos(a), y: p.center.y + p.radius * Math.sin(a) };
+}
+
+function shapePerimeter(shape) {
+    return shapeOutlines(shape).reduce((sum, p) => sum + primitiveLength(p), 0);
+}
+
 // Node 单测入口（浏览器下 module 未定义，整块跳过）
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         EARTH_RADIUS_M, M_PER_DEG_LAT, MIN_DIM_M, MIN_SPACING, MAX_SPACING, MAX_POINTS,
         haversineMeters, mPerDegLng, projectLocal, unprojectLocal, localToGeo,
-        lockDims, normalizeShape, makeDefaultShape
+        lockDims, normalizeShape, makeDefaultShape,
+        shapeOutlines, primitiveLength, primitivePoint, shapePerimeter
     };
 }

@@ -168,6 +168,99 @@ test('makeDefaultShape 对未知类型抛错', () => {
     true_(/未知图形类型/.test(message), `应以「未知图形类型」拒绝，实际抛出：${message || '(没有抛错)'}`);
 });
 
+// ===== 轮廓分解 =====
+section('轮廓分解');
+
+test('矩形分解为 4 条直线段，长度依次为 100/60/100/60', () => {
+    const s = { id: 'r', type: 'rect', center: { lat: 26.42, lng: 106.67 }, width: 100, height: 60, rotation: 0 };
+    const prims = G.shapeOutlines(s);
+    true_(prims.length === 4, '基元数应为 4，实际 ' + prims.length);
+    const lens = prims.map(G.primitiveLength);
+    [100, 60, 100, 60].forEach((want, i) => near(lens[i], want, 1e-9, `第 ${i} 段长`));
+    true_(prims.every((p) => p.kind === 'line'), '应全为直线段');
+});
+
+test('矩形的起点是西南角，且首尾闭合', () => {
+    const s = { id: 'r', type: 'rect', center: { lat: 26.42, lng: 106.67 }, width: 100, height: 60, rotation: 0 };
+    const prims = G.shapeOutlines(s);
+    near(prims[0].from.x, -50, 1e-9, '起点 x');
+    near(prims[0].from.y, -30, 1e-9, '起点 y');
+    const last = prims[prims.length - 1];
+    near(last.to.x, prims[0].from.x, 1e-9, '闭合点 x');
+    near(last.to.y, prims[0].from.y, 1e-9, '闭合点 y');
+});
+
+test('矩形四角都落在基元端点上（不会被切角）', () => {
+    const s = { id: 'r', type: 'rect', center: { lat: 26.42, lng: 106.67 }, width: 100, height: 60, rotation: 0 };
+    const pts = [];
+    G.shapeOutlines(s).forEach((p) => { pts.push(p.from); pts.push(p.to); });
+    [[-50, -30], [50, -30], [50, 30], [-50, 30]].forEach(([x, y]) => {
+        const hit = pts.some((q) => Math.hypot(q.x - x, q.y - y) < 1e-6);
+        true_(hit, `角点 (${x},${y}) 应在基元端点上`);
+    });
+});
+
+test('圆形分解为 1 个整圆弧，半径 60，弧长 2πR', () => {
+    const s = { id: 'c', type: 'circle', center: { lat: 26.42, lng: 106.67 }, width: 120, height: 120, rotation: 0 };
+    const prims = G.shapeOutlines(s);
+    true_(prims.length === 1 && prims[0].kind === 'arc', '应为单个圆弧');
+    near(prims[0].radius, 60, 1e-9, '半径');
+    near(G.primitiveLength(prims[0]), 2 * Math.PI * 60, 1e-6, '弧长');
+    near(G.primitivePoint(prims[0], 0).x, 60, 1e-9, '起点在正东');
+    near(G.primitivePoint(prims[0], 0).y, 0, 1e-9, '起点在正东');
+});
+
+test('操场分解为 直线-半圆-直线-半圆，直道 84.39、半径 36.5', () => {
+    const s = { id: 's', type: 'stadium', center: { lat: 26.42, lng: 106.67 }, width: 157.39, height: 73, rotation: 0 };
+    const prims = G.shapeOutlines(s);
+    const kinds = prims.map((p) => p.kind).join(',');
+    true_(kinds === 'line,arc,line,arc', '基元顺序应为 line,arc,line,arc，实际 ' + kinds);
+    near(G.primitiveLength(prims[0]), 84.39, 1e-6, '底边直道');
+    near(G.primitiveLength(prims[1]), Math.PI * 36.5, 1e-6, '右半圆弧长');
+    near(prims[1].radius, 36.5, 1e-9, '半径');
+    near(G.primitiveLength(prims[2]), 84.39, 1e-6, '顶边直道');
+    near(G.primitiveLength(prims[3]), Math.PI * 36.5, 1e-6, '左半圆弧长');
+});
+
+test('操场起点在左起下，基元首尾闭合', () => {
+    const s = { id: 's', type: 'stadium', center: { lat: 26.42, lng: 106.67 }, width: 157.39, height: 73, rotation: 0 };
+    const prims = G.shapeOutlines(s);
+    near(prims[0].from.x, -84.39 / 2, 1e-9, '起点 x');
+    near(prims[0].from.y, -36.5, 1e-9, '起点 y');
+    const last = prims[prims.length - 1];
+    near(last.to.x, prims[0].from.x, 1e-9, '闭合点 x');
+    near(last.to.y, prims[0].from.y, 1e-9, '闭合点 y');
+});
+
+test('操场基元端点全部落在轮廓上（距中心符合几何定义）', () => {
+    const s = { id: 's', type: 'stadium', center: { lat: 26.42, lng: 106.67 }, width: 157.39, height: 73, rotation: 0 };
+    const prims = G.shapeOutlines(s);
+    // 所有端点要么在直道（|y| == R 且 |x| <= L/2），要么在弯道（到某个圆心距离 == R）
+    const R = 36.5;
+    const L = 84.39;
+    const pts = [];
+    prims.forEach((p) => { pts.push(p.from); pts.push(p.to); });
+    pts.forEach((q) => {
+        const onStraight = Math.abs(Math.abs(q.y) - R) < 1e-6 && Math.abs(q.x) <= L / 2 + 1e-6;
+        const dRight = Math.hypot(q.x - L / 2, q.y);
+        const dLeft = Math.hypot(q.x + L / 2, q.y);
+        const onArc = Math.abs(dRight - R) < 1e-6 || Math.abs(dLeft - R) < 1e-6;
+        true_(onStraight || onArc, `端点 (${q.x},${q.y}) 应落在操场轮廓上`);
+    });
+});
+
+test('shapePerimeter 对三种默认图形给出已知周长', () => {
+    const center = { lat: 26.4205, lng: 106.6713 };
+    near(G.shapePerimeter(G.makeDefaultShape('rect', center, 'r')), 320, 1e-6, '矩形周长 2(100+60)');
+    near(G.shapePerimeter(G.makeDefaultShape('circle', center, 'c')), Math.PI * 120, 1e-6, '圆形周长 120π');
+    near(G.shapePerimeter(G.makeDefaultShape('stadium', center, 's')), 2 * 84.39 + Math.PI * 73, 1e-6, '操场周长 2L+πh');
+});
+
+test('shapeOutlines 对未规范化的图形自动夹紧', () => {
+    const s = { id: 'r', type: 'rect', center: { lat: 26.42, lng: 106.67 }, width: 1, height: 1, rotation: 0 };
+    near(G.primitiveLength(G.shapeOutlines(s)[0]), G.MIN_DIM_M, 1e-9, '夹紧后底边长');
+});
+
 // ===== 汇总 =====
 console.log(`\n${passed} 个用例通过，${failed} 个失败`);
 if (failed > 0) process.exitCode = 1;

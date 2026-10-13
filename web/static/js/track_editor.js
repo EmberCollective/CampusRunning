@@ -393,6 +393,7 @@ document.getElementById('save-form').addEventListener('submit', handleSaveSubmit
     // 地图引擎与搜索（异步初始化，需先加载高德 Key 配置）
     await MapEngine.init();
     initSearchBox();
+    ShapeLayer.init();   // 图形覆盖层：必须在 MapEngine.init() 之后（依赖活跃适配器的像素换算）
 
     try {
         const response = await fetch('/api/defaults');

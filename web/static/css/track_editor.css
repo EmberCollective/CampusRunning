@@ -284,3 +284,78 @@
     }
     .map-hint { display: none; }
 }
+
+/* ============================================================
+   图形模板覆盖层 —— .map-stage 的兄弟图层，天然盖住两个地图容器
+   pointer-events 默认穿透，只有图形本体与手柄自己开启
+   ============================================================ */
+.shape-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 500;              /* 高于两个地图容器，低于 .search-box / .basemap-switch 的 1000 */
+    pointer-events: none;
+    overflow: hidden;          /* 图形被拖出视口时不撑出滚动条 */
+}
+.shape-layer svg { display: block; }
+.shape-layer.is-hidden { opacity: 0; }   /* Leaflet 缩放动画期间遮挡，见 shape_layer.js */
+
+.shape-outline {
+    fill: rgba(59, 91, 215, .06);
+    stroke: var(--accent);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+    pointer-events: auto;
+    cursor: move;
+}
+.shape-outline.selected {
+    stroke-width: 2.5;
+    fill: rgba(59, 91, 215, .1);
+}
+.shape-frame {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+    opacity: .55;
+    pointer-events: none;
+}
+
+.shape-preview-line {
+    fill: none;
+    stroke: rgba(59, 91, 215, .35);
+    stroke-width: 1.5;
+    stroke-dasharray: 5 5;
+    pointer-events: none;
+}
+.shape-preview-dot {
+    fill: #fff;
+    stroke: var(--accent);
+    stroke-width: 2;
+    pointer-events: none;
+}
+.shape-preview-start {
+    fill: var(--accent);
+    stroke: #fff;
+    stroke-width: 2;
+    pointer-events: none;
+}
+
+.shape-handle {
+    fill: #fff;
+    stroke: var(--accent);
+    stroke-width: 2;
+    pointer-events: auto;
+}
+.shape-handle-rot {
+    fill: #fff;
+    stroke: var(--accent);
+    stroke-width: 2;
+    pointer-events: auto;
+    cursor: grab;
+}
+.shape-handle-rot:active { cursor: grabbing; }
+.shape-rot-line {
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    pointer-events: none;
+}

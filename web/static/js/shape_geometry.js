@@ -57,10 +57,59 @@ function localToGeo(center, lx, ly, rotation) {
     };
 }
 
+// ===== 图形模型与尺寸约束 =====
+//
+// 默认尺寸（设计文档 §2.2）：周长刻意落在现有轨迹 320–400 m 区间
+//   操场 w = L + 2R = 84.39 + 73 = 157.39，h = 2R = 73  → 周长 398.1 m（标准 400 m 内道）
+//   矩形 100 × 60                                        → 周长 320 m
+//   圆形 w = h = 120（R = 60）                           → 周长 377.0 m
+const DEFAULT_SIZES = {
+    rect: { width: 100, height: 60 },
+    circle: { width: 120, height: 120 },
+    stadium: { width: 157.39, height: 73 }
+};
+
+// 尺寸约束：先夹紧下限，再按类型锁比例
+//   圆：正圆，宽高强制相等（取较大者）
+//   操场：w = L + h，故 w >= h 等价于直道 L >= 0（w == h 时退化为圆）
+function lockDims(type, width, height) {
+    let w = Math.max(width, MIN_DIM_M);
+    let h = Math.max(height, MIN_DIM_M);
+    if (type === 'circle') {
+        const d = Math.max(w, h);
+        w = d;
+        h = d;
+    } else if (type === 'stadium' && h > w) {
+        w = h;
+    }
+    return { width: w, height: h };
+}
+
+// 返回规范化后的新对象；调用方（shape_layer）在每次编辑后都要过一遍
+function normalizeShape(shape) {
+    const { width, height } = lockDims(shape.type, shape.width, shape.height);
+    return { ...shape, width, height };
+}
+
+// 新建默认图形；center 取当前地图中心
+function makeDefaultShape(type, center, id) {
+    const size = DEFAULT_SIZES[type];
+    if (!size) throw new Error('未知图形类型: ' + type);
+    return {
+        id,
+        type,
+        center: { lat: center.lat, lng: center.lng },
+        width: size.width,
+        height: size.height,
+        rotation: 0
+    };
+}
+
 // Node 单测入口（浏览器下 module 未定义，整块跳过）
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         EARTH_RADIUS_M, M_PER_DEG_LAT, MIN_DIM_M, MIN_SPACING, MAX_SPACING, MAX_POINTS,
-        haversineMeters, mPerDegLng, projectLocal, unprojectLocal, localToGeo
+        haversineMeters, mPerDegLng, projectLocal, unprojectLocal, localToGeo,
+        lockDims, normalizeShape, makeDefaultShape
     };
 }

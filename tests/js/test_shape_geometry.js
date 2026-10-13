@@ -94,6 +94,80 @@ test('localToGeo 在旋转下保持距离不变', () => {
     true_(Math.abs(got - 80) / 80 < 0.005, `期望 ≈80，实际 ${got}`);
 });
 
+// ===== 图形规范化与默认尺寸 =====
+section('图形规范化与默认尺寸');
+
+test('lockDims 把过小尺寸夹紧到 MIN_DIM_M', () => {
+    const d = G.lockDims('rect', 1, 1);
+    near(d.width, G.MIN_DIM_M, 1e-9, 'width');
+    near(d.height, G.MIN_DIM_M, 1e-9, 'height');
+});
+
+test('lockDims 对圆形锁定宽高相等（取较大者）', () => {
+    const d = G.lockDims('circle', 100, 40);
+    near(d.width, 100, 1e-9, 'width');
+    near(d.height, 100, 1e-9, 'height');
+});
+
+test('lockDims 对操场保证 w >= h（直道不为负）', () => {
+    const d = G.lockDims('stadium', 60, 100);
+    true_(d.width >= d.height, '操场必须 w >= h');
+    near(d.width, 100, 1e-9, 'width 抬到 height');
+});
+
+test('lockDims 对矩形不施加比例约束', () => {
+    const d = G.lockDims('rect', 300, 20);
+    near(d.width, 300, 1e-9, 'width');
+    near(d.height, 20, 1e-9, 'height');
+});
+
+test('normalizeShape 夹紧 rect(1,1) 到 5x5 并返回新对象', () => {
+    const src = { id: 'a', type: 'rect', center: { lat: 1, lng: 2 }, width: 1, height: 1, rotation: 0 };
+    const out = G.normalizeShape(src);
+    near(out.width, 5, 1e-9, 'width');
+    near(out.height, 5, 1e-9, 'height');
+    true_(out !== src, '必须返回新对象，不原地修改');
+    near(src.width, 1, 1e-9, '原对象不得被改动');
+});
+
+test('normalizeShape 保留 id/type/center/rotation', () => {
+    const src = { id: 'x9', type: 'circle', center: { lat: 26.4, lng: 106.6 }, width: 200, height: 50, rotation: 0.3 };
+    const out = G.normalizeShape(src);
+    true_(out.id === 'x9' && out.type === 'circle', 'id/type 保留');
+    near(out.rotation, 0.3, 1e-12, 'rotation 保留');
+    near(out.center.lat, 26.4, 1e-12, 'center 保留');
+});
+
+test('makeDefaultShape 默认周长落在现有轨迹区间（320–400 m）', () => {
+    const center = { lat: 26.4205, lng: 106.6713 };
+    ['rect', 'circle', 'stadium'].forEach((type) => {
+        const s = G.makeDefaultShape(type, center, 'd1');
+        true_(s.type === type, type + ' 类型正确');
+        true_(s.id === 'd1', type + ' id 正确');
+        near(s.center.lat, center.lat, 1e-9, type + ' center.lat');
+        near(s.rotation, 0, 1e-9, type + ' 初始 rotation');
+    });
+    // 周长按几何定义直接算，不依赖 Task 3 才有的 shapePerimeter
+    const rect = G.makeDefaultShape('rect', center, 'r');
+    near(2 * (rect.width + rect.height), 320, 0.01, '矩形周长');
+    const circle = G.makeDefaultShape('circle', center, 'c');
+    near(Math.PI * circle.width, Math.PI * 120, 0.01, '圆形周长');
+    const stadium = G.makeDefaultShape('stadium', center, 's');
+    // 操场周长 = 2L + πh，其中 L = w - h
+    near(2 * (stadium.width - stadium.height) + Math.PI * stadium.height, 2 * 84.39 + Math.PI * 73, 0.01, '操场周长');
+});
+
+test('makeDefaultShape 对未知类型抛错', () => {
+    // 必须匹配错误信息：若只判断「抛了没」，函数根本不存在时 TypeError 也会让用例假通过
+    let message = '';
+    try {
+        G.makeDefaultShape('triangle', { lat: 0, lng: 0 }, 'x');
+    } catch (e) {
+        message = e.message;
+    }
+    true_(/未知图形类型/.test(message), `应以「未知图形类型」拒绝，实际抛出：${message || '(没有抛错)'}`);
+});
+
 // ===== 汇总 =====
 console.log(`\n${passed} 个用例通过，${failed} 个失败`);
 if (failed > 0) process.exitCode = 1;

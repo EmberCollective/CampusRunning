@@ -124,18 +124,7 @@ function updateButtonStates() {
     document.getElementById('redo-btn').disabled = redoStack.length === 0;
 }
 
-// ===== 统计（Haversine，与后端 TrackAnalyzer 同参：R=6371000，环线含闭合段）=====
-const EARTH_RADIUS_M = 6371000;
-
-function haversineMeters(a, b) {
-    const toRad = (deg) => deg * Math.PI / 180;
-    const dLat = toRad(b.lat - a.lat);
-    const dLng = toRad(b.lng - a.lng);
-    const s = Math.sin(dLat / 2) ** 2 +
-        Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-    return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(s));
-}
-
+// ===== 统计（Haversine 已收敛到 shape_geometry.js，唯一实现；与后端 TrackAnalyzer 同参：R=6371000，环线含闭合段）=====
 function totalLoopDistance(pts) {
     if (pts.length < 2) return 0;
     let total = 0;

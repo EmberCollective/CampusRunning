@@ -97,6 +97,9 @@
                 <!-- 高德官方 JS API 容器：仅「官方」档使用，初始隐藏 -->
                 <div id="map-amap" style="display:none"></div>
 
+                <!-- 图形模板覆盖层：SVG 由 shape_layer.js 在 init 时注入 -->
+                <div id="shape-layer" class="shape-layer"></div>
+
                 <!-- 左上角：地点搜索（配置高德 Key 后可用）；input 单独包一层，图标锚定输入框不随下拉漂移 -->
                 <div class="search-box">
                     <div class="search-input-wrap">
@@ -206,12 +209,15 @@
         </div>
     </div>
 
-    <!-- 脚本加载顺序：Leaflet → 两个地图适配器 → 引擎 → 搜索框 → 编辑器主逻辑 -->
+    <!-- 脚本加载顺序：Leaflet → 两个地图适配器 → 引擎 → 搜索框 → 图形几何 → 编辑器主逻辑 -->
+    <!-- shape_geometry.js 必须在 track_editor.js 之前：它依赖其全局函数。
+         shape_layer.js 的 <script> 由 Task 8 在本行之后再补（本任务时该文件尚不存在）。 -->
     <script src="/static/vendor/leaflet/leaflet.js"></script>
     <script src="/static/js/map_adapter_leaflet.js"></script>
     <script src="/static/js/map_adapter_amap.js"></script>
     <script src="/static/js/map_engine.js"></script>
     <script src="/static/js/search_box.js"></script>
+    <script src="/static/js/shape_geometry.js"></script>
     <script src="/static/js/track_editor.js"></script>
 </body>
 </html>

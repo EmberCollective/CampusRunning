@@ -17,6 +17,7 @@ const ShapeLayer = (function () {
     const mapStageEl = document.querySelector('.map-stage');
 
     let svgEl = null;
+    let hostEl = null;              // #shape-layer 宿主：指针捕获必须落在它上面（见 beginDrag）
     let rootG = null;               // 平移偏移容器：只改它的 transform
     let shapes = [];
     let selected = null;            // 选中图形的 id
@@ -147,7 +148,13 @@ const ShapeLayer = (function () {
 
         evt.preventDefault();
         evt.stopPropagation();
-        if (evt.target.setPointerCapture) evt.target.setPointerCapture(evt.pointerId);
+        // 指针捕获必须打在常驻的宿主层上，不能打在 evt.target 上：
+        //   ① 未选中的图形按下时会先 rebuild()，evt.target 当场被 replaceChildren 摘离文档，
+        //      在游离节点上 setPointerCapture 会抛 InvalidStateError 且捕获不成立；
+        //   ② 即便捕获成功（图形已选中、手柄按下），拖动过程中每次 updateDrag 都会 rebuild()，
+        //      被捕获的节点第一帧就被换掉，捕获随之失效。
+        // 两者都会让「按住图形拖出去」在指针离开图形后断掉，且松手事件收不到、drag 卡死。
+        if (hostEl && hostEl.setPointerCapture) hostEl.setPointerCapture(evt.pointerId);
     }
 
     function updateDrag(evt) {
@@ -188,9 +195,10 @@ const ShapeLayer = (function () {
         drag = null;
         rebuild();
         notify();
-        if (evt && evt.target && evt.target.releasePointerCapture && evt.pointerId !== undefined) {
+        // 释放也要在宿主上（与 beginDrag 的捕获目标一致）
+        if (hostEl && hostEl.releasePointerCapture && evt && evt.pointerId !== undefined) {
             try {
-                evt.target.releasePointerCapture(evt.pointerId);
+                hostEl.releasePointerCapture(evt.pointerId);
             } catch (e) {
                 // 指针已释放，忽略
             }
@@ -352,6 +360,7 @@ const ShapeLayer = (function () {
         init() {
             if (svgEl) return;
             const host = document.getElementById('shape-layer');
+            hostEl = host;
             svgEl = el('svg', {}, 'shape-svg');
             host.appendChild(svgEl);
             rebuild();

@@ -36,6 +36,9 @@ class LeafletAdapter {
 
         this._handlers = null;     // renderTrack 注入的事件回调集
         this._currentBase = null;  // 当前已挂载的瓦片层数组
+        this._onView = null;       // 图形层的视野钩子回调（具名引用，便于 off）
+        this._onZoomStart = null;
+        this._onZoomEnd = null;
 
         if (interactive) {
             this._bindEditorEvents();
@@ -124,13 +127,31 @@ class LeafletAdapter {
 
     // 视野变化钩子：平移/缩放重绘图形层；缩放动画期间要遮住图形层——
     // Leaflet 动画中 latLngToContainerPoint 仍返回旧 zoom 的值，不遮会先漂移再跳回
+    //
+    // 必须先摘上一轮再绑：MapEngine 每次切底图档位都会重绑，而 map 实例是构造时建好后
+    // 长期复用的——只 on 不 off 的话，切 N 次档位就叠 N 层监听，每次平移触发 N 倍重绘。
+    // 保留具名回调引用才 off 得掉，所以不能写成内联箭头函数。
     bindViewHooks(hooks) {
-        this.map.on('move zoom', () => hooks.onChange());
-        this.map.on('zoomstart', () => hooks.onZoomStart && hooks.onZoomStart());
-        this.map.on('zoomend', () => {
+        this._unbindViewHooks();
+        this._onView = () => hooks.onChange();
+        this._onZoomStart = () => hooks.onZoomStart && hooks.onZoomStart();
+        this._onZoomEnd = () => {
             if (hooks.onZoomEnd) hooks.onZoomEnd();
             hooks.onChange();
-        });
+        };
+        this.map.on('move zoom', this._onView);
+        this.map.on('zoomstart', this._onZoomStart);
+        this.map.on('zoomend', this._onZoomEnd);
+    }
+
+    _unbindViewHooks() {
+        if (!this._onView) return;
+        this.map.off('move zoom', this._onView);
+        this.map.off('zoomstart', this._onZoomStart);
+        this.map.off('zoomend', this._onZoomEnd);
+        this._onView = null;
+        this._onZoomStart = null;
+        this._onZoomEnd = null;
     }
 
     // 缩放至轨迹范围（无点时不动作）；padding 可配——小尺寸地图（预览卡）需更小的内边距

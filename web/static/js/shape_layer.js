@@ -378,11 +378,15 @@ const ShapeLayer = (function () {
         },
 
         add(type) {
+            // 引擎未就绪就什么都不做：宁可点一下没反应，也不要在控制台抛 TypeError
+            // （侧边栏按钮在脚本加载时即可点，而 MapEngine.init() 是异步的）
+            if (!MapEngine.isReady()) return null;
             const c = stageCenterPx();
             return this.addAt(type, MapEngine.containerToLatLng(c.x, c.y));
         },
 
         addAt(type, center) {
+            if (!MapEngine.isReady()) return null;   // 直接调 addAt 的调用方同样兜底
             seq += 1;
             const id = `shape-${Date.now()}-${seq}`;
             shapes.push(normalizeShape(makeDefaultShape(type, center, id)));
@@ -427,7 +431,7 @@ const ShapeLayer = (function () {
         },
 
         setSpacing(meters) {
-            const next = Math.min(Math.max(Number(meters) || 10, MIN_SPACING), MAX_SPACING);
+            const next = Math.min(Math.max(Number(meters) || DEFAULT_SPACING, MIN_SPACING), MAX_SPACING);
             if (next === pointSpacing) return;
             pointSpacing = next;
             rebuild();

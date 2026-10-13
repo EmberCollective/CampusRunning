@@ -387,8 +387,11 @@
     stroke: currentColor;
     stroke-width: 1.5;
 }
-.shape-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
-.shape-btn:active { background: var(--surface-2); }
+.shape-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.shape-btn:active:not(:disabled) { background: var(--surface-2); }
+/* 引擎就绪前禁用：不要摆出可点的样子 */
+.shape-btn:disabled { color: #C9CFD6; border-color: var(--border); cursor: not-allowed; }
+.shape-btn:disabled svg rect, .shape-btn:disabled svg circle, .shape-btn:disabled svg path { stroke: #C9CFD6; }
 
 .shape-list {
     list-style: none;

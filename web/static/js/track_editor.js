@@ -271,6 +271,13 @@ function renderShapePanel() {
     const hasShapes = shapes.length > 0;
     document.getElementById('shape-generate-btn').disabled = !hasShapes;
     document.getElementById('shape-clear-btn').disabled = !hasShapes;
+
+    // 引擎未就绪前禁用三个放置按钮：MapEngine.init() 是异步的，在那之前点击不做事，
+    // 与其「点了没反应」，不如让按钮看起来就不能点（ShapeLayer.add 侧还有一层兜底）
+    const ready = MapEngine.isReady();
+    ['rect', 'circle', 'stadium'].forEach((type) => {
+        document.getElementById('shape-btn-' + type).disabled = !ready;
+    });
 }
 
 function handleShapeGenerate() {

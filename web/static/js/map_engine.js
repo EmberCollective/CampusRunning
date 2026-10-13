@@ -173,6 +173,14 @@ const MapEngine = {
         return this.activeAdapter().latLngToContainer(lat, lng);
     },
 
+    // 当前活跃引擎是否已就绪。init() 是异步的（开头要拉一次高德 Key 配置），
+    // 在那之前 activeAdapter() 返回 null —— 而侧边栏的图形按钮在脚本加载时就绑好了 click，
+    // 用户在 init 完成前点到，会一路走到上面的坐标换算上抛
+    // 「Cannot read properties of null」。调用方先问这里再动手。
+    isReady() {
+        return !!this.activeAdapter();
+    },
+
     containerToLatLng(x, y) {
         return this.activeAdapter().containerToLatLng(x, y);
     },

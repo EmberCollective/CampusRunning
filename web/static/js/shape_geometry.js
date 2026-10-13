@@ -14,7 +14,8 @@ const M_PER_DEG_LAT = EARTH_RADIUS_M * Math.PI / 180;   // ≈ 111194.93 m
 const MIN_DIM_M = 5;      // 宽/高（圆为直径）下限
 const MIN_SPACING = 3;    // 点间距下限（米）
 const MAX_SPACING = 100;  // 点间距上限（米）
-const MAX_POINTS = 500;   // 单条轨迹点总数上限
+const DEFAULT_SPACING = 10;  // 编辑器默认点间距（米），也是非有限输入的回退值
+const MAX_POINTS = 500;   // 单个图形的点数上限（多图形拼接后总数可超过它）
 
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -207,12 +208,18 @@ function shapePerimeter(shape) {
 //
 // 点数封顶：先夹紧间距到 [MIN_SPACING, MAX_SPACING]，再按周长抬高间距，
 // 保证手滑拖出极大图形（或把间距拉到 3 m）也不会生成上万点。
+//
+// 非有限间距（NaN / undefined / 'abc' / ±Infinity）先回退到 DEFAULT_SPACING：
+// NaN 会一路穿过 Math.max/Math.min 仍是 NaN，最后 `i < NaN` 一次都不进循环，
+// 结果是**静默**返回 0 个点 —— 不报错、界面上什么都不发生，最难排查的那类失败。
 function shapeToLoop(shape, spacing) {
     const s = normalizeShape(shape);
     const prims = shapeOutlines(s);
     const perimeter = prims.reduce((sum, p) => sum + primitiveLength(p), 0);
 
-    let effective = Math.min(Math.max(spacing, MIN_SPACING), MAX_SPACING);
+    const raw = Number(spacing);
+    const requested = Number.isFinite(raw) ? raw : DEFAULT_SPACING;
+    let effective = Math.min(Math.max(requested, MIN_SPACING), MAX_SPACING);
     if (perimeter > 0 && perimeter / effective > MAX_POINTS) {
         effective = perimeter / MAX_POINTS;
     }
@@ -311,6 +318,7 @@ function resizeShape(snapshot, key, offsetX, offsetY) {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         EARTH_RADIUS_M, M_PER_DEG_LAT, MIN_DIM_M, MIN_SPACING, MAX_SPACING, MAX_POINTS,
+        DEFAULT_SPACING,
         haversineMeters, mPerDegLng, projectLocal, unprojectLocal, localToGeo,
         lockDims, normalizeShape, makeDefaultShape,
         shapeOutlines, primitiveLength, primitivePoint, shapePerimeter, shapeToLoop,

@@ -489,6 +489,28 @@ test('已旋转的图形仍能正确按锚点缩放', () => {
     true_(drift < 1e-4, `旋转情形漂移应更小，实际 ${drift} m`);
 });
 
+// ===== 打点的健壮性（code review 发现 2）=====
+section('打点健壮性：非有限间距');
+
+test('DEFAULT_SPACING 与编辑器默认一致', () => {
+    near(G.DEFAULT_SPACING, 10, 0, 'DEFAULT_SPACING');
+});
+
+test('非有限间距不静默返回 0 点', () => {
+    [NaN, undefined, null, Infinity, -Infinity, 'abc', {}].forEach((s) => {
+        const n = G.shapeToLoop(RECT(), s).length;
+        true_(n >= 3, `spacing=${String(s)} 时点数 ${n}，绝不该静默产出 0 点`);
+    });
+});
+
+test('非有限间距回退到默认 10 m', () => {
+    // 写死 32（矩形 100×60 @10 m 的已知点数），不要拿 shapeToLoop 的两个返回值互比 ——
+    // 出 bug 时两边会一起变成 0，断言就变成同义反复了。
+    [NaN, undefined, 'abc'].forEach((s) => {
+        near(G.shapeToLoop(RECT(), s).length, 32, 0, `spacing=${String(s)} 回退到 10 m`);
+    });
+});
+
 // ===== 汇总 =====
 console.log(`\n${passed} 个用例通过，${failed} 个失败`);
 if (failed > 0) process.exitCode = 1;

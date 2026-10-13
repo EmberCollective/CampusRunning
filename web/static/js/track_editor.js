@@ -230,6 +230,90 @@ function updateCorrectionNote() {
     note.classList.remove('hidden');
 }
 
+// ===== 图形模板 =====
+// chip 文案：矩形显示宽高，圆形显示半径，操场显示直道与半径
+function shapeChipText(shape) {
+    if (shape.type === 'rect') return `矩形 ${Math.round(shape.width)}×${Math.round(shape.height)}`;
+    if (shape.type === 'circle') return `圆形 R${Math.round(shape.width / 2)}`;
+    return `操场 直道${Math.round(shape.width - shape.height)}/R${Math.round(shape.height / 2)}`;
+}
+
+// 重建 chip 列表与按钮可用态（形状数量或选中项变化时调用）
+function renderShapePanel() {
+    const list = document.getElementById('shape-list');
+    const shapes = ShapeLayer.shapes();
+    const selectedId = ShapeLayer.selectedId();
+
+    // 用 DOM API 构建，chip 文案不进 innerHTML
+    list.replaceChildren();
+    shapes.forEach((shape) => {
+        const li = document.createElement('li');
+        li.className = 'shape-chip' + (shape.id === selectedId ? ' active' : '');
+        li.dataset.shapeId = shape.id;
+
+        const label = document.createElement('span');
+        label.textContent = shapeChipText(shape);
+        li.appendChild(label);
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'shape-chip-del';
+        del.dataset.shapeId = shape.id;
+        del.title = '删除该图形';
+        del.textContent = '×';
+        li.appendChild(del);
+
+        list.appendChild(li);
+    });
+
+    const hasShapes = shapes.length > 0;
+    document.getElementById('shape-generate-btn').disabled = !hasShapes;
+    document.getElementById('shape-clear-btn').disabled = !hasShapes;
+}
+
+function handleShapeGenerate() {
+    const shapes = ShapeLayer.shapes();
+    if (!shapes.length) return;
+    const generated = ShapeLayer.generatePoints();
+
+    if (points.length > 0) {
+        const ok = window.confirm(
+            `将从 ${shapes.length} 个图形生成 ${generated.length} 个轨迹点，替换当前 ${points.length} 个点？`);
+        if (!ok) return;
+    }
+    pushUndo();
+    points = generated.map((p) => ({ lat: p.lat, lng: p.lng }));
+    renderTrack();
+    showMessage(`已从 ${shapes.length} 个图形生成 ${points.length} 个轨迹点`, 'success');
+}
+
+// chip 列表事件委托：点 chip 选中，点 × 删除
+document.getElementById('shape-list').addEventListener('click', (e) => {
+    const del = e.target.closest('.shape-chip-del');
+    if (del) {
+        ShapeLayer.remove(del.dataset.shapeId);
+        return;
+    }
+    const chip = e.target.closest('.shape-chip');
+    if (chip) ShapeLayer.select(chip.dataset.shapeId);
+});
+
+['rect', 'circle', 'stadium'].forEach((type) => {
+    document.getElementById('shape-btn-' + type).addEventListener('click', () => {
+        ShapeLayer.add(type);
+    });
+});
+
+document.getElementById('shape-spacing').addEventListener('change', (e) => {
+    ShapeLayer.setSpacing(Number(e.target.value));
+    e.target.value = ShapeLayer.spacing();   // 回写被夹紧后的实际值
+});
+
+document.getElementById('shape-generate-btn').addEventListener('click', handleShapeGenerate);
+document.getElementById('shape-clear-btn').addEventListener('click', () => ShapeLayer.clear());
+
+ShapeLayer.onChange(renderShapePanel);
+
 // ===== 保存 =====
 function handleSaveSubmit(e) {
     e.preventDefault();
@@ -398,6 +482,7 @@ document.getElementById('save-form').addEventListener('submit', handleSaveSubmit
     await MapEngine.init();
     initSearchBox();
     ShapeLayer.init();   // 图形覆盖层：必须在 MapEngine.init() 之后（依赖活跃适配器的像素换算）
+    renderShapePanel();  // 初始化侧边栏图形区块的按钮可用态
 
     try {
         const response = await fetch('/api/defaults');

@@ -141,6 +141,35 @@
                     <p id="correction-note" class="hint hidden"></p>
                 </section>
 
+                <!-- 图形模板：点选即在地图中心放置，可拖动/缩放/旋转，确认后生成轨迹点 -->
+                <section class="panel-sec">
+                    <div class="group-label">图形模板 SHAPES</div>
+                    <div class="shape-picker">
+                        <button type="button" id="shape-btn-rect" class="shape-btn" title="矩形：点一下在地图中心放置">
+                            <svg viewBox="0 0 36 24" aria-hidden="true"><rect x="2" y="2" width="32" height="20" rx="1"></rect></svg>
+                            <span>矩形</span>
+                        </button>
+                        <button type="button" id="shape-btn-circle" class="shape-btn" title="圆形：点一下在地图中心放置">
+                            <svg viewBox="0 0 36 24" aria-hidden="true"><circle cx="18" cy="12" r="10"></circle></svg>
+                            <span>圆形</span>
+                        </button>
+                        <button type="button" id="shape-btn-stadium" class="shape-btn" title="操场形：两边半圆中间矩形，点一下在地图中心放置">
+                            <svg viewBox="0 0 36 24" aria-hidden="true"><path d="M10 2h16a10 10 0 0 1 0 20H10a10 10 0 0 1 0-20z"></path></svg>
+                            <span>操场</span>
+                        </button>
+                    </div>
+                    <ul id="shape-list" class="shape-list"></ul>
+                    <div class="form-group">
+                        <label for="shape-spacing">点间距（米）</label>
+                        <input type="number" id="shape-spacing" value="10" min="3" max="100" step="1">
+                    </div>
+                    <div class="btn-group">
+                        <button type="button" id="shape-generate-btn" class="btn btn-primary" disabled>生成轨迹点</button>
+                        <button type="button" id="shape-clear-btn" class="btn btn-secondary" disabled>清空图形</button>
+                    </div>
+                    <p class="hint">点图形即在地图中心放置；拖动移动、拖手柄缩放、拖上方圆点旋转。调整到位后点「生成轨迹点」写入轨迹；多个图形会按放置顺序串成一条环线。</p>
+                </section>
+
                 <!-- 统计 -->
                 <section class="panel-sec">
                     <div class="group-label">统计 STATS</div>

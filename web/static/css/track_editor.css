@@ -359,3 +359,63 @@
     stroke-width: 1.5;
     pointer-events: none;
 }
+
+/* ============================================================
+   侧边栏图形模板区块
+   ============================================================ */
+.shape-picker {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.shape-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 8px 4px;
+    background: var(--surface);
+    border: 1px solid var(--border-2); border-radius: var(--radius-sm);
+    color: var(--text-2);
+    font-size: 11px;
+    cursor: pointer;
+    transition: border-color .12s, color .12s, background .12s;
+}
+.shape-btn svg { width: 100%; height: 24px; }
+.shape-btn svg rect,
+.shape-btn svg circle,
+.shape-btn svg path {
+    fill: rgba(59, 91, 215, .08);
+    stroke: currentColor;
+    stroke-width: 1.5;
+}
+.shape-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.shape-btn:active { background: var(--surface-2); }
+
+.shape-list {
+    list-style: none;
+    display: flex; flex-wrap: wrap; gap: 4px;
+    margin: 0 0 10px;
+}
+.shape-list:empty { display: none; }
+.shape-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 5px 3px 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 999px;
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: border-color .12s, color .12s;
+}
+.shape-chip:hover { border-color: var(--accent); color: var(--text); }
+.shape-chip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.shape-chip-del {
+    display: flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px;
+    border: none; border-radius: 50%;
+    background: transparent;
+    color: var(--text-3);
+    font-size: 12px; line-height: 1;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+}
+.shape-chip-del:hover { background: var(--danger); color: #fff; }

@@ -157,6 +157,26 @@ class AmapAdapter {
         this.map.setZoomAndCenter(zoom, [lng, lat]);
     }
 
+    // ===== 屏幕像素换算（图形层用：容器像素 ↔ 经纬度）=====
+    // 容器像素原点 = #map-amap 左上角；与 #shape-layer 同为 inset:0，坐标可直接共用。
+    latLngToContainer(lat, lng) {
+        const p = this.map.lngLatToContainer([lng, lat]);
+        return { x: p.getX(), y: p.getY() };
+    }
+
+    containerToLatLng(x, y) {
+        const ll = this.map.containerToLngLat(new this._AMap.Pixel(x, y));
+        return { lat: ll.getLat(), lng: ll.getLng() };
+    }
+
+    // 视野变化钩子：AMap 缩放是瞬时切换、没有动画漂移，故不需要遮挡，
+    // onZoomStart / onZoomEnd 由 MapEngine 传空实现。
+    bindViewHooks(hooks) {
+        this.map.on('mapmove', () => hooks.onChange());
+        this.map.on('zoomchange', () => hooks.onChange());
+        this.map.on('viewchange', () => hooks.onChange());
+    }
+
     // 缩放至轨迹覆盖物范围；无覆盖物时回默认中心
     fitTrack(points) {
         if (this.overlays.length > 0) {

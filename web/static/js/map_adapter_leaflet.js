@@ -109,6 +109,30 @@ class LeafletAdapter {
         this.map.flyTo([lat, lng], zoom);
     }
 
+    // ===== 屏幕像素换算（图形层用：容器像素 ↔ 经纬度）=====
+    // 容器像素原点 = #map-leaflet 左上角；#map-leaflet 与 #shape-layer 同为 inset:0，
+    // 故这里返回的坐标可以直接当作 shape-layer 的坐标使用。
+    latLngToContainer(lat, lng) {
+        const p = this.map.latLngToContainerPoint([lat, lng]);
+        return { x: p.x, y: p.y };
+    }
+
+    containerToLatLng(x, y) {
+        const ll = this.map.containerPointToLatLng([x, y]);
+        return { lat: ll.lat, lng: ll.lng };
+    }
+
+    // 视野变化钩子：平移/缩放重绘图形层；缩放动画期间要遮住图形层——
+    // Leaflet 动画中 latLngToContainerPoint 仍返回旧 zoom 的值，不遮会先漂移再跳回
+    bindViewHooks(hooks) {
+        this.map.on('move zoom', () => hooks.onChange());
+        this.map.on('zoomstart', () => hooks.onZoomStart && hooks.onZoomStart());
+        this.map.on('zoomend', () => {
+            if (hooks.onZoomEnd) hooks.onZoomEnd();
+            hooks.onChange();
+        });
+    }
+
     // 缩放至轨迹范围（无点时不动作）；padding 可配——小尺寸地图（预览卡）需更小的内边距
     fitTrack(points, padding = [30, 30]) {
         if (points.length > 0) {

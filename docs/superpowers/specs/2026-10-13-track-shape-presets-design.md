@@ -54,7 +54,9 @@ tests/test_shape_geometry.py      新增  pytest 驱动 Node（无 Node 时跳�
 
 分层原则：**几何与打点全部在 `shape_geometry.js`（纯函数，可测）；DOM 与指针交互全部在 `shape_layer.js`；`track_editor.js` 只做接线**，不出现图形数学。
 
-`shape_geometry.js` 对浏览器与 Node 双用：对外挂全局对象（供 `shape_layer.js` / `track_editor.js` 以 `<script>` 顺序引用），末尾加 `if (typeof module !== 'undefined') module.exports = {...}` 守卫（供 Node 单测 require）。导出：`EARTH_RADIUS_M`、`haversineMeters`、`mPerDegLng`、`makeDefaultShape`、`normalizeShape`、`shapeOutlines`、`shapeToLoop`、`localToGeo`。
+`shape_geometry.js` 对浏览器与 Node 双用：对外挂全局对象（供 `shape_layer.js` / `track_editor.js` 以 `<script>` 顺序引用），末尾加 `if (typeof module !== 'undefined') module.exports = {...}` 守卫（供 Node 单测 require）。导出：`EARTH_RADIUS_M`、`M_PER_DEG_LAT`、`MIN_DIM_M`、`MIN_SPACING`、`MAX_SPACING`、`MAX_POINTS`、`haversineMeters`、`mPerDegLng`、`projectLocal`、`unprojectLocal`、`localToGeo`、`lockDims`、`normalizeShape`、`makeDefaultShape`、`primitiveLength`、`primitivePoint`、`shapeOutlines`、`shapePerimeter`、`shapeToLoop`、`handlePositions`、`HANDLE_OPPOSITE`、`ROTATE_HANDLE_ANGLE`、`rotationFromPointer`、`resizeShape`。
+
+**手柄几何也在本模块**（`handlePositions` / `resizeShape` / `rotationFromPointer`）——它们是纯 2D 数学，不碰 DOM，因此同样走 Node 单测；`shape_layer.js` 只负责像素换算与指针事件接线。
 
 ## 二、几何模型
 
@@ -246,6 +248,8 @@ Leaflet 滚轮/双击缩放有约 250 ms 动画，动画期间 `latLngToContaine
 - 操场：`R = h/2`，`L = w − h`，夹紧 `L ≥ 0`
 
 所有尺寸最后统一夹紧到 `MIN_DIM_M`。
+
+**锚点语义（Word 手感）**：拖动任一手柄时，**对角手柄的地理位置保持不动**，图形向拖动方向生长/收缩（拖过锚点则翻转）。实现为 `resizeShape(snapshot, key, offsetX, offsetY)`：先按锚点求出裁剪前的宽高，再施加类型的尺寸约束（圆锁定、操场 `w ≥ h`），最后用**约束后的**宽高反算中心偏移，保证锚点真的不动。圆形沿用矩形包围盒的 8 个手柄（Word 对圆形图片也是画矩形选择框），不做「手柄落在圆周上」的特例。
 
 手柄与轮廓一起旋转（全部在局部坐标系里算完再旋转平移回像素）。光标按旋转后的方向就近映射到 8 种 resize 光标，旋转手柄用 `grab`。
 

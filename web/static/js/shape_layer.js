@@ -110,6 +110,10 @@ const ShapeLayer = (function () {
     }
 
     function beginDrag(evt) {
+        // 只认左键。右键按住图形会把图形拖走，而且下面的 preventDefault 会吃掉右键菜单；
+        // 中键在本应用里是「临时平移地图」（见 track_editor.js 的 showTempPanUI）。
+        // 两个地图适配器的 mousedown 也做了同样的 button !== 0 过滤，这里保持一致。
+        if (evt.button !== 0) return;
         const handleEl = evt.target.closest ? evt.target.closest('[data-handle-key]') : null;
         const outlineEl = evt.target.closest ? evt.target.closest('[data-shape-id]') : null;
         const id = (handleEl && handleEl.dataset.shapeId) || (outlineEl && outlineEl.dataset.shapeId);
@@ -337,12 +341,19 @@ const ShapeLayer = (function () {
         svgEl.replaceChildren(rootG);
     }
 
-    // 视野变化：缩放没变就只平移（便宜），变了才全量重建
+    // 视野变化：缩放没变就只平移（便宜），变了才全量重建。
+    //
+    // 判据必须用**相对**容差，不能用绝对阈值：computeScale 与视口中心纬度相关
+    // （m/px ∝ cos φ），南北平移 1 px 就让它的相对变化约 8e-8 —— 用 1e-9 的绝对阈值去比，
+    // 任何带南北分量的平移（也就是绝大多数平移）都会被判成「缩放变了」而逐帧全量重建，
+    // 恰好把这条快路径废掉。真正的缩放至少翻倍（相对变化 ≥ 100%），1% 容差足够区分。
+    // 代价：南北长距离平移会累积亚毫米级的投影误差（50 m 半径约 0.8 mm），下一次重建即校正。
     function onViewChange() {
         if (!svgEl) return;
         const next = shapes.length ? shapeCenterPx(shapes[0]) : null;
         const nextScale = computeScale();
-        if (next && originPx && Math.abs(nextScale - scale) < 1e-9) {
+        const scaleStable = scale > 0 && Math.abs(nextScale / scale - 1) < 0.01;
+        if (next && originPx && scaleStable) {
             rootG.setAttribute('transform',
                 `translate(${next.x - originPx.x}, ${next.y - originPx.y})`);
             return;

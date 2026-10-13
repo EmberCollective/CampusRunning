@@ -17,8 +17,6 @@ const MAX_SPACING = 100;  // 点间距上限（米）
 const DEFAULT_SPACING = 10;  // 编辑器默认点间距（米），也是非有限输入的回退值
 const MAX_POINTS = 500;   // 单个图形的点数上限（多图形拼接后总数可超过它）
 
-const NS = 'http://www.w3.org/2000/svg';
-
 // 两点球面距离（米）。原 track_editor.js 的本地副本已收敛到此处，唯一实现。
 function haversineMeters(a, b) {
     const toRad = (deg) => deg * Math.PI / 180;
@@ -71,13 +69,19 @@ const DEFAULT_SIZES = {
 };
 
 // 尺寸约束：先夹紧下限，再按类型锁比例
-//   圆：正圆，宽高强制相等（取较大者）
+//   圆：正圆，宽高强制相等
 //   操场：w = L + h，故 w >= h 等价于直道 L >= 0（w == h 时退化为圆）
-function lockDims(type, width, height) {
+//
+// driven 指出哪一轴真的被拖动驱动：
+//   'both'（默认，normalizeShape 夹紧时用）→ 圆取两轴较大者
+//   'x' / 'y'                            → 只驱动了该轴，圆必须取该轴的尺寸
+// 这个参数是必需的：拖圆形北边中点时 hasX 为 false、width 原样传入 120，
+// 若仍取 Math.max(120, 90) 就还是 120 —— 圆的四个边中点手柄会变成只涨不缩。
+function lockDims(type, width, height, driven = 'both') {
     let w = Math.max(width, MIN_DIM_M);
     let h = Math.max(height, MIN_DIM_M);
     if (type === 'circle') {
-        const d = Math.max(w, h);
+        const d = driven === 'y' ? h : driven === 'x' ? w : Math.max(w, h);
         w = d;
         h = d;
     } else if (type === 'stadium' && h > w) {
@@ -300,7 +304,9 @@ function resizeShape(snapshot, key, offsetX, offsetY) {
     const { width, height } = lockDims(
         s.type,
         hasX ? Math.abs(p.lx - ax) : s.width,
-        hasY ? Math.abs(p.ly - ay) : s.height
+        hasY ? Math.abs(p.ly - ay) : s.height,
+        // 角手柄两轴同时驱动；边中点只有一轴驱动，圆形要靠这个才缩得动
+        hasX && hasY ? 'both' : (hasX ? 'x' : 'y')
     );
 
     const dirX = hasX ? (Math.sign(p.lx - ax) || 1) : 0;

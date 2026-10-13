@@ -511,6 +511,41 @@ test('非有限间距回退到默认 10 m', () => {
     });
 });
 
+// ===== 圆形边中点缩放（code review 发现 1）=====
+section('圆形边中点手柄');
+
+test('圆形的四个边中点手柄都能缩小它', () => {
+    // 回归：lockDims 对圆取 max(w,h)，拖边中点时未驱动的那一轴会顶住结果，
+    // 导致四个边手柄只能放大、永远缩不小（实测四个方向都停在 120）。
+    const cases = [
+        ['n', 0, 30], ['s', 0, -30], ['e', 30, 0], ['w', -30, 0]
+    ];
+    cases.forEach(([k, lx, ly]) => {
+        const r = G.resizeShape(CIRCLE(), k, lx, ly);
+        near(r.width, 90, 1e-6, `拖 ${k} 手柄的直径应为 |指针 − 对侧手柄| = 90`);
+        near(r.height, 90, 1e-6, `拖 ${k} 手柄后仍应是正圆`);
+    });
+});
+
+test('圆形边中点手柄仍能放大（别把缩小修成只能缩）', () => {
+    const r = G.resizeShape(CIRCLE(), 'n', 0, 100);
+    near(r.width, 160, 1e-6, '向外拖应变大到 160');
+});
+
+test('圆形边中点缩放时对侧手柄保持不动', () => {
+    const before = CIRCLE();
+    const anchorBefore = G.localToGeo(before.center, 0, -60, 0);        // 南侧手柄
+    const after = G.resizeShape(before, 'n', 0, 30);
+    const anchorAfter = G.localToGeo(after.center, 0, -after.height / 2, 0);
+    const drift = G.haversineMeters(anchorBefore, anchorAfter);
+    true_(drift < 1e-3, `南侧锚点应保持不动，实际漂移 ${drift} m`);
+});
+
+test('圆形角手柄仍取两轴较大者（两轴同时驱动）', () => {
+    const r = G.resizeShape(CIRCLE(), 'se', 100, -100);
+    near(r.width, 160, 1e-6, '角手柄向外 160');
+});
+
 // ===== 汇总 =====
 console.log(`\n${passed} 个用例通过，${failed} 个失败`);
 if (failed > 0) process.exitCode = 1;

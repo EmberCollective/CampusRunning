@@ -190,6 +190,7 @@ async function loadTrackById(id) {
         document.getElementById('track-name').value = data.name || '';
         document.getElementById('track-desc').value = data.description || '';
 
+        ShapeLayer.clear();   // 换轨迹时清掉上一个轨迹留下的图形层
         clearHistory();
         renderTrack();
         if (points.length > 0) {
@@ -210,6 +211,7 @@ function handleNew() {
     document.getElementById('track-id').value = '';
     document.getElementById('track-name').value = '';
     document.getElementById('track-desc').value = '';
+    ShapeLayer.clear();   // 清掉残留的图形层，避免"空白画布上还浮着一个操场"
     clearHistory();
     renderTrack();
     updateCorrectionNote();

@@ -343,6 +343,152 @@ test('未规范化的过小图形也能正常打点', () => {
     true_(loop.length >= 3, `至少 3 点，实际 ${loop.length}`);
 });
 
+// ===== 手柄几何与变换 =====
+section('手柄几何与变换');
+
+test('handlePositions 返回 8 个手柄，矩形按包围盒分布', () => {
+    const hs = G.handlePositions(RECT());
+    true_(hs.length === 8, '应为 8 个手柄，实际 ' + hs.length);
+    const byKey = Object.fromEntries(hs.map((h) => [h.key, h]));
+    near(byKey.nw.lx, -50, 1e-9, 'nw.lx');
+    near(byKey.nw.ly, 30, 1e-9, 'nw.ly');
+    near(byKey.se.lx, 50, 1e-9, 'se.lx');
+    near(byKey.se.ly, -30, 1e-9, 'se.ly');
+    near(byKey.n.lx, 0, 1e-9, 'n.lx');
+    near(byKey.n.ly, 30, 1e-9, 'n.ly');
+    near(byKey.w.lx, -50, 1e-9, 'w.lx');
+    near(byKey.w.ly, 0, 1e-9, 'w.ly');
+});
+
+test('圆形使用矩形包围盒手柄（与 Word 图片选择框一致）', () => {
+    const byKey = Object.fromEntries(G.handlePositions(CIRCLE()).map((h) => [h.key, h]));
+    near(byKey.nw.lx, -60, 1e-9, 'nw.lx');
+    near(byKey.nw.ly, 60, 1e-9, 'nw.ly');
+    near(byKey.e.lx, 60, 1e-9, 'e.lx');
+});
+
+test('HANDLE_OPPOSITE 覆盖全部 8 个手柄且互为逆', () => {
+    G.HANDLE_KEYS.forEach((k) => {
+        const opp = G.HANDLE_OPPOSITE[k];
+        true_(!!opp, k + ' 应有对角手柄');
+        true_(G.HANDLE_OPPOSITE[opp] === k, k + ' 与 ' + opp + ' 应互为逆');
+    });
+});
+
+// 锚点容差 1 mm：经纬度是球面坐标，mPerDegLng 随纬度变化，
+// 中心南北移动后用同一个局部偏移换算出的经度会有亚毫米级差异（实测 2.7e-5 m）。
+// 纬度方向是精确固定的；经度方向的这点漂移在任何缩放下都不可见，属模型固有精度而非缺陷。
+const ANCHOR_TOL_M = 1e-3;
+
+test('拖 se 手柄时，nw 角的地理位置保持不动（Word 锚点手感）', () => {
+    const before = RECT();
+    const anchorLocal = G.handlePositions(before).find((h) => h.key === 'nw');
+    const anchorBefore = G.localToGeo(before.center, anchorLocal.lx, anchorLocal.ly, before.rotation);
+    const after = G.resizeShape(before, 'se', 20, -10);   // 指针在中心东南 20/10 m
+    const anchorLocalAfter = G.handlePositions(after).find((h) => h.key === 'nw');
+    const anchorAfter = G.localToGeo(after.center, anchorLocalAfter.lx, anchorLocalAfter.ly, after.rotation);
+    const drift = G.haversineMeters(anchorBefore, anchorAfter);
+    true_(drift < ANCHOR_TOL_M, `锚点应保持不动，实际漂移 ${drift} m`);
+    // 纬度方向必须精确固定（中心南北位移不该影响锚点纬度）
+    near(anchorAfter.lat, anchorBefore.lat, 1e-12, '锚点纬度');
+});
+
+test('向右下拖 se 手柄把宽高改成 2 倍偏移', () => {
+    const after = G.resizeShape(RECT(), 'se', 80, -50);
+    near(after.width, 130, 1e-6, 'width');    // |80 - (-50)| = 130
+    near(after.height, 80, 1e-6, 'height');   // |-50 - 30| = 80
+});
+
+test('拖 e 手柄只改宽度，高度不变', () => {
+    const after = G.resizeShape(RECT(), 'e', 90, 999);
+    near(after.width, 140, 1e-6, 'width');
+    near(after.height, 60, 1e-6, 'height 应保持不变');
+});
+
+test('拖 n 手柄只改高度，宽度不变', () => {
+    const after = G.resizeShape(RECT(), 'n', 999, 60);
+    near(after.width, 100, 1e-6, 'width 应保持不变');
+    near(after.height, 90, 1e-6, 'height = |60 − (−30)| = 90');
+});
+
+test('拖过锚点时图形翻转（宽高仍为正）', () => {
+    const after = G.resizeShape(RECT(), 'e', -70, 0);
+    true_(after.width > 0 && after.height > 0, '宽高必须为正');
+    near(after.width, 20, 1e-6, 'width');     // |-70 - (-50)| = 20
+});
+
+test('缩放夹紧到 MIN_DIM_M，不塌成一点', () => {
+    // 指针几乎贴在锚点 nw(-50, 30) 上：raw 宽高只有 0.1 m，必须被夹到 5 m
+    const after = G.resizeShape(RECT(), 'se', -49.9, 29.9);
+    near(after.width, G.MIN_DIM_M, 1e-9, 'width');
+    near(after.height, G.MIN_DIM_M, 1e-9, 'height');
+});
+
+test('圆形缩放后仍是正圆（宽高相等）', () => {
+    const after = G.resizeShape(CIRCLE(), 'e', 100, 0);
+    near(after.width, after.height, 1e-9, '宽高应相等');
+    true_(after.width > 0, '直径为正');
+});
+
+test('操场纵向拉高超过宽度时退化为圆（直道为 0）', () => {
+    const after = G.resizeShape(STADIUM(), 'n', 0, 200);
+    near(after.width, after.height, 1e-6, '宽度应被抬到等于高度');
+});
+
+test('操场横向拖动改变直道长度，弯道半径不变', () => {
+    // 锚点是西边界 x = −157.39/2 = −78.695，新宽 = 指针 x − 西边界 x = 120 + 78.695
+    const after = G.resizeShape(STADIUM(), 'e', 120, 0);
+    near(after.height, 73, 1e-6, '半径不变（高度不变）');
+    near(after.width, 120 + 157.39 / 2, 1e-6, '总宽 = 指针 x − 西边界 x');
+});
+
+test('resizeShape 不修改入参快照', () => {
+    const snapshot = RECT();
+    G.resizeShape(snapshot, 'se', 80, -50);
+    near(snapshot.width, 100, 1e-9, '快照 width 不得被改动');
+    near(snapshot.height, 60, 1e-9, '快照 height 不得被改动');
+});
+
+test('rotationFromPointer：手柄正北时为 0，正西时为 +90 度，正南为 ±180 度', () => {
+    near(G.rotationFromPointer(0, 100), 0, 1e-9, '正北');
+    near(G.rotationFromPointer(-100, 0), Math.PI / 2, 1e-9, '正西');
+    // 正南返回 -π（与 +π 等价，旋转本就是模 2π 的），故比较绝对值
+    near(Math.abs(G.rotationFromPointer(0, -100)), Math.PI, 1e-9, '正南');
+});
+
+test('rotationFromPointer 接受自定义抓取方位，避免按下瞬间跳转', () => {
+    // 用户抓在东北 45 度处：此时应保持 rotation 为 0，而不是跳到 -45 度
+    const bearing = Math.PI / 4;
+    near(G.rotationFromPointer(Math.cos(bearing) * 80, Math.sin(bearing) * 80, bearing), 0, 1e-9, '抓取方位自洽');
+    // 指针再转到正北：相对抓取方位转过了 45 度
+    near(G.rotationFromPointer(0, 80, bearing), Math.PI / 4, 1e-9, '转过 45 度');
+});
+
+test('旋转后手柄的东/北向偏移随之改变', () => {
+    const before = RECT();
+    const after = { ...before, rotation: G.rotationFromPointer(70, 70) };   // 转 -45 度
+    const eastBefore = G.handlePositions(before).find((h) => h.key === 'e');
+    const eastAfter = G.handlePositions(after).find((h) => h.key === 'e');
+    // handlePositions 返回的局部坐标不含旋转，旋转体现在 projectLocal 上
+    near(G.projectLocal(before, eastBefore.lx, eastBefore.ly).x, 50, 1e-9, '旋转前 e 的正东偏移');
+    const rotated = G.projectLocal(after, eastAfter.lx, eastAfter.ly);
+    near(rotated.x, 50 * Math.cos(-Math.PI / 4), 1e-6, '旋转后正东偏移被投影缩短');
+    near(rotated.y, 50 * Math.sin(-Math.PI / 4), 1e-6, '旋转后出现南北分量');
+});
+
+test('已旋转的图形仍能正确按锚点缩放', () => {
+    const before = { ...RECT(), rotation: Math.PI / 4 };
+    const anchorLocal = G.handlePositions(before).find((h) => h.key === 'sw');
+    const anchorBefore = G.localToGeo(before.center, anchorLocal.lx, anchorLocal.ly, before.rotation);
+    const after = G.resizeShape(before, 'ne', 40, 40);
+    const anchorAfterLocal = G.handlePositions(after).find((h) => h.key === 'sw');
+    const anchorAfter = G.localToGeo(after.center, anchorAfterLocal.lx, anchorAfterLocal.ly, after.rotation);
+    const drift = G.haversineMeters(anchorBefore, anchorAfter);
+    true_(drift < ANCHOR_TOL_M, `旋转后锚点仍应固定，实际漂移 ${drift} m`);
+    // 旋转 45 度后锚点不在正南北向，两轴都会有一点球面换算漂移，但量级仍须远小于 1 mm
+    true_(drift < 1e-4, `旋转情形漂移应更小，实际 ${drift} m`);
+});
+
 // ===== 汇总 =====
 console.log(`\n${passed} 个用例通过，${failed} 个失败`);
 if (failed > 0) process.exitCode = 1;

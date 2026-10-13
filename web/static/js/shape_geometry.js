@@ -229,13 +229,92 @@ function shapeToLoop(shape, spacing) {
     return loop;
 }
 
+// ===== 手柄几何与变换（设计文档 §5.1）=====
+//
+// 8 个缩放手柄固定按图形**包围盒**分布——圆形也不例外，与 Word 对图片画的矩形选择框一致。
+// 旋转手柄不在这 8 个之内：它位于局部 +y（正北）方向、包围盒之外 28 px 处，
+// 28 px 需要 scale 才能换算成米，故由 shape_layer.js 负责定位；本模块只提供角度常量。
+
+const HANDLE_KEYS = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+
+// 对角手柄：拖动时以它为锚点（Word 手感），它的地理位置保持不动
+const HANDLE_OPPOSITE = {
+    nw: 'se', n: 's', ne: 'sw', e: 'w',
+    se: 'nw', s: 'n', sw: 'ne', w: 'e'
+};
+
+const ROTATE_HANDLE_ANGLE = Math.PI / 2;   // 旋转手柄在正北方向
+
+function handlePositions(shape) {
+    const s = normalizeShape(shape);
+    const x = s.width / 2;
+    const y = s.height / 2;
+    return [
+        { key: 'nw', lx: -x, ly: y },
+        { key: 'n', lx: 0, ly: y },
+        { key: 'ne', lx: x, ly: y },
+        { key: 'e', lx: x, ly: 0 },
+        { key: 'se', lx: x, ly: -y },
+        { key: 's', lx: 0, ly: -y },
+        { key: 'sw', lx: -x, ly: -y },
+        { key: 'w', lx: -x, ly: 0 }
+    ];
+}
+
+// 指针方位 → 新 rotation。
+//
+// grabBearing 是「按下瞬间指针的方位角」，默认值即旋转手柄自身的固定方位（正北）。
+// 用户可能抓在旋转圆点的任意位置，传入实际抓取方位才能在按下瞬间不跳转；
+// 只抓在正上方时用默认值即可。
+function rotationFromPointer(offsetX, offsetY, grabBearing = ROTATE_HANDLE_ANGLE) {
+    return Math.atan2(offsetY, offsetX) - grabBearing;
+}
+
+// 拖动手柄缩放。offsetX/offsetY 是指针相对 snapshot.center 的「东/北」偏移（米）。
+//
+// 算法（顺序很重要）：
+//   1. 把指针偏移逆旋转到快照局部坐标系
+//   2. 以对角手柄为锚点，算出裁剪前的宽高
+//   3. 施加类型尺寸约束（圆锁定、操场 w >= h）
+//   4. 用**约束后**的宽高反算中心偏移，锚点才真的不动
+// 第 4 步若用约束前的宽高，圆形/操场的锚点会漂——这是本函数唯一的坑。
+function resizeShape(snapshot, key, offsetX, offsetY) {
+    const s = normalizeShape(snapshot);
+    const hasX = key === 'e' || key === 'w' || key.length === 2;
+    const hasY = key === 'n' || key === 's' || key.length === 2;
+
+    const anchor = handlePositions(s).find((h) => h.key === HANDLE_OPPOSITE[key]);
+    if (!anchor) throw new Error('未知手柄: ' + key);
+
+    const p = unprojectLocal(s, offsetX, offsetY);
+    const ax = hasX ? anchor.lx : 0;
+    const ay = hasY ? anchor.ly : 0;
+
+    const { width, height } = lockDims(
+        s.type,
+        hasX ? Math.abs(p.lx - ax) : s.width,
+        hasY ? Math.abs(p.ly - ay) : s.height
+    );
+
+    const dirX = hasX ? (Math.sign(p.lx - ax) || 1) : 0;
+    const dirY = hasY ? (Math.sign(p.ly - ay) || 1) : 0;
+    const shift = projectLocal(s, hasX ? ax + dirX * width / 2 : 0, hasY ? ay + dirY * height / 2 : 0);
+
+    const center = {
+        lat: s.center.lat + shift.y / M_PER_DEG_LAT,
+        lng: s.center.lng + shift.x / mPerDegLng(s.center.lat)
+    };
+    return normalizeShape({ ...s, width, height, center });
+}
+
 // Node 单测入口（浏览器下 module 未定义，整块跳过）
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         EARTH_RADIUS_M, M_PER_DEG_LAT, MIN_DIM_M, MIN_SPACING, MAX_SPACING, MAX_POINTS,
         haversineMeters, mPerDegLng, projectLocal, unprojectLocal, localToGeo,
         lockDims, normalizeShape, makeDefaultShape,
-        shapeOutlines, primitiveLength, primitivePoint, shapePerimeter,
-        shapeToLoop
+        shapeOutlines, primitiveLength, primitivePoint, shapePerimeter, shapeToLoop,
+        HANDLE_KEYS, HANDLE_OPPOSITE, ROTATE_HANDLE_ANGLE,
+        handlePositions, rotationFromPointer, resizeShape
     };
 }

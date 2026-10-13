@@ -46,6 +46,10 @@ const HANDLERS = {
     onMapClick() {
         // 加点已改由 onMapMouseDown 承担：click 在按下后移动（地图拖动平移）时被引擎抑制，
         // 会导致"按住左键稍一动点就丢"；这里保留空实现避免适配器侧再加一条加点路径
+        //
+        // 借这个已在两个适配器接好的回调做「点地图空白取消选中图形」：
+        // 图形层 SVG 只在有图形的地方开启 pointer-events，点空白处事件落到地图容器上
+        ShapeLayer.select(null);
     },
     onMapMouseDown(pt) {
         // 仅画笔模式下左键按下即加点（按下瞬间完成，之后拖动平移地图也不丢点）

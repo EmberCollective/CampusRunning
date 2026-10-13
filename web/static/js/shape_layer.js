@@ -90,6 +90,137 @@ const ShapeLayer = (function () {
         return pts;
     }
 
+    // ---------- 指针交互 ----------
+    //
+    // 一次拖拽的完整状态：drag 为 null 表示未在拖拽。
+    // 所有几何计算都在拖拽开始时对 snapshot 做，指针移动只重算「相对 snapshot」的结果，
+    // 避免逐帧累积误差（连续 apply 会让浮点误差滚雪球）。
+    let drag = null;
+    // drag = {
+    //   mode: 'move' | 'resize' | 'rotate',
+    //   shapeId, key, snapshot,          // snapshot 是拖拽开始时的图形快照
+    //   grabLocal: {lx, ly} | null,      // move 模式：抓取点相对中心的局部坐标（米）
+    //   grabBearing: number | null       // rotate 模式：按下瞬间的指针方位角，用于去除起始抖动
+    // }
+
+    function pointerStagePos(evt) {
+        const rect = mapStageEl.getBoundingClientRect();
+        return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+    }
+
+    function beginDrag(evt) {
+        const handleEl = evt.target.closest ? evt.target.closest('[data-handle-key]') : null;
+        const outlineEl = evt.target.closest ? evt.target.closest('[data-shape-id]') : null;
+        const id = (handleEl && handleEl.dataset.shapeId) || (outlineEl && outlineEl.dataset.shapeId);
+        if (!id) return;
+        const shape = findShape(id);
+        if (!shape) return;
+
+        // 命中图形即选中（含点未选中图形直接开拖的场景）
+        if (selected !== id) {
+            selected = id;
+            rebuild();
+            notify();
+        }
+
+        const pos = pointerStagePos(evt);
+        const centerPx = shapeCenterPx(shape);
+        const offset = stageToOffset(centerPx, pos.x, pos.y);
+        const key = handleEl ? handleEl.dataset.handleKey : null;
+        const snapshot = { ...shape, center: { ...shape.center } };
+
+        if (key === 'rotate') {
+            // 记下按下瞬间的指针方位：用户可能抓在旋转圆点的任意位置，
+            // 用它作为基准才能保证按下不跳转（rotationFromPointer 的第三个参数）
+            drag = {
+                mode: 'rotate', shapeId: id, key, snapshot,
+                grabLocal: null, grabBearing: Math.atan2(offset.y, offset.x) - shape.rotation
+            };
+        } else if (key) {
+            drag = { mode: 'resize', shapeId: id, key, snapshot, grabLocal: null, grabBearing: null };
+        } else {
+            drag = {
+                mode: 'move', shapeId: id, key: null, snapshot,
+                grabLocal: unprojectLocal(shape, offset.x, offset.y), grabBearing: null
+            };
+        }
+
+        evt.preventDefault();
+        evt.stopPropagation();
+        if (evt.target.setPointerCapture) evt.target.setPointerCapture(evt.pointerId);
+    }
+
+    function updateDrag(evt) {
+        if (!drag) return;
+        const pos = pointerStagePos(evt);
+        const snap = drag.snapshot;
+        let next = null;
+
+        if (drag.mode === 'move') {
+            const geo = MapEngine.containerToLatLng(pos.x, pos.y);
+            // 新中心 = 指针地理坐标 − 抓取点相对中心的旋转后偏移
+            const shift = projectLocal(snap, drag.grabLocal.lx, drag.grabLocal.ly);
+            next = {
+                ...snap,
+                center: {
+                    lat: geo.lat - shift.y / M_PER_DEG_LAT,
+                    lng: geo.lng - shift.x / mPerDegLng(geo.lat)
+                }
+            };
+        } else if (drag.mode === 'resize') {
+            const centerPx = shapeCenterPx(snap);
+            const offset = stageToOffset(centerPx, pos.x, pos.y);
+            next = resizeShape(snap, drag.key, offset.x, offset.y);
+        } else {
+            const centerPx = shapeCenterPx(snap);
+            const offset = stageToOffset(centerPx, pos.x, pos.y);
+            // 第三参数传抓取时的方位，避免按下瞬间图形「跳」到指针方向
+            next = { ...snap, rotation: rotationFromPointer(offset.x, offset.y, drag.grabBearing) };
+        }
+
+        shapes = shapes.map((s) => (s.id === drag.shapeId ? normalizeShape(next) : s));
+        rebuild();
+        evt.preventDefault();
+    }
+
+    function endDrag(evt) {
+        if (!drag) return;
+        drag = null;
+        rebuild();
+        notify();
+        if (evt && evt.target && evt.target.releasePointerCapture && evt.pointerId !== undefined) {
+            try {
+                evt.target.releasePointerCapture(evt.pointerId);
+            } catch (e) {
+                // 指针已释放，忽略
+            }
+        }
+    }
+
+    // 键盘：Esc 取消选中，Delete/Backspace 删除选中图形
+    // （点地图空白取消选中走的不是这里——图形层 SVG 只在有图形处开启 pointer-events，
+    //   点空白时事件落到地图容器上，由 track_editor.js 的 onMapClick 转达）
+    function handleKeydown(evt) {
+        if (evt.target.closest && evt.target.closest('input, textarea, select')) return;
+        if (evt.key === 'Escape') {
+            if (selected) {
+                selected = null;
+                rebuild();
+                notify();
+            }
+            return;
+        }
+        if (evt.key === 'Delete' || evt.key === 'Backspace') {
+            if (!selected) return;
+            evt.preventDefault();
+            const id = selected;
+            shapes = shapes.filter((s) => s.id !== id);
+            selected = null;
+            rebuild();
+            notify();
+        }
+    }
+
     // ---------- 渲染 ----------
 
     // 轮廓多边形。必须**单趟按基元顺序**取点：分两趟（先取所有基元的端点、再补圆弧采样）
@@ -229,6 +360,12 @@ const ShapeLayer = (function () {
                 onZoomStart: () => setZoomHidden(true),
                 onZoomEnd: () => setZoomHidden(false)
             });
+            // 指针事件绑在宿主 div 上：SVG 内元素只负责提供 data-* 命中信息
+            host.addEventListener('pointerdown', beginDrag);
+            host.addEventListener('pointermove', updateDrag);
+            host.addEventListener('pointerup', endDrag);
+            host.addEventListener('pointercancel', endDrag);
+            document.addEventListener('keydown', handleKeydown);
         },
 
         add(type) {

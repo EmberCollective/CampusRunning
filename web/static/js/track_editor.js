@@ -293,6 +293,7 @@ function handleShapeGenerate() {
     pushUndo();
     points = generated.map((p) => ({ lat: p.lat, lng: p.lng }));
     renderTrack();
+    ShapeLayer.finishEditing();
     showMessage(`已从 ${shapes.length} 个图形生成 ${points.length} 个轨迹点`, 'success');
 }
 

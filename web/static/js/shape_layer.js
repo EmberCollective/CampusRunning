@@ -24,6 +24,7 @@ const ShapeLayer = (function () {
     let pointSpacing = 10;          // 点间距（米）
     let scale = 1;                  // 像素 / 米
     let originPx = null;            // 上次全量重建时 shapes[0] 中心的像素坐标（平移偏移的基准）
+    let renderedSize = null;        // 尺寸变化不能走仅平移快路径，否则 SVG 会继续裁剪旧视口
     let changeCallbacks = [];
     let seq = 0;                    // id 自增序号
 
@@ -308,6 +309,7 @@ const ShapeLayer = (function () {
     function rebuild() {
         if (!svgEl) return;
         const { w, h } = stageSize();
+        renderedSize = { w, h };
         svgEl.setAttribute('width', w);
         svgEl.setAttribute('height', h);
         scale = computeScale();
@@ -350,6 +352,12 @@ const ShapeLayer = (function () {
     // 代价：南北长距离平移会累积亚毫米级的投影误差（50 m 半径约 0.8 mm），下一次重建即校正。
     function onViewChange() {
         if (!svgEl) return;
+        MapEngine.mountOverlay(hostEl);
+        const size = stageSize();
+        if (!renderedSize || size.w !== renderedSize.w || size.h !== renderedSize.h) {
+            rebuild();
+            return;
+        }
         const next = shapes.length ? shapeCenterPx(shapes[0]) : null;
         const nextScale = computeScale();
         const scaleStable = scale > 0 && Math.abs(nextScale / scale - 1) < 0.01;
@@ -372,6 +380,7 @@ const ShapeLayer = (function () {
             if (svgEl) return;
             const host = document.getElementById('shape-layer');
             hostEl = host;
+            MapEngine.mountOverlay(host);
             svgEl = el('svg', {}, 'shape-svg');
             host.appendChild(svgEl);
             rebuild();
@@ -385,6 +394,11 @@ const ShapeLayer = (function () {
             host.addEventListener('pointermove', updateDrag);
             host.addEventListener('pointerup', endDrag);
             host.addEventListener('pointercancel', endDrag);
+            // 左键图形编辑不能触发底图取消选中/双击缩放；滚轮和中键保留原生冒泡。
+            ['click', 'dblclick'].forEach((type) => host.addEventListener(type, (evt) => {
+                if (evt.button === 0) evt.stopPropagation();
+            }));
+            new ResizeObserver(() => rebuild()).observe(mapStageEl);
             document.addEventListener('keydown', handleKeydown);
         },
 
@@ -398,6 +412,7 @@ const ShapeLayer = (function () {
 
         addAt(type, center) {
             if (!MapEngine.isReady()) return null;   // 直接调 addAt 的调用方同样兜底
+            if (hostEl) hostEl.classList.remove('is-editing-hidden');
             seq += 1;
             const id = `shape-${Date.now()}-${seq}`;
             shapes.push(normalizeShape(makeDefaultShape(type, center, id)));
@@ -423,6 +438,7 @@ const ShapeLayer = (function () {
         },
 
         select(id) {
+            if (id !== null && hostEl) hostEl.classList.remove('is-editing-hidden');
             if (selected === id) return;
             selected = id;
             rebuild();
@@ -431,6 +447,14 @@ const ShapeLayer = (function () {
 
         selectedId() {
             return selected;
+        },
+
+        // 生成后保留模板模型，退出命中层以便立即编辑轨迹；点 chip 可恢复模板编辑。
+        finishEditing() {
+            selected = null;
+            if (hostEl) hostEl.classList.add('is-editing-hidden');
+            rebuild();
+            notify();
         },
 
         shapes() {
@@ -454,10 +478,6 @@ const ShapeLayer = (function () {
                 shapeToLoop(shape, pointSpacing).forEach((p) => out.push(p));
             });
             return out;
-        },
-
-        redraw() {
-            rebuild();
         },
 
         onChange(cb) {

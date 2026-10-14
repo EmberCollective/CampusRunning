@@ -185,6 +185,12 @@ const MapEngine = {
         return this.activeAdapter().containerToLatLng(x, y);
     },
 
+    // 覆盖层放在活跃地图内，让滚轮和中键沿原生事件路径交给地图引擎。
+    mountOverlay(element) {
+        const container = this.activeAdapter().map.getContainer();
+        if (element.parentNode !== container) container.appendChild(element);
+    },
+
     // ===== 切换按钮 =====
     _bindSwitchButtons() {
         ['classic', 'fresh', 'satellite', 'amap'].forEach((mode) => {

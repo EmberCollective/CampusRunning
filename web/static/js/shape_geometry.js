@@ -204,11 +204,12 @@ function shapePerimeter(shape) {
 
 // ===== 按间距打点（设计文档 §3.2 / §3.3）=====
 //
-//   每段采样数 n = max(1, round(段长 / 间距))，取 t = 0, 1/n, …, (n-1)/n
+//   非零段按 round(段长 / 间距) 采样，取 t = 0, 1/n, …, (n-1)/n
+//   直线至少 1 点，半圆至少 2 点，整圆至少 3 点，避免闭环退化成点或直线。
 //   取 n 个点而不含 t = 1，避免与下一段的首点重复
 //
 // 这个式子保证：① 顶点与切点必然落在点上（矩形四角、操场直道与弯道切点都是某段的 t = 0）；
-// ② 点数严格随尺寸线性增长；③ 每段至少 1 点，不会出现空段。
+// ② 点数按尺寸与目标间距增长；③ 零长直道不采样，避免退化操场的切点重复。
 //
 // 点数封顶：先夹紧间距到 [MIN_SPACING, MAX_SPACING]，再按周长抬高间距，
 // 保证手滑拖出极大图形（或把间距拉到 3 m）也不会生成上万点。
@@ -218,8 +219,9 @@ function shapePerimeter(shape) {
 // 结果是**静默**返回 0 个点 —— 不报错、界面上什么都不发生，最难排查的那类失败。
 function shapeToLoop(shape, spacing) {
     const s = normalizeShape(shape);
-    const prims = shapeOutlines(s);
-    const perimeter = prims.reduce((sum, p) => sum + primitiveLength(p), 0);
+    const prims = shapeOutlines(s).filter((p) => primitiveLength(p) > 0);
+    const lengths = prims.map(primitiveLength);
+    const perimeter = lengths.reduce((sum, length) => sum + length, 0);
 
     const raw = Number(spacing);
     const requested = Number.isFinite(raw) ? raw : DEFAULT_SPACING;
@@ -228,10 +230,26 @@ function shapeToLoop(shape, spacing) {
         effective = perimeter / MAX_POINTS;
     }
 
+    const minimums = prims.map((p) => p.kind === 'arc'
+        ? Math.ceil(Math.abs(p.sweep) / Math.PI) + 1 : 1);
+    const targets = lengths.map((length) => length / effective);
+    const counts = targets.map((target, i) => Math.max(minimums[i], Math.round(target)));
+    // 各段独立四舍五入可能使总数超过 500。只回收超出预算的点，优先调整
+    // 超过理想配额最多的段；保留每段起点及圆弧最低采样数，角点/切点不会丢失。
+    let excess = counts.reduce((sum, count) => sum + count, 0) - MAX_POINTS;
+    while (excess > 0) {
+        let candidate = -1;
+        counts.forEach((count, i) => {
+            if (count > minimums[i] && (candidate < 0 ||
+                count - targets[i] > counts[candidate] - targets[candidate])) candidate = i;
+        });
+        counts[candidate] -= 1;
+        excess -= 1;
+    }
+
     const loop = [];
-    prims.forEach((p) => {
-        const len = primitiveLength(p);
-        const n = Math.max(1, Math.round(len / effective));
+    prims.forEach((p, index) => {
+        const n = counts[index];
         for (let i = 0; i < n; i++) {
             const local = primitivePoint(p, i / n);
             loop.push(localToGeo(s.center, local.x, local.y, s.rotation));

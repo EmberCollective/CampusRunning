@@ -546,6 +546,72 @@ test('圆形角手柄仍取两轴较大者（两轴同时驱动）', () => {
     near(r.width, 160, 1e-6, '角手柄向外 160');
 });
 
+// ===== 闭环退化与严格点数预算 =====
+section('闭环退化与严格点数预算');
+
+function assertValidLoop(loop, label) {
+    true_(loop.length >= 3, label + ' 至少三个点');
+    loop.forEach((point, i) => {
+        true_(Number.isFinite(point.lat) && Number.isFinite(point.lng), label + ' 坐标有限');
+        true_(G.haversineMeters(point, loop[(i + 1) % loop.length]) > 1e-6,
+            label + ' 不含重复相邻点或重复首尾点');
+    });
+    // 平移到首点附近计算面积，避免经纬度绝对值引起的浮点抵消。
+    const origin = loop[0];
+    const area = loop.reduce((sum, p, i) => {
+        const q = loop[(i + 1) % loop.length];
+        return sum + (p.lng - origin.lng) * (q.lat - origin.lat)
+            - (q.lng - origin.lng) * (p.lat - origin.lat);
+    }, 0);
+    true_(Math.abs(area) > 1e-12, label + ' 不退化为直线');
+}
+
+test('最小圆与大间距组合仍生成可保存的有效闭环', () => {
+    for (const width of [5, 10, 50]) {
+        for (const spacing of [10, 100]) {
+            const loop = G.shapeToLoop({ ...CIRCLE(), width, height: width }, spacing);
+            assertValidLoop(loop, `圆 ${width}m @${spacing}m`);
+        }
+    }
+});
+
+test('操场退化为圆时跳过零长直道，且半圆保留中间点', () => {
+    for (const width of [5, 10, 120]) {
+        for (const spacing of [10, 100]) {
+            const loop = G.shapeToLoop({ ...STADIUM(), width, height: width }, spacing);
+            assertValidLoop(loop, `退化操场 ${width}m @${spacing}m`);
+        }
+    }
+    near(G.shapeToLoop({ ...STADIUM(), width: 120, height: 120 }, 10).length, 38, 0,
+        '零长直道不额外产生两个切点');
+});
+
+test('不对称大矩形严格遵守500点上限且保留四个角', () => {
+    for (const [width, height] of [[1003, 177], [1007, 53], [1020, 180], [5000, 5]]) {
+        const shape = { ...RECT(), width, height };
+        const loop = G.shapeToLoop(shape, 3);
+        true_(loop.length <= G.MAX_POINTS, `${width}×${height} 实际 ${loop.length} 点`);
+        assertValidLoop(loop, '大矩形');
+        G.shapeOutlines(shape).forEach((p) => {
+            const corner = G.localToGeo(shape.center, p.from.x, p.from.y, shape.rotation);
+            true_(loop.some((q) => G.haversineMeters(corner, q) < 1e-6), '保留矩形角点');
+        });
+    }
+});
+
+test('大操场严格遵守500点上限且保留直道弯道切点', () => {
+    for (const [width, height] of [[5000, 5], [5000, 73], [5000, 5000]]) {
+        const shape = { ...STADIUM(), width, height };
+        const loop = G.shapeToLoop(shape, 3);
+        true_(loop.length <= G.MAX_POINTS, `操场 ${width}×${height} 实际 ${loop.length} 点`);
+        assertValidLoop(loop, '大操场');
+        G.shapeOutlines(shape).forEach((p) => {
+            const tangent = G.localToGeo(shape.center, p.from.x, p.from.y, shape.rotation);
+            true_(loop.some((q) => G.haversineMeters(tangent, q) < 1e-6), '保留操场切点');
+        });
+    }
+});
+
 // ===== 汇总 =====
 console.log(`\n${passed} 个用例通过，${failed} 个失败`);
 if (failed > 0) process.exitCode = 1;

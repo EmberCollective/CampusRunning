@@ -51,6 +51,7 @@ const MapEngine = {
     adapters: { leaflet: null, amap: null },  // amap 懒建（需 Key + 在线加载）
     loading: false,                // 官方引擎加载防重入
     _dragEnabled: true,            // 拖动平移状态（画笔工具禁用），切换档位后需重放
+    _viewHooks: null,              // 图形层注册的视野钩子（切档时重绑）
 
     async init() {
         // 先从服务器加载高德 Key 配置
@@ -84,6 +85,7 @@ const MapEngine = {
         this.mode = mode;
         this._updateSwitchStates();
         renderTrack();  // 后台引擎覆盖物不维护，切换后必须重渲染
+        this._bindViewHooksToActive();   // 图形层跟随新引擎重新定位
     },
 
     async _switchToAmap() {
@@ -103,6 +105,7 @@ const MapEngine = {
             this.mode = 'amap';
             this._updateSwitchStates();
             renderTrack();
+            this._bindViewHooksToActive();
             return;
         }
 
@@ -119,6 +122,7 @@ const MapEngine = {
             this.mode = 'amap';
             this._updateSwitchStates();
             renderTrack();
+            this._bindViewHooksToActive();
         } catch (error) {
             showMessage('官方地图加载失败：' + (error && error.message ? error.message : error), 'error');
             this._updateSwitchStates();
@@ -149,6 +153,42 @@ const MapEngine = {
     setDragEnabled(enabled) {
         this._dragEnabled = enabled;
         this.activeAdapter().setDragEnabled(enabled);
+    },
+
+    // ===== 图形层用的像素换算与视野钩子（转发到当前活跃引擎）=====
+    // 钩子只注册一次，切换到新适配器时必须重新绑定，否则切档后图形不再跟随视野；
+    // 重绑后立刻补一次 onChange，让图形在新引擎下重新定位。
+    bindViewHooks(hooks) {
+        this._viewHooks = hooks;
+        this._bindViewHooksToActive();
+    },
+
+    _bindViewHooksToActive() {
+        if (!this._viewHooks) return;
+        this.activeAdapter().bindViewHooks(this._viewHooks);
+        this._viewHooks.onChange();
+    },
+
+    latLngToContainer(lat, lng) {
+        return this.activeAdapter().latLngToContainer(lat, lng);
+    },
+
+    // 当前活跃引擎是否已就绪。init() 是异步的（开头要拉一次高德 Key 配置），
+    // 在那之前 activeAdapter() 返回 null —— 而侧边栏的图形按钮在脚本加载时就绑好了 click，
+    // 用户在 init 完成前点到，会一路走到上面的坐标换算上抛
+    // 「Cannot read properties of null」。调用方先问这里再动手。
+    isReady() {
+        return !!this.activeAdapter();
+    },
+
+    containerToLatLng(x, y) {
+        return this.activeAdapter().containerToLatLng(x, y);
+    },
+
+    // 覆盖层放在活跃地图内，让滚轮和中键沿原生事件路径交给地图引擎。
+    mountOverlay(element) {
+        const container = this.activeAdapter().map.getContainer();
+        if (element.parentNode !== container) container.appendChild(element);
     },
 
     // ===== 切换按钮 =====

@@ -65,6 +65,7 @@ class AmapAdapter {
     constructor(AMap, containerId, view) {
         this._AMap = AMap;
         this._handlers = null;      // renderTrack 注入的事件回调集
+        this._onView = null;        // 图形层的视野钩子回调（具名引用，便于 off）
         this.overlays = [];         // 当前轨迹覆盖物集合（renderTrack 全量重建）
         this._defaultView = view;   // fitTrack 无覆盖物时的回退视角
 
@@ -155,6 +156,39 @@ class AmapAdapter {
     // 定位到指定位置
     flyTo(lat, lng, zoom) {
         this.map.setZoomAndCenter(zoom, [lng, lat]);
+    }
+
+    // ===== 屏幕像素换算（图形层用：容器像素 ↔ 经纬度）=====
+    // 容器像素原点 = #map-amap 左上角；与 #shape-layer 同为 inset:0，坐标可直接共用。
+    latLngToContainer(lat, lng) {
+        const p = this.map.lngLatToContainer([lng, lat]);
+        return { x: p.getX(), y: p.getY() };
+    }
+
+    containerToLatLng(x, y) {
+        const ll = this.map.containerToLngLat(new this._AMap.Pixel(x, y));
+        return { lat: ll.getLat(), lng: ll.getLng() };
+    }
+
+    // 视野变化钩子：AMap 缩放是瞬时切换、没有动画漂移，故不需要遮挡，
+    // onZoomStart / onZoomEnd 由 MapEngine 传空实现。
+    //
+    // 必须先摘上一轮再绑，理由同 Leaflet 侧：map 实例长期复用，只 on 不 off 会让每次切档
+    // 叠加一层监听，而 AMap 的 mapmove 接近 60 fps，叠 N 层就是每帧 N 倍重绘。
+    bindViewHooks(hooks) {
+        this._unbindViewHooks();
+        this._onView = () => hooks.onChange();
+        this.map.on('mapmove', this._onView);
+        this.map.on('zoomchange', this._onView);
+        this.map.on('viewchange', this._onView);
+    }
+
+    _unbindViewHooks() {
+        if (!this._onView) return;
+        this.map.off('mapmove', this._onView);
+        this.map.off('zoomchange', this._onView);
+        this.map.off('viewchange', this._onView);
+        this._onView = null;
     }
 
     // 缩放至轨迹覆盖物范围；无覆盖物时回默认中心

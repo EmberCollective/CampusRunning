@@ -300,7 +300,7 @@ function initTabs() {
                 }
             });
 
-            // 表单高度随模式变化，结果卡上限需重算 (#49)
+            // 切换模式后结果卡仍在展示，上限保持与视口一致 (#49)
             updateResultsScrollHeight();
         });
     });
@@ -986,20 +986,23 @@ function showResults(result) {
     section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-// 结果滚动区高度上限：撑到最高时卡片底边与左栏（02 生成模式）底边对齐 (#49)。
-// 上限取决于左栏与当前表单的实际高度，纯 CSS 无法表达，故由 JS 动态设定；
-// 单列布局或剩余空间不足时清除内联样式，回退到 CSS 默认 40vh。
+// 结果滚动区高度上限：约一屏（视口高度 - 顶部避让 - 卡片底部间距），随窗口尺寸变化 (#49)。
+// 生成后 scrollIntoView 将卡片顶边钉在顶栏下方，撑满时卡片底边正好落在视口底；
+// 视口过小导致剩余不足时清除内联样式，回退到 CSS 默认 40vh。
+const RESULTS_TOP_CLEARANCE = 56;      // 与 .results-section 的 scroll-margin-top 一致
 const RESULTS_MIN_SCROLL_HEIGHT = 200;
 
 function updateResultsScrollHeight() {
     const section = document.getElementById('results-section');
     const scrollBox = section && section.querySelector('.results-scroll');
-    const side = document.querySelector('.cfg-side');
-    if (!section || !scrollBox || !side || !section.classList.contains('show')) return;
+    if (!section || !scrollBox || !section.classList.contains('show')) return;
 
-    // 滚动区底边到卡片底边的间距（内边距+边框，与内容无关，可现场测得）
-    const below = section.getBoundingClientRect().bottom - scrollBox.getBoundingClientRect().bottom;
-    const available = side.getBoundingClientRect().bottom - scrollBox.getBoundingClientRect().top - below;
+    // 滚动区上下两侧的卡片间距（标题行+内边距+边框，与内容无关，可现场测得）
+    const secRect = section.getBoundingClientRect();
+    const boxRect = scrollBox.getBoundingClientRect();
+    const above = boxRect.top - secRect.top;
+    const below = secRect.bottom - boxRect.bottom;
+    const available = window.innerHeight - RESULTS_TOP_CLEARANCE - above - below;
     scrollBox.style.maxHeight = available >= RESULTS_MIN_SCROLL_HEIGHT
         ? `${Math.floor(available)}px`
         : '';

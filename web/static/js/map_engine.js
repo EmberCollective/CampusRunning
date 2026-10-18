@@ -51,7 +51,7 @@ const MapEngine = {
     adapters: { leaflet: null, amap: null },  // amap 懒建（需 Key + 在线加载）
     loading: false,                // 官方引擎加载防重入
     _dragEnabled: true,            // 拖动平移状态（画笔工具禁用），切换档位后需重放
-    _viewHooks: null,              // 图形层注册的视野钩子（切档时重绑）
+    _viewHooks: [],                // 覆盖层的视野钩子（切档时统一重绑）
 
     async init() {
         // 先从服务器加载高德 Key 配置
@@ -159,14 +159,18 @@ const MapEngine = {
     // 钩子只注册一次，切换到新适配器时必须重新绑定，否则切档后图形不再跟随视野；
     // 重绑后立刻补一次 onChange，让图形在新引擎下重新定位。
     bindViewHooks(hooks) {
-        this._viewHooks = hooks;
+        this._viewHooks.push(hooks);
         this._bindViewHooksToActive();
     },
 
     _bindViewHooksToActive() {
-        if (!this._viewHooks) return;
-        this.activeAdapter().bindViewHooks(this._viewHooks);
-        this._viewHooks.onChange();
+        const notify = key => this._viewHooks.forEach(h => { if (h[key]) h[key](); });
+        this.activeAdapter().bindViewHooks({
+            onChange: () => notify('onChange'),
+            onZoomStart: () => notify('onZoomStart'),
+            onZoomEnd: () => notify('onZoomEnd')
+        });
+        notify('onChange');
     },
 
     latLngToContainer(lat, lng) {

@@ -10,15 +10,14 @@ from pathlib import Path
 import pytest
 
 NODE = shutil.which("node")
-JS_TEST = Path(__file__).parent / "js" / "test_shape_geometry.js"
-GEOMETRY = Path(__file__).parent.parent / "web" / "static" / "js" / "shape_geometry.js"
 
 
 @pytest.mark.skipif(NODE is None, reason="需要 Node.js 运行前端几何单测（CI 无 Node 时跳过）")
-def test_shape_geometry_js_suite():
-    assert GEOMETRY.exists(), f"几何模块不存在：{GEOMETRY}"
+@pytest.mark.parametrize("suite", ["shape", "selection"])
+def test_geometry_js_suite(suite):
+    js_test = Path(__file__).parent / "js" / f"test_{suite}_geometry.js"
     result = subprocess.run(
-        [NODE, str(JS_TEST)],
+        [NODE, str(js_test)],
         capture_output=True,
         text=True,
         encoding="utf-8",

@@ -153,7 +153,7 @@ button { font-family: inherit; }
     display: grid;
     grid-template-columns: 280px 1fr;
     gap: 14px;
-    align-items: start;
+    align-items: stretch;
 }
 
 /* 左配置栏 */
@@ -224,7 +224,13 @@ button { font-family: inherit; }
 .mode-content.active { display: block; }
 
 /* 主区：参数 */
+.param-main { display: flex; flex-direction: column; min-width: 0; }
+.param-main > .section-head,
+.param-main > .mode-content,
+.param-main > .message-slot { flex-shrink: 0; }
 .param-main .section-body { padding: 16px; }
+/* 反馈消失后仍保留一行空间，结果区边界不随提示显隐跳动。 */
+.message-slot { min-height: 54px; }
 
 .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 14px; }
 .form-group { display: flex; flex-direction: column; gap: 5px; }
@@ -283,13 +289,56 @@ button { font-family: inherit; }
 .btn-sm { flex: none; padding: 5px 13px; font-size: 12px; }
 
 /* ============================================================
-   输出区
+   输出区（右栏内嵌卡片，按钮正下方；超限内部滚动 #49）
    ============================================================ */
-.output-sec { margin-top: 14px; }
-.results-section { display: none; }
-.results-section.show { display: block; }
-.results-table { width: 100%; border-collapse: collapse; }
+/* 明确的 200px 基准阻断表格的内容高度贡献；双栏填满工作台剩余空间。
+   工作台高度只由左栏、当前表单与这一基准决定，不由结果行数决定。 */
+.results-area {
+    display: flex;
+    align-items: flex-end;
+    flex: 1 0 200px;
+    height: 200px;
+    min-height: 200px;
+    min-width: 0;
+}
+.results-section {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    flex-direction: column;
+    height: 100%;
+    /* 矮窗口可把整张结果卡滚入顶栏下方，卡片底边仍固定在结果槽底部。 */
+    max-height: calc(100vh - 56px);
+    /* scrollIntoView 时避让 sticky 顶栏（48px + 余量） */
+    scroll-margin-top: 56px;
+}
+.results-section.show { display: flex; }
+
+.results-head {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    flex: none;
+    margin-bottom: 10px;
+}
+.results-head .mono-tag { margin-left: auto; }
+
+/* 固定卡片内只让表格内容滚动，短结果也保留同一个下边界。 */
+.results-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.results-table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 .results-table th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--surface);
     font-family: var(--mono); font-size: 10px; font-weight: 600;
     letter-spacing: .08em; text-transform: uppercase;
     color: var(--text-3);
@@ -669,12 +718,15 @@ button { font-family: inherit; }
     .form-grid { grid-template-columns: 1fr 1fr; }
     .dates-cal-row { flex-direction: column; }
     .dates-side { width: 100%; }
+    /* 单列没有同排左栏可对齐，保留独立、有限的结果槽；矮窗口仍能看到表头和行。 */
+    .results-area { flex: none; height: clamp(200px, 40vh, 360px); min-height: 0; }
 }
 @media (max-width: 640px) {
     .form-grid { grid-template-columns: 1fr; }
     .run-bar { flex-direction: column; }
     .run-bar .btn { min-width: 0; }
     .statusbar { flex-wrap: wrap; gap: 10px; }
+    .results-head .mono-tag { display: none; }
 }
 
 /* 宽屏（≥1440px）：加宽左栏 / 表单 4 列 / 收窄会被拉伸的元素 */

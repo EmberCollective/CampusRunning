@@ -987,7 +987,7 @@ function showResults(result) {
 }
 
 // 结果滚动区高度上限：约一屏（视口高度 - 顶部避让 - 卡片底部间距），随窗口尺寸变化 (#49)。
-// 生成后 scrollIntoView 将卡片顶边钉在顶栏下方，撑满时卡片底边正好落在视口底；
+// 按卡片位于顶栏下方时的可用空间计算上限；scrollIntoView 以最近边缘将其带入视野。
 // 视口过小导致剩余不足时清除内联样式，回退到 CSS 默认 40vh。
 const RESULTS_TOP_CLEARANCE = 56;      // 与 .results-section 的 scroll-margin-top 一致
 const RESULTS_MIN_SCROLL_HEIGHT = 200;

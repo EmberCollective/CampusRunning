@@ -97,6 +97,9 @@
                 <!-- 高德官方 JS API 容器：仅「官方」档使用，初始隐藏 -->
                 <div id="map-amap" style="display:none"></div>
 
+                <!-- 图形模板覆盖层：SVG 由 shape_layer.js 在 init 时注入 -->
+                <div id="shape-layer" class="shape-layer"></div>
+
                 <!-- 左上角：地点搜索（配置高德 Key 后可用）；input 单独包一层，图标锚定输入框不随下拉漂移 -->
                 <div class="search-box">
                     <div class="search-input-wrap">
@@ -114,7 +117,7 @@
                 </div>
 
                 <!-- 左下角：操作提示 -->
-                <div class="map-hint">默认<b>拖动</b>平移；「<b>画笔</b>」点击加点（地图锁定，平移请切回拖动）；「<b>橡皮擦</b>」点击顶点删点；顶点可拖动；线段中点小圆插点</div>
+                <div class="map-hint">默认<b>拖动</b>平移；「<b>画笔</b>」点击加点（地图锁定，平移请切回拖动）；「<b>橡皮擦</b>」点击顶点删点；顶点可拖动；线段中点小圆插点；右栏可放<b>图形模板</b></div>
 
                 <!-- 全屏加载遮罩：加载官方 JS API 时由 JS 显示，文案可被改写 -->
                 <div id="map-loading" class="map-loading" style="display:none"><span id="map-loading-text">加载高德地图…</span></div>
@@ -136,6 +139,35 @@
                         <button type="button" id="new-btn" class="btn btn-secondary">新建空白</button>
                     </div>
                     <p id="correction-note" class="hint hidden"></p>
+                </section>
+
+                <!-- 图形模板：点选即在地图中心放置，可拖动/缩放/旋转，确认后生成轨迹点 -->
+                <section class="panel-sec">
+                    <div class="group-label">图形模板 SHAPES</div>
+                    <div class="shape-picker">
+                        <button type="button" id="shape-btn-rect" class="shape-btn" disabled title="矩形：点一下在地图中心放置">
+                            <svg viewBox="0 0 36 24" aria-hidden="true"><rect x="2" y="2" width="32" height="20" rx="1"></rect></svg>
+                            <span>矩形</span>
+                        </button>
+                        <button type="button" id="shape-btn-circle" class="shape-btn" disabled title="圆形：点一下在地图中心放置">
+                            <svg viewBox="0 0 36 24" aria-hidden="true"><circle cx="18" cy="12" r="10"></circle></svg>
+                            <span>圆形</span>
+                        </button>
+                        <button type="button" id="shape-btn-stadium" class="shape-btn" disabled title="操场形：两边半圆中间矩形，点一下在地图中心放置">
+                            <svg viewBox="0 0 36 24" aria-hidden="true"><path d="M10 2h16a10 10 0 0 1 0 20H10a10 10 0 0 1 0-20z"></path></svg>
+                            <span>操场</span>
+                        </button>
+                    </div>
+                    <ul id="shape-list" class="shape-list"></ul>
+                    <div class="form-group">
+                        <label for="shape-spacing">点间距（米）</label>
+                        <input type="number" id="shape-spacing" value="10" min="3" max="100" step="1">
+                    </div>
+                    <div class="btn-group">
+                        <button type="button" id="shape-generate-btn" class="btn btn-primary" disabled>生成轨迹点</button>
+                        <button type="button" id="shape-clear-btn" class="btn btn-secondary" disabled>清空图形</button>
+                    </div>
+                    <p class="hint">点图形即在地图中心放置；拖动移动、拖手柄缩放、拖上方圆点旋转。调整到位后点「生成轨迹点」写入轨迹；多个图形会按放置顺序串成一条环线。生成后可直接编辑轨迹点；点击上方图形列表可重新调整模板。</p>
                 </section>
 
                 <!-- 统计 -->
@@ -206,12 +238,16 @@
         </div>
     </div>
 
-    <!-- 脚本加载顺序：Leaflet → 两个地图适配器 → 引擎 → 搜索框 → 编辑器主逻辑 -->
+    <!-- 脚本加载顺序：Leaflet → 两个地图适配器 → 引擎 → 搜索框 → 图形几何 → 编辑器主逻辑 -->
+    <!-- shape_geometry.js 必须在 track_editor.js 之前：它依赖其全局函数。
+         shape_layer.js 的 <script> 由 Task 8 在本行之后再补（本任务时该文件尚不存在）。 -->
     <script src="/static/vendor/leaflet/leaflet.js"></script>
     <script src="/static/js/map_adapter_leaflet.js"></script>
     <script src="/static/js/map_adapter_amap.js"></script>
     <script src="/static/js/map_engine.js"></script>
     <script src="/static/js/search_box.js"></script>
+    <script src="/static/js/shape_geometry.js"></script>
+    <script src="/static/js/shape_layer.js"></script>
     <script src="/static/js/track_editor.js"></script>
 </body>
 </html>

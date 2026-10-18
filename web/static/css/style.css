@@ -302,7 +302,7 @@ button { font-family: inherit; }
 }
 .results-head .mono-tag { margin-left: auto; }
 
-/* 限高滚动容器：表头 sticky，超出约半屏的行在容器内滚动 */
+/* 限高滚动容器：JS 按视口计算上限，空间不足时回退 40vh；表头 sticky */
 .results-scroll { max-height: 40vh; overflow-y: auto; }
 
 .results-table { width: 100%; border-collapse: collapse; }

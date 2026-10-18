@@ -1,5 +1,7 @@
 # Issue #49 生成结果布局重构 Implementation Plan
 
+> 当前实现补记：作者最终提交 `9c32ca3` 已将高度上限改为视口计算；以下步骤与代码片段保留原始实施计划，涉及固定 `40vh` 的验收描述以本补记和设计文档为准。双栏、单列均按视口高度扣除 56px 顶栏避让及卡片标题/内边距/边框计算；仅在可用高度不足 200px 时回退 `40vh`。验收需覆盖窗口 resize 和切换模式后的重算。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将生成结果板块移到「开始生成」按钮正下方（右栏 param-main 内），结果表格限高内部滚动 + sticky 表头。
@@ -16,7 +18,7 @@
 - 不动左栏（数据源 / 生成模式）与状态条
 - 不做分页、虚拟滚动（YAGNI）
 - 结果隐藏机制保持 `#results-section` + `.show` class 切换（app.js 既有约定）
-- 滚动限高 `40vh`；sticky 表头背景必须不透明（`var(--surface)`）
+- 滚动限高按视口计算，`40vh` 仅作空间不足的回退；sticky 表头背景必须不透明（`var(--surface)`）
 - 提交信息格式遵循项目 CLAUDE.md commit 规范，结尾加 `Co-Authored-By: Claude Code <noreply@anthropic.com>`
 
 ---

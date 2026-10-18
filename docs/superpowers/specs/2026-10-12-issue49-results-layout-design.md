@@ -2,7 +2,7 @@
 
 - 日期：2026-10-12
 - 关联：[#49](https://github.com/EmberCollective/CampusRunning/issues/49)（enhancement）
-- 状态：待用户审阅
+- 状态：实现已随作者最终提交改为视口高度上限，待整合验收
 
 ## 背景
 
@@ -18,6 +18,9 @@ Issue 截图基于 v2 旧界面（配置左 / 结果右）。当前 v3 工作台
    即「开始生成」按钮正下方；左栏不动。
 2. **溢出处理**：内部滚动条（`max-height` + `overflow-y: auto` + sticky 表头），
    不做分页。
+3. **高度上限**：沿用作者最后一次提交 `9c32ca3` 的视口计算。双栏和单列均使用
+   视口高度减去 56px 顶栏避让及卡片标题、内边距、边框；可用高度不足 200px 时
+   清除内联上限，回退到 CSS 的 `40vh`。不再与左栏底边对齐，也不按单列另设半屏上限。
 
 ## 目标
 
@@ -48,7 +51,7 @@ Issue 截图基于 v2 旧界面（配置左 / 结果右）。当前 v3 工作台
 .results-section { /* 内嵌子面板：边框、圆角、背景 */ }
 
 .results-scroll {
-    max-height: 40vh;      /* 限高常量，约半屏 */
+    max-height: 40vh;      /* JS 计算的可用高度不足 200px 时回退 */
     overflow-y: auto;      /* 复用全局自定义滚动条样式 */
 }
 
@@ -61,16 +64,20 @@ Issue 截图基于 v2 旧界面（配置左 / 结果右）。当前 v3 工作台
 
 - 删除仅服务于旧整宽布局的 `.output-sec` 规则。
 - 移动端无新增规则：workbench 折叠为单列时结果自然跟随按钮。
+- 显示结果后由 `updateResultsScrollHeight()` 设置内联像素上限；窗口 resize、
+  切换生成模式时重算，长表格内部滚动，少量结果按实际内容收缩。
 
 ### 3. 交互（`web/static/js/app.js`，`showResults()` 内）
 
 - 填充表格后重置 `.results-scroll` 的 `scrollTop = 0`（新一轮结果从顶部展示）；
 - 对结果块执行 `scrollIntoView({ behavior: 'smooth', block: 'nearest' })`，
-  生成完成后将其平滑带入视野。
+  生成完成后将其平滑带入视野；`.results-section` 以 `scroll-margin-top: 56px`
+  避让 sticky 顶栏，最近边缘对齐不保证卡片顶边固定在某一位置。
 
 ## 验证
 
 - 浏览器实测（无 JS 测试基建）：4 种模式各生成一次；
   重点用每日模式生成 15+ 行验证滚动与 sticky 表头；
   桌面（1600px）与窄屏（≤960px，workbench 折叠为单列）两种宽度截图确认布局。
+- 两种布局分别验证视口高度上限、resize 重算；可用高度不足 200px 时验证 `40vh` 回退。
 - `pytest` 全量保持绿色。

@@ -344,19 +344,19 @@
                 </div>
 
                 <!-- 消息提示：紧跟执行区，生成中/结果反馈显示于此 -->
-                <div class="section-body" style="padding-top:0;">
+                <div class="section-body message-slot" style="padding-top:0;">
                     <div id="message" class="message"></div>
                 </div>
 
                 <!-- 生成结果：按钮正下方，超限内部滚动 (#49) -->
-                <div class="section-body" style="padding-top:0;">
+                <div class="section-body results-area" style="padding-top:0;">
                     <section id="results-section" class="results-section">
                         <div class="results-head">
                             <span class="group-label" style="margin:0;"><span class="step-no">03</span>生成结果 OUTPUT</span>
                             <span class="mono-tag">FIT / TCX EXPORT</span>
                             <button id="download-btn" class="btn btn-primary btn-sm" disabled>下载文件</button>
                         </div>
-                        <div class="results-scroll">
+                        <div class="results-scroll" tabindex="0" role="region" aria-label="生成结果表格">
                             <table class="results-table">
                                 <thead>
                                     <tr>

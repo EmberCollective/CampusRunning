@@ -17,6 +17,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadTracks();
     await loadTemplates();
     initForms();
+
+    // 窗口尺寸变化时重算结果卡高度上限（未显示结果时函数内部自会跳过）(#49)
+    window.addEventListener('resize', updateResultsScrollHeight);
 });
 
 // 加载并展示应用版本号（来自 /api/version 的 Python 侧元数据）
@@ -296,6 +299,9 @@ function initTabs() {
                     content.classList.add('active');
                 }
             });
+
+            // 切换模式后结果卡仍在展示，上限保持与视口一致 (#49)
+            updateResultsScrollHeight();
         });
     });
 }
@@ -972,6 +978,34 @@ function showResults(result) {
 
     section.classList.add('show');
     downloadBtn.disabled = false;
+
+    // 新一轮结果从顶部展示，并将结果块平滑带入视野 (#49)
+    updateResultsScrollHeight();
+    const scrollBox = section.querySelector('.results-scroll');
+    if (scrollBox) scrollBox.scrollTop = 0;
+    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// 结果滚动区高度上限：约一屏（视口高度 - 顶部避让 - 卡片底部间距），随窗口尺寸变化 (#49)。
+// 按卡片位于顶栏下方时的可用空间计算上限；scrollIntoView 以最近边缘将其带入视野。
+// 视口过小导致剩余不足时清除内联样式，回退到 CSS 默认 40vh。
+const RESULTS_TOP_CLEARANCE = 56;      // 与 .results-section 的 scroll-margin-top 一致
+const RESULTS_MIN_SCROLL_HEIGHT = 200;
+
+function updateResultsScrollHeight() {
+    const section = document.getElementById('results-section');
+    const scrollBox = section && section.querySelector('.results-scroll');
+    if (!section || !scrollBox || !section.classList.contains('show')) return;
+
+    // 滚动区上下两侧的卡片间距（标题行+内边距+边框，与内容无关，可现场测得）
+    const secRect = section.getBoundingClientRect();
+    const boxRect = scrollBox.getBoundingClientRect();
+    const above = boxRect.top - secRect.top;
+    const below = secRect.bottom - boxRect.bottom;
+    const available = window.innerHeight - RESULTS_TOP_CLEARANCE - above - below;
+    scrollBox.style.maxHeight = available >= RESULTS_MIN_SCROLL_HEIGHT
+        ? `${Math.floor(available)}px`
+        : '';
 }
 
 // 格式化时长

@@ -283,13 +283,32 @@ button { font-family: inherit; }
 .btn-sm { flex: none; padding: 5px 13px; font-size: 12px; }
 
 /* ============================================================
-   输出区
+   输出区（右栏内嵌卡片，按钮正下方；超限内部滚动 #49）
    ============================================================ */
-.output-sec { margin-top: 14px; }
-.results-section { display: none; }
+.results-section {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    /* scrollIntoView 时避让 sticky 顶栏（48px + 余量） */
+    scroll-margin-top: 56px;
+}
 .results-section.show { display: block; }
+
+.results-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+}
+.results-head .mono-tag { margin-left: auto; }
+
+/* 限高滚动容器：JS 按视口计算上限，空间不足时回退 40vh；表头 sticky */
+.results-scroll { max-height: 40vh; overflow-y: auto; }
+
 .results-table { width: 100%; border-collapse: collapse; }
 .results-table th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--surface);
     font-family: var(--mono); font-size: 10px; font-weight: 600;
     letter-spacing: .08em; text-transform: uppercase;
     color: var(--text-3);

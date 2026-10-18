@@ -3,7 +3,7 @@
 // 坐标约定（设计文档 §2.4）：
 //   局部坐标系原点 = 图形中心；+x = 东，+y = 北；rotation 逆时针为正
 //   projectLocal / unprojectLocal 在这一层工作（东向上、北向上）
-//   像素空间 y 向下，由 shape_layer.js 负责 scale 与 y 轴翻转
+//   编辑器按当前视野将局部米坐标换成像素，再通过 MapEngine 反投影
 //
 // 常量口径与 track_editor.js 的环线统计一致（R = 6371000），
 // 保证图形生成的距离与右下角「环线总距离」读数完全对齐。
@@ -40,10 +40,9 @@ function projectLocal(shape, lx, ly) {
     return { x: lx * c - ly * s, y: lx * s + ly * c };
 }
 
-// 「东/北」偏移（米）→ 局部坐标（projectLocal 的逆）
+// 框选沿用相同的旋转数学，逆投影仍是共享几何。
 function unprojectLocal(shape, x, y) {
-    const c = Math.cos(shape.rotation);
-    const s = Math.sin(shape.rotation);
+    const c = Math.cos(shape.rotation), s = Math.sin(shape.rotation);
     return { lx: x * c + y * s, ly: -x * s + y * c };
 }
 
@@ -72,16 +71,11 @@ const DEFAULT_SIZES = {
 //   圆：正圆，宽高强制相等
 //   操场：w = L + h，故 w >= h 等价于直道 L >= 0（w == h 时退化为圆）
 //
-// driven 指出哪一轴真的被拖动驱动：
-//   'both'（默认，normalizeShape 夹紧时用）→ 圆取两轴较大者
-//   'x' / 'y'                            → 只驱动了该轴，圆必须取该轴的尺寸
-// 这个参数是必需的：拖圆形北边中点时 hasX 为 false、width 原样传入 120，
-// 若仍取 Math.max(120, 90) 就还是 120 —— 圆的四个边中点手柄会变成只涨不缩。
-function lockDims(type, width, height, driven = 'both') {
+function lockDims(type, width, height) {
     let w = Math.max(width, MIN_DIM_M);
     let h = Math.max(height, MIN_DIM_M);
     if (type === 'circle') {
-        const d = driven === 'y' ? h : driven === 'x' ? w : Math.max(w, h);
+        const d = Math.max(w, h);
         w = d;
         h = d;
     } else if (type === 'stadium' && h > w) {
@@ -90,7 +84,7 @@ function lockDims(type, width, height, driven = 'both') {
     return { width: w, height: h };
 }
 
-// 返回规范化后的新对象；调用方（shape_layer）在每次编辑后都要过一遍
+// 采样前规范化临时形状尺寸
 function normalizeShape(shape) {
     const { width, height } = lockDims(shape.type, shape.width, shape.height);
     return { ...shape, width, height };
@@ -217,7 +211,7 @@ function shapePerimeter(shape) {
 // 非有限间距（NaN / undefined / 'abc' / ±Infinity）先回退到 DEFAULT_SPACING：
 // NaN 会一路穿过 Math.max/Math.min 仍是 NaN，最后 `i < NaN` 一次都不进循环，
 // 结果是**静默**返回 0 个点 —— 不报错、界面上什么都不发生，最难排查的那类失败。
-function shapeToLoop(shape, spacing) {
+function shapeToLocalLoop(shape, spacing) {
     const s = normalizeShape(shape);
     const prims = shapeOutlines(s).filter((p) => primitiveLength(p) > 0);
     const lengths = prims.map(primitiveLength);
@@ -252,90 +246,79 @@ function shapeToLoop(shape, spacing) {
         const n = counts[index];
         for (let i = 0; i < n; i++) {
             const local = primitivePoint(p, i / n);
-            loop.push(localToGeo(s.center, local.x, local.y, s.rotation));
+            loop.push(local);
         }
     });
     return loop;
 }
 
-// ===== 手柄几何与变换（设计文档 §5.1）=====
-//
-// 8 个缩放手柄固定按图形**包围盒**分布——圆形也不例外，与 Word 对图片画的矩形选择框一致。
-// 旋转手柄不在这 8 个之内：它位于局部 +y（正北）方向、包围盒之外 28 px 处，
-// 28 px 需要 scale 才能换算成米，故由 shape_layer.js 负责定位；本模块只提供角度常量。
-
-const HANDLE_KEYS = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
-
-// 对角手柄：拖动时以它为锚点（Word 手感），它的地理位置保持不动
-const HANDLE_OPPOSITE = {
-    nw: 'se', n: 's', ne: 'sw', e: 'w',
-    se: 'nw', s: 'n', sw: 'ne', w: 'e'
-};
-
-const ROTATE_HANDLE_ANGLE = Math.PI / 2;   // 旋转手柄在正北方向
-
-function handlePositions(shape) {
-    const s = normalizeShape(shape);
-    const x = s.width / 2;
-    const y = s.height / 2;
-    return [
-        { key: 'nw', lx: -x, ly: y },
-        { key: 'n', lx: 0, ly: y },
-        { key: 'ne', lx: x, ly: y },
-        { key: 'e', lx: x, ly: 0 },
-        { key: 'se', lx: x, ly: -y },
-        { key: 's', lx: 0, ly: -y },
-        { key: 'sw', lx: -x, ly: -y },
-        { key: 'w', lx: -x, ly: 0 }
-    ];
+// 保留地理采样入口供纯几何测试使用；编辑器用局部采样配合地图投影。
+function shapeToLoop(shape, spacing) {
+    return shapeToLocalLoop(shape, spacing)
+        .map(p => localToGeo(shape.center, p.x, p.y, shape.rotation));
 }
 
-// 指针方位 → 新 rotation。
-//
-// grabBearing 是「按下瞬间指针的方位角」，默认值即旋转手柄自身的固定方位（正北）。
-// 用户可能抓在旋转圆点的任意位置，传入实际抓取方位才能在按下瞬间不跳转；
-// 只抓在正上方时用默认值即可。
-function rotationFromPointer(offsetX, offsetY, grabBearing = ROTATE_HANDLE_ANGLE) {
-    return Math.atan2(offsetY, offsetX) - grabBearing;
+// 保持三种模板的轮廓比例，占当前可见地图宽高的一半，给选框手柄留出空间。
+function viewportShape(type, visibleWidth, visibleHeight) {
+    const shape = makeDefaultShape(type, { lat: 0, lng: 0 });
+    const ratio = Math.min(visibleWidth * 0.5 / shape.width, visibleHeight * 0.5 / shape.height);
+    return normalizeShape({ ...shape, width: shape.width * ratio, height: shape.height * ratio });
 }
 
-// 拖动手柄缩放。offsetX/offsetY 是指针相对 snapshot.center 的「东/北」偏移（米）。
-//
-// 算法（顺序很重要）：
-//   1. 把指针偏移逆旋转到快照局部坐标系
-//   2. 以对角手柄为锚点，算出裁剪前的宽高
-//   3. 施加类型尺寸约束（圆锁定、操场 w >= h）
-//   4. 用**约束后**的宽高反算中心偏移，锚点才真的不动
-// 第 4 步若用约束前的宽高，圆形/操场的锚点会漂——这是本函数唯一的坑。
-function resizeShape(snapshot, key, offsetX, offsetY) {
-    const s = normalizeShape(snapshot);
-    const hasX = key === 'e' || key === 'w' || key.length === 2;
-    const hasY = key === 'n' || key === 's' || key.length === 2;
+// 相交包括相切与重叠；用于避免模板追加时新增跨过已有轨迹的连接线。
+function segmentsMeet(a, b, c, d) {
+    const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+    const on = (p, q, r) => Math.abs(cross(p, q, r)) < 1e-7
+        && r.x >= Math.min(p.x, q.x) - 1e-7 && r.x <= Math.max(p.x, q.x) + 1e-7
+        && r.y >= Math.min(p.y, q.y) - 1e-7 && r.y <= Math.max(p.y, q.y) + 1e-7;
+    const abC = cross(a, b, c), abD = cross(a, b, d), cdA = cross(c, d, a), cdB = cross(c, d, b);
+    return abC * abD < 0 && cdA * cdB < 0 || on(a, b, c) || on(a, b, d) || on(c, d, a) || on(c, d, b);
+}
 
-    const anchor = handlePositions(s).find((h) => h.key === HANDLE_OPPOSITE[key]);
-    if (!anchor) throw new Error('未知手柄: ' + key);
+function segmentsConflict(a, b, c, d) {
+    if (!segmentsMeet(a, b, c, d)) return false;
+    const same = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < 1e-7;
+    // 允许相邻边共用端点，但不允许从该端点沿同一方向重叠。
+    for (const [p, q] of [[a, b], [b, a]]) {
+        for (const [r, t] of [[c, d], [d, c]]) {
+            if (same(p, r)) {
+                const cross = (q.x - p.x) * (t.y - p.y) - (q.y - p.y) * (t.x - p.x);
+                const dot = (q.x - p.x) * (t.x - p.x) + (q.y - p.y) * (t.y - p.y);
+                return Math.abs(cross) < 1e-7 && dot > 1e-7;
+            }
+        }
+    }
+    return true;
+}
 
-    const p = unprojectLocal(s, offsetX, offsetY);
-    const ax = hasX ? anchor.lx : 0;
-    const ay = hasY ? anchor.ly : 0;
-
-    const { width, height } = lockDims(
-        s.type,
-        hasX ? Math.abs(p.lx - ax) : s.width,
-        hasY ? Math.abs(p.ly - ay) : s.height,
-        // 角手柄两轴同时驱动；边中点只有一轴驱动，圆形要靠这个才缩得动
-        hasX && hasY ? 'both' : (hasX ? 'x' : 'y')
-    );
-
-    const dirX = hasX ? (Math.sign(p.lx - ax) || 1) : 0;
-    const dirY = hasY ? (Math.sign(p.ly - ay) || 1) : 0;
-    const shift = projectLocal(s, hasX ? ax + dirX * width / 2 : 0, hasY ? ay + dirY * height / 2 : 0);
-
-    const center = {
-        lat: s.center.lat + shift.y / M_PER_DEG_LAT,
-        lng: s.center.lng + shift.x / mPerDegLng(s.center.lat)
-    };
-    return normalizeShape({ ...s, width, height, center });
+// 单环线格式不支持独立子路径：各打开一条边，用两条不相交的短线接入。
+// 仅返回插入位置和新点顺序，绝不移动/重排旧节点；整组删除可恢复原环线。
+function joinLoops(existing, added) {
+    const n = existing.length, m = added.length;
+    if (!n) return { after: -1, order: added.map((_, i) => i) };
+    const edges = loop => loop.map((p, i) => [p, loop[(i + 1) % loop.length]]);
+    const oldEdges = edges(existing), newEdges = edges(added);
+    // 重叠轮廓不能无损接入；失败时由 UI 提示平移视野，不改历史或旧点。
+    if (oldEdges.some(([a, b]) => newEdges.some(([c, d]) => segmentsMeet(a, b, c, d)))) return null;
+    const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    let best = null, bestCost = Infinity;
+    oldEdges.forEach(([a, b], i) => {
+        newEdges.forEach(([c, d], j) => {
+            for (const reverse of [false, true]) {
+                const first = reverse ? c : d, last = reverse ? d : c;
+                const cost = distance(a, first) + distance(last, b) - distance(a, b) - distance(c, d);
+                if (cost >= bestCost) continue;
+                const bridges = [[a, first], [last, b]];
+                if (segmentsConflict(...bridges[0], ...bridges[1])) continue;
+                if (bridges.some(([p, q]) => oldEdges.some(([r, t], k) => k !== i && segmentsConflict(p, q, r, t))
+                    || newEdges.some(([r, t], k) => k !== j && segmentsConflict(p, q, r, t)))) continue;
+                const order = Array.from({ length: m }, (_, k) => (j + (reverse ? -k : 1 + k) + m) % m);
+                best = { after: i, order };
+                bestCost = cost;
+            }
+        });
+    });
+    return best;
 }
 
 // Node 单测入口（浏览器下 module 未定义，整块跳过）
@@ -345,8 +328,7 @@ if (typeof module !== 'undefined' && module.exports) {
         DEFAULT_SPACING,
         haversineMeters, mPerDegLng, projectLocal, unprojectLocal, localToGeo,
         lockDims, normalizeShape, makeDefaultShape,
-        shapeOutlines, primitiveLength, primitivePoint, shapePerimeter, shapeToLoop,
-        HANDLE_KEYS, HANDLE_OPPOSITE, ROTATE_HANDLE_ANGLE,
-        handlePositions, rotationFromPointer, resizeShape
+        shapeOutlines, primitiveLength, primitivePoint, shapePerimeter, shapeToLocalLoop, shapeToLoop,
+        viewportShape, segmentsMeet, segmentsConflict, joinLoops
     };
 }

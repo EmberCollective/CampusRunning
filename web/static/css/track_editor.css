@@ -285,62 +285,7 @@
     .map-hint { display: none; }
 }
 
-/* ============================================================
-   图形模板覆盖层 —— 挂在活跃地图内，滚轮/中键复用地图原生交互
-   pointer-events 默认穿透，只有图形本体与手柄自己开启
-   ============================================================ */
-.shape-layer {
-    position: absolute;
-    inset: 0;
-    z-index: 650;              /* 高于 Leaflet markerPane(600)，低于外部搜索/底图切换(1000) */
-    pointer-events: none;
-    overflow: hidden;          /* 图形被拖出视口时不撑出滚动条 */
-}
-.shape-layer svg { display: block; }
-.shape-layer.is-hidden { opacity: 0; }   /* Leaflet 缩放动画期间遮挡，见 shape_layer.js */
-.shape-layer.is-editing-hidden { display: none; } /* 生成后退出编辑，保留模型供 chip 恢复 */
-
-.shape-outline {
-    fill: rgba(59, 91, 215, .06);
-    stroke: var(--accent);
-    stroke-width: 2;
-    vector-effect: non-scaling-stroke;
-    pointer-events: auto;
-    cursor: move;
-}
-.shape-outline.selected {
-    stroke-width: 2.5;
-    fill: rgba(59, 91, 215, .1);
-}
-.shape-frame {
-    fill: none;
-    stroke: var(--accent);
-    stroke-width: 1;
-    stroke-dasharray: 4 4;
-    opacity: .55;
-    pointer-events: none;
-}
-
-.shape-preview-line {
-    fill: none;
-    stroke: rgba(59, 91, 215, .35);
-    stroke-width: 1.5;
-    stroke-dasharray: 5 5;
-    pointer-events: none;
-}
-.shape-preview-dot {
-    fill: #fff;
-    stroke: var(--accent);
-    stroke-width: 2;
-    pointer-events: none;
-}
-.shape-preview-start {
-    fill: var(--accent);
-    stroke: #fff;
-    stroke-width: 2;
-    pointer-events: none;
-}
-
+/* 框选变换手柄 */
 .shape-handle {
     fill: #fff;
     stroke: var(--accent);
@@ -412,33 +357,3 @@
 /* 引擎就绪前禁用：不要摆出可点的样子 */
 .shape-btn:disabled { color: #C9CFD6; border-color: var(--border); cursor: not-allowed; }
 .shape-btn:disabled svg rect, .shape-btn:disabled svg circle, .shape-btn:disabled svg path { stroke: #C9CFD6; }
-
-.shape-list {
-    list-style: none;
-    display: flex; flex-wrap: wrap; gap: 4px;
-    margin: 0 0 10px;
-}
-.shape-list:empty { display: none; }
-.shape-chip {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 3px 5px 3px 8px;
-    background: var(--surface-2);
-    border: 1px solid var(--border); border-radius: 999px;
-    font-family: var(--mono); font-size: 10.5px;
-    color: var(--text-2);
-    cursor: pointer;
-    transition: border-color .12s, color .12s;
-}
-.shape-chip:hover { border-color: var(--accent); color: var(--text); }
-.shape-chip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
-.shape-chip-del {
-    display: flex; align-items: center; justify-content: center;
-    width: 14px; height: 14px;
-    border: none; border-radius: 50%;
-    background: transparent;
-    color: var(--text-3);
-    font-size: 12px; line-height: 1;
-    cursor: pointer;
-    transition: background .12s, color .12s;
-}
-.shape-chip-del:hover { background: var(--danger); color: #fff; }

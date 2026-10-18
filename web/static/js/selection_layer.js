@@ -39,7 +39,8 @@ const SelectionLayer = (() => {
         host.classList.toggle('is-active', active);
         const status = document.getElementById('selection-status');
         status.hidden = !active;
-        status.textContent = indices.length ? `已选 ${indices.length} 个节点 · Esc 取消选择`
+        document.getElementById('delete-selection-btn').disabled = !active || !indices.length;
+        status.textContent = indices.length ? `已选 ${indices.length} 个节点 · Delete 删除 · Esc 取消选择`
             : '拖出矩形框选节点 · 中键平移地图';
         if (!active) return;
         indices.forEach(i => {
@@ -113,7 +114,6 @@ const SelectionLayer = (() => {
         drag = { id: e.pointerId, key, start, last: start, frame: frame(), frameGeo,
             snapshot: api.getPoints().map(p => ({ ...p })),
             pixels: indices.map(i => ({ i, ...pixel(api.getPoints()[i]) })) };
-        ShapeLayer.select(null);
         host.setPointerCapture(e.pointerId);
         render();
     }
@@ -169,6 +169,12 @@ const SelectionLayer = (() => {
             render();
         },
         setActive(value) { clear(); active = value; render(); },
+        selectIndices(next) {
+            clear();
+            indices = [...new Set(next)].filter(i => Number.isInteger(i) && i >= 0 && i < api.getPoints().length);
+            rememberFrame(G.bounds(indices.map(i => pixel(api.getPoints()[i]))));
+            render();
+        },
         clear,
         cancelDrag: () => finish(true),
         indices: () => indices.slice()

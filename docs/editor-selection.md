@@ -8,6 +8,8 @@
 - 框选模式的左键不平移地图；中键临时平移、滚轮缩放沿用地图交互。切换工具、Esc、加载/新建及撤销重做会清除临时选择。
 - 一次完成的变换占一次撤销；无变化不记录。Esc、指针取消、失焦及变换中视野改变会回滚未完成的手势。
 
-节点坐标仍由 `track_editor.js` 的 `points` 数组保存；框选只记录临时索引，不插入、删除或重排节点。现有主线/闭合边随坐标重绘，保存格式及坐标修正配置保持原有机制。`SelectionGeometry` 复用图形模板旋转数学，但不复用允许翻转的模板缩放规则。
+选中节点后可点「删除选中节点」或按 Delete / Backspace，一次删除占一条历史，可撤销；输入框内保留文本编辑语义。
 
-验证：`python -m pytest` 包含 Node 几何测试；真实浏览器回归脚本为 `tests/browser/selection_regression.py`，需 Playwright 与 Chromium，并连接使用一次性配置目录的 Flask。`--output` 指向仓库外目录以保存逐步截图、坐标和 trace；`--save-id` 必须不存在。另运行原有 `tests/browser/shape_regression.py` 检查模板与编辑功能。
+节点坐标仍由 `track_editor.js` 的 `points` 数组保存；框选只记录临时索引，通过编辑器统一删除选中点，不维护独立节点模型或重排未选节点。现有主线/闭合边随坐标重绘，保存格式及坐标修正配置保持原有机制。`SelectionGeometry` 复用图形模板旋转数学，且限制缩放翻转。
+
+验证：`python -m pytest` 包含 Node 几何测试；真实浏览器回归脚本为 `tests/browser/selection_regression.py`，需 Playwright 与 Chromium，并连接使用一次性配置目录的 Flask。`--output` 指向仓库外目录以保存逐步截图、坐标和 trace；`--save-id` 必须不存在。另运行 `tests/browser/shape_regression.py` 检查模板与编辑功能。

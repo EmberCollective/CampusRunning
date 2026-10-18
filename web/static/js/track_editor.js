@@ -31,7 +31,6 @@ function applyToolButtons() {
 function setTool(tool) {
     if (!['pan', 'draw', 'erase', 'select'].includes(tool) || !MapEngine.isReady()) return;
     SelectionLayer.setActive(tool === 'select');
-    if (tool === 'select') ShapeLayer.select(null);
     currentTool = tool;
     applyToolButtons();
     // 画笔模式下锁定地图拖动：按住左键移动不再被判成拖图（平移请切回拖动模式）
@@ -50,10 +49,6 @@ const HANDLERS = {
     onMapClick() {
         // 加点已改由 onMapMouseDown 承担：click 在按下后移动（地图拖动平移）时被引擎抑制，
         // 会导致"按住左键稍一动点就丢"；这里保留空实现避免适配器侧再加一条加点路径
-        //
-        // 借这个已在两个适配器接好的回调做「点地图空白取消选中图形」：
-        // 图形层 SVG 只在有图形的地方开启 pointer-events，点空白处事件落到地图容器上
-        ShapeLayer.select(null);
     },
     onMapMouseDown(pt) {
         // 仅画笔模式下左键按下即加点（按下瞬间完成，之后拖动平移地图也不丢点）
@@ -198,7 +193,6 @@ async function loadTrackById(id) {
         document.getElementById('track-name').value = data.name || '';
         document.getElementById('track-desc').value = data.description || '';
 
-        ShapeLayer.clear();   // 换轨迹时清掉上一个轨迹留下的图形层
         clearHistory();
         renderTrack();
         if (points.length > 0) {
@@ -220,7 +214,6 @@ function handleNew() {
     document.getElementById('track-id').value = '';
     document.getElementById('track-name').value = '';
     document.getElementById('track-desc').value = '';
-    ShapeLayer.clear();   // 清掉残留的图形层，避免"空白画布上还浮着一个操场"
     clearHistory();
     renderTrack();
     updateCorrectionNote();
@@ -242,100 +235,60 @@ function updateCorrectionNote() {
 }
 
 // ===== 图形模板 =====
-// chip 文案：矩形显示宽高，圆形显示半径，操场显示直道与半径
-function shapeChipText(shape) {
-    if (shape.type === 'rect') return `矩形 ${Math.round(shape.width)}×${Math.round(shape.height)}`;
-    if (shape.type === 'circle') return `圆形 R${Math.round(shape.width / 2)}`;
-    return `操场 直道${Math.round(shape.width - shape.height)}/R${Math.round(shape.height / 2)}`;
-}
-
-// 重建 chip 列表与按钮可用态（形状数量或选中项变化时调用）
+// 模板只在点击时采样一次；生成后只留下普通 points 与临时节点选择。
 function renderShapePanel() {
-    const list = document.getElementById('shape-list');
-    const shapes = ShapeLayer.shapes();
-    const selectedId = ShapeLayer.selectedId();
-
-    // 用 DOM API 构建，chip 文案不进 innerHTML
-    list.replaceChildren();
-    shapes.forEach((shape) => {
-        const li = document.createElement('li');
-        li.className = 'shape-chip' + (shape.id === selectedId ? ' active' : '');
-        li.dataset.shapeId = shape.id;
-
-        const label = document.createElement('span');
-        label.textContent = shapeChipText(shape);
-        li.appendChild(label);
-
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'shape-chip-del';
-        del.dataset.shapeId = shape.id;
-        del.title = '删除该图形';
-        del.textContent = '×';
-        li.appendChild(del);
-
-        list.appendChild(li);
-    });
-
-    const hasShapes = shapes.length > 0;
-    document.getElementById('shape-generate-btn').disabled = !hasShapes;
-    document.getElementById('shape-clear-btn').disabled = !hasShapes;
-
-    // 引擎未就绪前禁用三个放置按钮：MapEngine.init() 是异步的，在那之前点击不做事，
-    // 与其「点了没反应」，不如让按钮看起来就不能点（ShapeLayer.add 侧还有一层兜底）
-    const ready = MapEngine.isReady();
-    ['rect', 'circle', 'stadium'].forEach((type) => {
-        document.getElementById('shape-btn-' + type).disabled = !ready;
+    ['rect', 'circle', 'stadium'].forEach(type => {
+        document.getElementById('shape-btn-' + type).disabled = !MapEngine.isReady();
     });
 }
 
-function handleShapeGenerate() {
-    const shapes = ShapeLayer.shapes();
-    if (!shapes.length) return;
-    const generated = ShapeLayer.generatePoints();
-
-    if (points.length > 0) {
-        const ok = window.confirm(
-            `将从 ${shapes.length} 个图形生成 ${generated.length} 个轨迹点，替换当前 ${points.length} 个点？`);
-        if (!ok) return;
-    }
-    pushUndo();
-    points = generated.map((p) => ({ lat: p.lat, lng: p.lng }));
-    renderTrack();
-    ShapeLayer.finishEditing();
-    showMessage(`已从 ${shapes.length} 个图形生成 ${points.length} 个轨迹点`, 'success');
-}
-
-// chip 列表事件委托：点 chip 选中，点 × 删除
-document.getElementById('shape-list').addEventListener('click', (e) => {
-    const del = e.target.closest('.shape-chip-del');
-    if (del) {
-        ShapeLayer.remove(del.dataset.shapeId);
+function handleShapeGenerate(type) {
+    if (!MapEngine.isReady()) return;
+    SelectionLayer.cancelDrag();
+    const { width, height } = mapStageEl.getBoundingClientRect();
+    const center = { x: width / 2, y: height / 2 };
+    const geo = p => MapEngine.containerToLatLng(p.x, p.y);
+    const metersPerPixel = haversineMeters(geo(center), geo({ x: center.x, y: center.y - 50 })) / 50;
+    const shape = viewportShape(type, width * metersPerPixel, height * metersPerPixel);
+    const generated = shapeToLocalLoop(shape, Number(document.getElementById('shape-spacing').value))
+        .map(p => geo({ x: center.x + p.x / metersPerPixel, y: center.y - p.y / metersPerPixel }));
+    if (!generated.every(SelectionGeometry.validGeo)) {
+        showMessage('当前地图范围无法放置图形，请移到地图中部或放大后重试', 'error');
         return;
     }
-    const chip = e.target.closest('.shape-chip');
-    if (chip) {
-        if (currentTool === 'select') setTool('pan');
-        ShapeLayer.select(chip.dataset.shapeId);
+    const pixel = p => MapEngine.latLngToContainer(p.lat, p.lng);
+    const join = joinLoops(points.map(pixel), generated.map(pixel));
+    if (!join) {
+        showMessage('新图形与当前轨迹重叠或无法接入。请平移地图，让新图形避开原轨迹后重试', 'error');
+        return;
     }
+    const start = join.after + 1;
+    pushUndo();
+    points.splice(start, 0, ...join.order.map(i => generated[i]));
+    renderTrack();
+    setTool('select');
+    SelectionLayer.selectIndices(join.order.map((_, i) => start + i));
+    showMessage(`已添加 ${generated.length} 个节点，可整组调整；切换拖动或橡皮擦可逐点编辑`, 'success');
+}
+
+function deleteSelectedPoints() {
+    SelectionLayer.cancelDrag();
+    const selected = new Set(SelectionLayer.indices());
+    if (!selected.size) return;
+    pushUndo();
+    points = points.filter((_, i) => !selected.has(i));
+    renderTrack();
+    showMessage(`已删除 ${selected.size} 个节点，可撤销恢复`, 'success');
+}
+
+['rect', 'circle', 'stadium'].forEach(type => {
+    document.getElementById('shape-btn-' + type).addEventListener('click', () => handleShapeGenerate(type));
 });
-
-['rect', 'circle', 'stadium'].forEach((type) => {
-    document.getElementById('shape-btn-' + type).addEventListener('click', () => {
-        if (currentTool === 'select') setTool('pan');
-        ShapeLayer.add(type);
-    });
+document.getElementById('shape-spacing').addEventListener('change', e => {
+    const value = Number(e.target.value);
+    e.target.value = Number.isFinite(value) ? Math.min(MAX_SPACING, Math.max(MIN_SPACING, value)) : DEFAULT_SPACING;
 });
-
-document.getElementById('shape-spacing').addEventListener('change', (e) => {
-    ShapeLayer.setSpacing(Number(e.target.value));
-    e.target.value = ShapeLayer.spacing();   // 回写被夹紧后的实际值
-});
-
-document.getElementById('shape-generate-btn').addEventListener('click', handleShapeGenerate);
-document.getElementById('shape-clear-btn').addEventListener('click', () => ShapeLayer.clear());
-
-ShapeLayer.onChange(renderShapePanel);
+document.getElementById('delete-selection-btn').addEventListener('click', deleteSelectedPoints);
 
 // ===== 保存 =====
 function handleSaveSubmit(e) {
@@ -436,7 +389,13 @@ function disableButtons(disabled) {
 // ===== 事件绑定 =====
 document.addEventListener('keydown', (e) => {
     // 输入框内保留浏览器原生文本撤销，不劫持为轨迹 undo
-    if (e.target.closest('input, textarea, select')) return;
+    if (e.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (currentTool === 'select' && (e.key === 'Delete' || e.key === 'Backspace')
+        && SelectionLayer.indices().length) {
+        e.preventDefault();
+        deleteSelectedPoints();
+        return;
+    }
     if (!(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();
     const isUndo = key === 'z' && !e.shiftKey;
@@ -510,7 +469,6 @@ document.getElementById('save-form').addEventListener('submit', handleSaveSubmit
     // 地图引擎与搜索（异步初始化，需先加载高德 Key 配置）
     await MapEngine.init();
     initSearchBox();
-    ShapeLayer.init();   // 图形覆盖层：必须在 MapEngine.init() 之后（依赖活跃适配器的像素换算）
     SelectionLayer.init({
         getPoints: () => points,
         apply: next => { points = next; renderTrack(); },

@@ -56,12 +56,12 @@ test('mPerDegLng 对极高纬度有下限保护，不返回 0 或负数', () => 
     true_(G.mPerDegLng(90) > 0, '恰好 90 度也必须为正');
 });
 
-test('projectLocal / unprojectLocal 互为逆运算', () => {
+test('projectLocal / unprojectLocal 互为逆运算（框选共享）', () => {
     const shape = { rotation: 0.7 };
     const p = G.projectLocal(shape, 30, -12);
     const back = G.unprojectLocal(shape, p.x, p.y);
-    near(back.lx, 30, 1e-9, 'lx');
-    near(back.ly, -12, 1e-9, 'ly');
+    near(back.lx, 30, 1e-9);
+    near(back.ly, -12, 1e-9);
 });
 
 test('projectLocal 在 rotation = 0 时是恒等', () => {
@@ -343,152 +343,6 @@ test('未规范化的过小图形也能正常打点', () => {
     true_(loop.length >= 3, `至少 3 点，实际 ${loop.length}`);
 });
 
-// ===== 手柄几何与变换 =====
-section('手柄几何与变换');
-
-test('handlePositions 返回 8 个手柄，矩形按包围盒分布', () => {
-    const hs = G.handlePositions(RECT());
-    true_(hs.length === 8, '应为 8 个手柄，实际 ' + hs.length);
-    const byKey = Object.fromEntries(hs.map((h) => [h.key, h]));
-    near(byKey.nw.lx, -50, 1e-9, 'nw.lx');
-    near(byKey.nw.ly, 30, 1e-9, 'nw.ly');
-    near(byKey.se.lx, 50, 1e-9, 'se.lx');
-    near(byKey.se.ly, -30, 1e-9, 'se.ly');
-    near(byKey.n.lx, 0, 1e-9, 'n.lx');
-    near(byKey.n.ly, 30, 1e-9, 'n.ly');
-    near(byKey.w.lx, -50, 1e-9, 'w.lx');
-    near(byKey.w.ly, 0, 1e-9, 'w.ly');
-});
-
-test('圆形使用矩形包围盒手柄（与 Word 图片选择框一致）', () => {
-    const byKey = Object.fromEntries(G.handlePositions(CIRCLE()).map((h) => [h.key, h]));
-    near(byKey.nw.lx, -60, 1e-9, 'nw.lx');
-    near(byKey.nw.ly, 60, 1e-9, 'nw.ly');
-    near(byKey.e.lx, 60, 1e-9, 'e.lx');
-});
-
-test('HANDLE_OPPOSITE 覆盖全部 8 个手柄且互为逆', () => {
-    G.HANDLE_KEYS.forEach((k) => {
-        const opp = G.HANDLE_OPPOSITE[k];
-        true_(!!opp, k + ' 应有对角手柄');
-        true_(G.HANDLE_OPPOSITE[opp] === k, k + ' 与 ' + opp + ' 应互为逆');
-    });
-});
-
-// 锚点容差 1 mm：经纬度是球面坐标，mPerDegLng 随纬度变化，
-// 中心南北移动后用同一个局部偏移换算出的经度会有亚毫米级差异（实测 2.7e-5 m）。
-// 纬度方向是精确固定的；经度方向的这点漂移在任何缩放下都不可见，属模型固有精度而非缺陷。
-const ANCHOR_TOL_M = 1e-3;
-
-test('拖 se 手柄时，nw 角的地理位置保持不动（Word 锚点手感）', () => {
-    const before = RECT();
-    const anchorLocal = G.handlePositions(before).find((h) => h.key === 'nw');
-    const anchorBefore = G.localToGeo(before.center, anchorLocal.lx, anchorLocal.ly, before.rotation);
-    const after = G.resizeShape(before, 'se', 20, -10);   // 指针在中心东南 20/10 m
-    const anchorLocalAfter = G.handlePositions(after).find((h) => h.key === 'nw');
-    const anchorAfter = G.localToGeo(after.center, anchorLocalAfter.lx, anchorLocalAfter.ly, after.rotation);
-    const drift = G.haversineMeters(anchorBefore, anchorAfter);
-    true_(drift < ANCHOR_TOL_M, `锚点应保持不动，实际漂移 ${drift} m`);
-    // 纬度方向必须精确固定（中心南北位移不该影响锚点纬度）
-    near(anchorAfter.lat, anchorBefore.lat, 1e-12, '锚点纬度');
-});
-
-test('向右下拖 se 手柄把宽高改成 2 倍偏移', () => {
-    const after = G.resizeShape(RECT(), 'se', 80, -50);
-    near(after.width, 130, 1e-6, 'width');    // |80 - (-50)| = 130
-    near(after.height, 80, 1e-6, 'height');   // |-50 - 30| = 80
-});
-
-test('拖 e 手柄只改宽度，高度不变', () => {
-    const after = G.resizeShape(RECT(), 'e', 90, 999);
-    near(after.width, 140, 1e-6, 'width');
-    near(after.height, 60, 1e-6, 'height 应保持不变');
-});
-
-test('拖 n 手柄只改高度，宽度不变', () => {
-    const after = G.resizeShape(RECT(), 'n', 999, 60);
-    near(after.width, 100, 1e-6, 'width 应保持不变');
-    near(after.height, 90, 1e-6, 'height = |60 − (−30)| = 90');
-});
-
-test('拖过锚点时图形翻转（宽高仍为正）', () => {
-    const after = G.resizeShape(RECT(), 'e', -70, 0);
-    true_(after.width > 0 && after.height > 0, '宽高必须为正');
-    near(after.width, 20, 1e-6, 'width');     // |-70 - (-50)| = 20
-});
-
-test('缩放夹紧到 MIN_DIM_M，不塌成一点', () => {
-    // 指针几乎贴在锚点 nw(-50, 30) 上：raw 宽高只有 0.1 m，必须被夹到 5 m
-    const after = G.resizeShape(RECT(), 'se', -49.9, 29.9);
-    near(after.width, G.MIN_DIM_M, 1e-9, 'width');
-    near(after.height, G.MIN_DIM_M, 1e-9, 'height');
-});
-
-test('圆形缩放后仍是正圆（宽高相等）', () => {
-    const after = G.resizeShape(CIRCLE(), 'e', 100, 0);
-    near(after.width, after.height, 1e-9, '宽高应相等');
-    true_(after.width > 0, '直径为正');
-});
-
-test('操场纵向拉高超过宽度时退化为圆（直道为 0）', () => {
-    const after = G.resizeShape(STADIUM(), 'n', 0, 200);
-    near(after.width, after.height, 1e-6, '宽度应被抬到等于高度');
-});
-
-test('操场横向拖动改变直道长度，弯道半径不变', () => {
-    // 锚点是西边界 x = −157.39/2 = −78.695，新宽 = 指针 x − 西边界 x = 120 + 78.695
-    const after = G.resizeShape(STADIUM(), 'e', 120, 0);
-    near(after.height, 73, 1e-6, '半径不变（高度不变）');
-    near(after.width, 120 + 157.39 / 2, 1e-6, '总宽 = 指针 x − 西边界 x');
-});
-
-test('resizeShape 不修改入参快照', () => {
-    const snapshot = RECT();
-    G.resizeShape(snapshot, 'se', 80, -50);
-    near(snapshot.width, 100, 1e-9, '快照 width 不得被改动');
-    near(snapshot.height, 60, 1e-9, '快照 height 不得被改动');
-});
-
-test('rotationFromPointer：手柄正北时为 0，正西时为 +90 度，正南为 ±180 度', () => {
-    near(G.rotationFromPointer(0, 100), 0, 1e-9, '正北');
-    near(G.rotationFromPointer(-100, 0), Math.PI / 2, 1e-9, '正西');
-    // 正南返回 -π（与 +π 等价，旋转本就是模 2π 的），故比较绝对值
-    near(Math.abs(G.rotationFromPointer(0, -100)), Math.PI, 1e-9, '正南');
-});
-
-test('rotationFromPointer 接受自定义抓取方位，避免按下瞬间跳转', () => {
-    // 用户抓在东北 45 度处：此时应保持 rotation 为 0，而不是跳到 -45 度
-    const bearing = Math.PI / 4;
-    near(G.rotationFromPointer(Math.cos(bearing) * 80, Math.sin(bearing) * 80, bearing), 0, 1e-9, '抓取方位自洽');
-    // 指针再转到正北：相对抓取方位转过了 45 度
-    near(G.rotationFromPointer(0, 80, bearing), Math.PI / 4, 1e-9, '转过 45 度');
-});
-
-test('旋转后手柄的东/北向偏移随之改变', () => {
-    const before = RECT();
-    const after = { ...before, rotation: G.rotationFromPointer(70, 70) };   // 转 -45 度
-    const eastBefore = G.handlePositions(before).find((h) => h.key === 'e');
-    const eastAfter = G.handlePositions(after).find((h) => h.key === 'e');
-    // handlePositions 返回的局部坐标不含旋转，旋转体现在 projectLocal 上
-    near(G.projectLocal(before, eastBefore.lx, eastBefore.ly).x, 50, 1e-9, '旋转前 e 的正东偏移');
-    const rotated = G.projectLocal(after, eastAfter.lx, eastAfter.ly);
-    near(rotated.x, 50 * Math.cos(-Math.PI / 4), 1e-6, '旋转后正东偏移被投影缩短');
-    near(rotated.y, 50 * Math.sin(-Math.PI / 4), 1e-6, '旋转后出现南北分量');
-});
-
-test('已旋转的图形仍能正确按锚点缩放', () => {
-    const before = { ...RECT(), rotation: Math.PI / 4 };
-    const anchorLocal = G.handlePositions(before).find((h) => h.key === 'sw');
-    const anchorBefore = G.localToGeo(before.center, anchorLocal.lx, anchorLocal.ly, before.rotation);
-    const after = G.resizeShape(before, 'ne', 40, 40);
-    const anchorAfterLocal = G.handlePositions(after).find((h) => h.key === 'sw');
-    const anchorAfter = G.localToGeo(after.center, anchorAfterLocal.lx, anchorAfterLocal.ly, after.rotation);
-    const drift = G.haversineMeters(anchorBefore, anchorAfter);
-    true_(drift < ANCHOR_TOL_M, `旋转后锚点仍应固定，实际漂移 ${drift} m`);
-    // 旋转 45 度后锚点不在正南北向，两轴都会有一点球面换算漂移，但量级仍须远小于 1 mm
-    true_(drift < 1e-4, `旋转情形漂移应更小，实际 ${drift} m`);
-});
-
 // ===== 打点的健壮性（code review 发现 2）=====
 section('打点健壮性：非有限间距');
 
@@ -509,41 +363,6 @@ test('非有限间距回退到默认 10 m', () => {
     [NaN, undefined, 'abc'].forEach((s) => {
         near(G.shapeToLoop(RECT(), s).length, 32, 0, `spacing=${String(s)} 回退到 10 m`);
     });
-});
-
-// ===== 圆形边中点缩放（code review 发现 1）=====
-section('圆形边中点手柄');
-
-test('圆形的四个边中点手柄都能缩小它', () => {
-    // 回归：lockDims 对圆取 max(w,h)，拖边中点时未驱动的那一轴会顶住结果，
-    // 导致四个边手柄只能放大、永远缩不小（实测四个方向都停在 120）。
-    const cases = [
-        ['n', 0, 30], ['s', 0, -30], ['e', 30, 0], ['w', -30, 0]
-    ];
-    cases.forEach(([k, lx, ly]) => {
-        const r = G.resizeShape(CIRCLE(), k, lx, ly);
-        near(r.width, 90, 1e-6, `拖 ${k} 手柄的直径应为 |指针 − 对侧手柄| = 90`);
-        near(r.height, 90, 1e-6, `拖 ${k} 手柄后仍应是正圆`);
-    });
-});
-
-test('圆形边中点手柄仍能放大（别把缩小修成只能缩）', () => {
-    const r = G.resizeShape(CIRCLE(), 'n', 0, 100);
-    near(r.width, 160, 1e-6, '向外拖应变大到 160');
-});
-
-test('圆形边中点缩放时对侧手柄保持不动', () => {
-    const before = CIRCLE();
-    const anchorBefore = G.localToGeo(before.center, 0, -60, 0);        // 南侧手柄
-    const after = G.resizeShape(before, 'n', 0, 30);
-    const anchorAfter = G.localToGeo(after.center, 0, -after.height / 2, 0);
-    const drift = G.haversineMeters(anchorBefore, anchorAfter);
-    true_(drift < 1e-3, `南侧锚点应保持不动，实际漂移 ${drift} m`);
-});
-
-test('圆形角手柄仍取两轴较大者（两轴同时驱动）', () => {
-    const r = G.resizeShape(CIRCLE(), 'se', 100, -100);
-    near(r.width, 160, 1e-6, '角手柄向外 160');
 });
 
 // ===== 闭环退化与严格点数预算 =====
@@ -610,6 +429,65 @@ test('大操场严格遵守500点上限且保留直道弯道切点', () => {
             true_(loop.some((q) => G.haversineMeters(tangent, q) < 1e-6), '保留操场切点');
         });
     }
+});
+
+// ===== 当前视野与追加连线 =====
+section('当前视野与追加连线');
+const square = (x, y, size = 10) => [{x, y}, {x: x + size, y}, {x: x + size, y: y + size}, {x, y: y + size}];
+function joined(old, added) {
+    const join = G.joinLoops(old, added);
+    true_(join, '应可接入');
+    const result = old.slice();
+    result.splice(join.after + 1, 0, ...join.order.map(i => added[i]));
+    true_(new Set(join.order).size === added.length, '新点恰好出现一次');
+    true_(JSON.stringify(result.filter(p => old.includes(p))) === JSON.stringify(old), '旧点顺序和坐标保持');
+    for (let i = 0; i < result.length; i++) {
+        for (let j = i + 1; j < result.length; j++) {
+            if (j === i + 1 || i === 0 && j === result.length - 1) continue;
+            true_(!G.segmentsConflict(result[i], result[(i + 1) % result.length],
+                result[j], result[(j + 1) % result.length]), '非相邻边不交叉');
+        }
+    }
+    return result;
+}
+
+test('三种图形随视野尺寸缩放，保持比例且预留一半空间', () => {
+    for (const type of ['rect', 'circle', 'stadium']) {
+        for (const [w, h] of [[1000, 600], [200, 900], [1000000, 300000]]) {
+            const s = G.viewportShape(type, w, h), base = G.makeDefaultShape(type, {lat: 0, lng: 0});
+            true_(s.width <= w / 2 + 1e-7 && s.height <= h / 2 + 1e-7, '视野内');
+            near(s.width / s.height, base.width / base.height);
+            const pts = G.shapeToLocalLoop(s, 3);
+            true_(pts.length >= 3 && pts.length <= 500, '点数预算');
+        }
+    }
+});
+test('空轨迹沿用模板采样顺序', () => {
+    const a = square(0, 0), join = G.joinLoops([], a);
+    true_(join.after === -1 && join.order.join() === '0,1,2,3', '初始顺序');
+});
+test('追加在左右上下四方都不引入交叉，旧点可完整恢复', () => {
+    for (const [x, y] of [[30, 0], [-30, 0], [0, 30], [0, -30]]) joined(square(0, 0), square(x, y));
+});
+test('相反绕向也可接入', () => joined(square(0, 0), square(30, 0).reverse()));
+test('连续追加第三组节点保持无交叉', () => joined(joined(square(0, 0), square(30, 0)), square(15, 30)));
+test('嵌套轮廓可通过两条不交叉连接线接入', () => joined(square(0, 0, 100), square(30, 30, 10)));
+test('凹环线接入不跨过原有边', () => joined(
+    [{x:0,y:0},{x:40,y:0},{x:40,y:40},{x:30,y:40},{x:30,y:10},{x:10,y:10},{x:10,y:40},{x:0,y:40}], square(15,20,5)));
+test('交叉、相切或重叠轮廓拒绝追加且不修改输入', () => {
+    const old = square(0, 0), before = JSON.stringify(old);
+    for (const a of [square(5,5), square(10,0), square(0,0)]) true_(G.joinLoops(old, a) === null, '拒绝相交');
+    true_(JSON.stringify(old) === before, '不改输入');
+});
+test('一个或两个手绘节点可以接入模板', () => {
+    joined([{x:0,y:0}], square(30, 10));
+    joined([{x:0,y:0},{x:0,y:10}], square(30, 10));
+});
+test('检测端点碰触、共线重叠与真正交叉，允许相邻边共用端点', () => {
+    true_(G.segmentsConflict({x:0,y:0},{x:10,y:10},{x:0,y:10},{x:10,y:0}), '交叉');
+    true_(G.segmentsConflict({x:0,y:0},{x:10,y:0},{x:5,y:0},{x:20,y:0}), '重叠');
+    true_(!G.segmentsConflict({x:0,y:0},{x:10,y:0},{x:10,y:0},{x:10,y:10}), '共享端点');
+    true_(G.segmentsConflict({x:0,y:0},{x:10,y:0},{x:10,y:0},{x:5,y:0}), '相邻也不能重叠');
 });
 
 // ===== 汇总 =====

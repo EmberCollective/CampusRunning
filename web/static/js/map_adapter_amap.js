@@ -159,7 +159,7 @@ class AmapAdapter {
     }
 
     // ===== 屏幕像素换算（图形层用：容器像素 ↔ 经纬度）=====
-    // 容器像素原点 = #map-amap 左上角；与 #shape-layer 同为 inset:0，坐标可直接共用。
+    // 容器像素原点 = #map-amap 左上角；与 #selection-layer 同为 inset:0，坐标可直接共用。
     latLngToContainer(lat, lng) {
         const p = this.map.lngLatToContainer([lng, lat]);
         return { x: p.getX(), y: p.getY() };

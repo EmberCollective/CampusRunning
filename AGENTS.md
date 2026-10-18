@@ -1,8 +1,8 @@
 # 协作与仓库约定
 
-开始工作前按任务阅读相关文档：项目入口见 [README.md](README.md)，架构与数据流见 [docs/architecture.md](docs/architecture.md)，API、轨迹和模板格式分别见 [docs/api_reference.md](docs/api_reference.md)、[docs/track_format.md](docs/track_format.md) 和 [config/templates/TEMPLATE_GUIDE.md](config/templates/TEMPLATE_GUIDE.md)。提交类型沿用 [CLAUDE.md](CLAUDE.md)；子系统若有设计文档，也要对照其约束。
+开始工作前按任务阅读相关文档：项目入口见 [README.md](README.md)，架构与数据流见 [docs/architecture.md](docs/architecture.md)，API、轨迹和模板格式分别见 [docs/api_reference.md](docs/api_reference.md)、[docs/track_format.md](docs/track_format.md) 和 [config/templates/TEMPLATE_GUIDE.md](config/templates/TEMPLATE_GUIDE.md)。提交类型沿用 [CLAUDE.md](CLAUDE.md)；子系统若有设计文档，也要对照其约束。文档与当前代码或配置不一致时，以当前证据为准，并在 PR 中指出待同步的说明。
 
-进行审查时，先显式阅读本文件和 [REVIEW.md](REVIEW.md)，并检查 `.agents/skills/` 下是否有与当前改动直接相关的 `SKILL.md`。只读相关技能；不要假定这些文件会被工具自动载入，也不要无差别加载全部技能。
+进行审查时，先显式阅读本文件和 [REVIEW.md](REVIEW.md)，并检查 `.agents/skills/` 下与改动直接相关的 `SKILL.md`。发现技能时跟随目录符号链接（如 `find -L`、`rg --follow`），或直接打开已知路径；只读相关技能，不要假定这些文件会自动载入或无差别加载全部技能。技能用于补充背景，其中的行为、默认值和依赖仍须对照当前代码与配置核实。
 
 ## 项目范式
 

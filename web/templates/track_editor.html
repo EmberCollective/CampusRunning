@@ -48,6 +48,13 @@
                         <path d="m5 11 9 9"></path>
                     </svg>
                 </button>
+                <button type="button" id="tool-select" class="tool-btn" aria-label="矩形框选" title="矩形框选：拖出矩形选中节点，整组移动、缩放或旋转；Esc 取消">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="4" y="4" width="16" height="16" stroke-dasharray="3 2"></rect>
+                        <circle cx="4" cy="4" r="2" fill="currentColor"></circle>
+                        <circle cx="20" cy="20" r="2" fill="currentColor"></circle>
+                    </svg>
+                </button>
                 <!-- 模式组与操作组分隔线 -->
                 <div class="tool-divider"></div>
                 <button type="button" id="undo-btn" class="tool-btn" disabled title="撤销 (Ctrl+Z)">
@@ -99,6 +106,8 @@
 
                 <!-- 图形模板覆盖层：SVG 由 shape_layer.js 在 init 时注入 -->
                 <div id="shape-layer" class="shape-layer"></div>
+                <div id="selection-layer" class="selection-layer"></div>
+                <div id="selection-status" class="selection-status" role="status" hidden></div>
 
                 <!-- 左上角：地点搜索（配置高德 Key 后可用）；input 单独包一层，图标锚定输入框不随下拉漂移 -->
                 <div class="search-box">
@@ -117,7 +126,7 @@
                 </div>
 
                 <!-- 左下角：操作提示 -->
-                <div class="map-hint">默认<b>拖动</b>平移；「<b>画笔</b>」点击加点（地图锁定，平移请切回拖动）；「<b>橡皮擦</b>」点击顶点删点；顶点可拖动；线段中点小圆插点；右栏可放<b>图形模板</b></div>
+                <div class="map-hint">「<b>框选</b>」按节点中心选择，拖框内移动；边柄单轴、角柄双轴缩放，顶部柄旋转；Esc 取消；中键平移。画笔加点，橡皮擦删点，线段中点插点；右栏可放<b>图形模板</b></div>
 
                 <!-- 全屏加载遮罩：加载官方 JS API 时由 JS 显示，文案可被改写 -->
                 <div id="map-loading" class="map-loading" style="display:none"><span id="map-loading-text">加载高德地图…</span></div>
@@ -248,6 +257,8 @@
     <script src="/static/js/search_box.js"></script>
     <script src="/static/js/shape_geometry.js"></script>
     <script src="/static/js/shape_layer.js"></script>
+    <script src="/static/js/selection_geometry.js"></script>
+    <script src="/static/js/selection_layer.js"></script>
     <script src="/static/js/track_editor.js"></script>
 </body>
 </html>

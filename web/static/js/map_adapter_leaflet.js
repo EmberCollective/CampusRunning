@@ -116,7 +116,9 @@ class LeafletAdapter {
     // 容器像素原点 = #map-leaflet 左上角；#map-leaflet 与 #shape-layer 同为 inset:0，
     // 故这里返回的坐标可以直接当作 shape-layer 的坐标使用。
     latLngToContainer(lat, lng) {
-        const p = this.map.latLngToContainerPoint([lat, lng]);
+        // latLngToContainerPoint 会取整；组变换需可逆的亚像素坐标，避免每次拖动累积舍入误差。
+        const p = this.map.project([lat, lng]).subtract(this.map.getPixelOrigin())
+            .subtract(this.map.containerPointToLayerPoint([0, 0]));
         return { x: p.x, y: p.y };
     }
 

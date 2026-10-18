@@ -13,7 +13,7 @@ let editingTrackId = null;          // 从磁盘加载的轨迹 id；null=新建
 let activeCorrection = null;        // 保存时使用：新建→defaultCorrection；编辑→加载时的原值
 let defaultCorrection = null;       // GET /api/defaults 的 default_coordinate_correction
 let dragStartSnapshot = null;       // 顶点拖拽开始时的快照
-let currentTool = 'pan';            // 当前工具：'pan' 拖动平移（默认）/ 'draw' 画笔加点 / 'erase' 橡皮擦删点
+let currentTool = 'pan';            // pan 平移 / draw 加点 / erase 删点 / select 框选
 
 const UNDO_LIMIT = 100;
 
@@ -25,17 +25,21 @@ function applyToolButtons() {
     document.getElementById('tool-pan').classList.toggle('active', currentTool === 'pan');
     document.getElementById('tool-draw').classList.toggle('active', currentTool === 'draw');
     document.getElementById('tool-erase').classList.toggle('active', currentTool === 'erase');
+    document.getElementById('tool-select').classList.toggle('active', currentTool === 'select');
 }
 
 function setTool(tool) {
-    if (tool !== 'pan' && tool !== 'draw' && tool !== 'erase') return;
+    if (!['pan', 'draw', 'erase', 'select'].includes(tool) || !MapEngine.isReady()) return;
+    SelectionLayer.setActive(tool === 'select');
+    if (tool === 'select') ShapeLayer.select(null);
     currentTool = tool;
     applyToolButtons();
     // 画笔模式下锁定地图拖动：按住左键移动不再被判成拖图（平移请切回拖动模式）
-    MapEngine.setDragEnabled(tool !== 'draw');
+    MapEngine.setDragEnabled(tool !== 'draw' && tool !== 'select');
     // 地图光标反馈：画笔为十字，橡皮擦悬停顶点变红（CSS），拖动用地图默认（抓手）
     mapStageEl.classList.toggle('draw-mode', tool === 'draw');
     mapStageEl.classList.toggle('erase-mode', tool === 'erase');
+    mapStageEl.classList.toggle('select-mode', tool === 'select');
 }
 
 // ===== 边界转换（{lat,lng} 与项目 JSON {longitude,latitude} 的唯一转换点）=====
@@ -76,7 +80,7 @@ const HANDLERS = {
     },
     onMidpointClick(i, mid) {
         // 橡皮擦模式下点击中点不插点（该模式意图是删除，误触插点很反直觉）
-        if (currentTool === 'erase') return;
+        if (currentTool === 'erase' || currentTool === 'select') return;
         pushUndo();
         points.splice(i + 1, 0, { lat: mid.lat, lng: mid.lng });
         renderTrack();
@@ -91,6 +95,7 @@ function renderTrack() {
 
 // ===== 撤销/重做 =====
 function pushUndo() {
+    SelectionLayer.clear();
     commitSnapshot(points.map(p => ({ ...p })));
 }
 
@@ -108,6 +113,7 @@ function clearHistory() {
 }
 
 function undo() {
+    SelectionLayer.clear();
     if (!undoStack.length) return;
     redoStack.push(points.map(p => ({ ...p })));
     points = undoStack.pop();
@@ -116,6 +122,7 @@ function undo() {
 }
 
 function redo() {
+    SelectionLayer.clear();
     if (!redoStack.length) return;
     undoStack.push(points.map(p => ({ ...p })));
     points = redoStack.pop();
@@ -182,6 +189,7 @@ async function loadTrackById(id) {
         }
 
         const data = await response.json();
+        SelectionLayer.clear();
         points = data.base_coordinates.map(p => ({ lat: p.latitude, lng: p.longitude }));
         editingTrackId = data.id || id;
         activeCorrection = data.coordinate_correction ?? null;
@@ -205,6 +213,7 @@ async function loadTrackById(id) {
 
 // ===== 新建空白 =====
 function handleNew() {
+    SelectionLayer.clear();
     points = [];
     editingTrackId = null;
     activeCorrection = defaultCorrection;
@@ -305,11 +314,15 @@ document.getElementById('shape-list').addEventListener('click', (e) => {
         return;
     }
     const chip = e.target.closest('.shape-chip');
-    if (chip) ShapeLayer.select(chip.dataset.shapeId);
+    if (chip) {
+        if (currentTool === 'select') setTool('pan');
+        ShapeLayer.select(chip.dataset.shapeId);
+    }
 });
 
 ['rect', 'circle', 'stadium'].forEach((type) => {
     document.getElementById('shape-btn-' + type).addEventListener('click', () => {
+        if (currentTool === 'select') setTool('pan');
         ShapeLayer.add(type);
     });
 });
@@ -327,6 +340,7 @@ ShapeLayer.onChange(renderShapePanel);
 // ===== 保存 =====
 function handleSaveSubmit(e) {
     e.preventDefault();
+    SelectionLayer.cancelDrag();
     const id = document.getElementById('track-id').value.trim();
     const name = document.getElementById('track-name').value.trim();
     const description = document.getElementById('track-desc').value.trim();
@@ -442,8 +456,11 @@ function showTempPanUI() {
     document.getElementById('tool-pan').classList.add('active');
     document.getElementById('tool-draw').classList.remove('active');
     document.getElementById('tool-erase').classList.remove('active');
+    document.getElementById('tool-select').classList.remove('active');
     mapStageEl.classList.remove('draw-mode');
     mapStageEl.classList.remove('erase-mode');
+    mapStageEl.classList.remove('select-mode');
+    if (!MapEngine.isReady()) return;
     MapEngine.setDragEnabled(true);
 }
 
@@ -451,8 +468,9 @@ function restoreToolUI() {
     applyToolButtons();
     mapStageEl.classList.toggle('draw-mode', currentTool === 'draw');
     mapStageEl.classList.toggle('erase-mode', currentTool === 'erase');
+    mapStageEl.classList.toggle('select-mode', currentTool === 'select');
     // 恢复当前工具对应的拖动状态（画笔=锁定；restoreToolUI 幂等）
-    MapEngine.setDragEnabled(currentTool !== 'draw');
+    if (MapEngine.isReady()) MapEngine.setDragEnabled(currentTool !== 'draw' && currentTool !== 'select');
 }
 
 window.addEventListener('mousedown', (e) => {
@@ -469,6 +487,7 @@ document.documentElement.addEventListener('mouseleave', restoreToolUI);
 document.getElementById('tool-pan').addEventListener('click', () => setTool('pan'));
 document.getElementById('tool-draw').addEventListener('click', () => setTool('draw'));
 document.getElementById('tool-erase').addEventListener('click', () => setTool('erase'));
+document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
 document.getElementById('undo-btn').addEventListener('click', undo);
 document.getElementById('redo-btn').addEventListener('click', redo);
 document.getElementById('load-btn').addEventListener('click', handleLoad);
@@ -492,6 +511,11 @@ document.getElementById('save-form').addEventListener('submit', handleSaveSubmit
     await MapEngine.init();
     initSearchBox();
     ShapeLayer.init();   // 图形覆盖层：必须在 MapEngine.init() 之后（依赖活跃适配器的像素换算）
+    SelectionLayer.init({
+        getPoints: () => points,
+        apply: next => { points = next; renderTrack(); },
+        commit: commitSnapshot
+    });
     renderShapePanel();  // 初始化侧边栏图形区块的按钮可用态
 
     try {

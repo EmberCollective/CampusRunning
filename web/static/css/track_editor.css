@@ -361,6 +361,25 @@
     pointer-events: none;
 }
 
+/* 框选宿主位于活跃地图内：左键独占，滚轮/中键沿地图原生路径冒泡。 */
+.selection-layer { position: absolute; inset: 0; z-index: 660; display: none; overflow: hidden; }
+.selection-layer.is-active { display: block; }
+.selection-layer.is-hidden { opacity: 0; }
+.selection-svg { display: block; touch-action: none; cursor: crosshair; }
+.selection-frame, .selection-marquee {
+    fill: rgba(59, 91, 215, .08); stroke: var(--accent); stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+.selection-frame { cursor: move; }
+.selection-marquee { stroke-dasharray: 4 3; pointer-events: none; }
+.selection-node { fill: none; stroke: var(--accent); stroke-width: 2; pointer-events: none; }
+.selection-handle[data-disabled="true"] { opacity: .35; }
+.selection-status {
+    position: absolute; z-index: 1000; bottom: 56px; left: 12px; pointer-events: none;
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--accent); font-size: 11.5px;
+}
+
 /* ============================================================
    侧边栏图形模板区块
    ============================================================ */

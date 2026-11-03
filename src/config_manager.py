@@ -91,7 +91,7 @@ class ConfigManager:
             for p in data["base_coordinates"]
         ]
 
-        # 解析可选的坐标修正
+        # 解析旧版坐标修正字段；仅保持兼容，不参与生成
         correction = None
         if "coordinate_correction" in data and data["coordinate_correction"]:
             cc = data["coordinate_correction"]
@@ -185,7 +185,7 @@ class ConfigManager:
         for index, point in enumerate(track.base_coordinates):
             self._validate_point(point, f"第 {index + 1} 个坐标点")
 
-        # 校验可选的坐标修正
+        # 校验旧版坐标修正字段
         if track.coordinate_correction is not None:
             self._validate_point(
                 track.coordinate_correction.current_center,

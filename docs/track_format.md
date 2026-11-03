@@ -15,11 +15,7 @@
     {"longitude": 106.6591, "latitude": 26.4513},
     {"longitude": 106.6590, "latitude": 26.4516},
     ...
-  ],
-  "coordinate_correction": {
-    "current_center": {"longitude": 106.6594, "latitude": 26.4518},
-    "target_center": {"longitude": 106.6630, "latitude": 26.4482}
-  }
+  ]
 }
 ```
 
@@ -31,7 +27,7 @@
 | `name` | string | 是 | 轨迹显示名称 |
 | `description` | string | 是 | 轨迹描述信息 |
 | `base_coordinates` | array | 是 | 基础坐标点列表 |
-| `coordinate_correction` | object | 否 | 坐标修正参数 |
+| `coordinate_correction` | object | 否 | 旧版兼容字段；当前版本读取后不参与坐标转换 |
 
 ### base_coordinates 格式
 
@@ -45,7 +41,11 @@
 - `longitude`: 经度
 - `latitude`: 纬度
 
-### coordinate_correction 格式
+### 坐标系
+
+`base_coordinates` 必须使用 GCJ-02（高德/火星坐标系）坐标。生成 FIT/TCX 时，程序会按每个点所在位置将 GCJ-02 转换为 WGS-84；不要在配置文件中手工预扣偏移。
+
+### 旧版 coordinate_correction 格式
 
 ```json
 {
@@ -54,15 +54,13 @@
 }
 ```
 
-- `current_center`: 轨迹当前中心点坐标
-- `target_center`: 目标中心点坐标
-- 修正偏移量 = current_center - target_center
+该字段来自旧版的“固定中心点平移”方案。GCJ-02 与 WGS-84 的偏移随地域变化，不能把一个校园的中心点差值复用到另一个城市；当前版本会忽略该字段，并在轨迹编辑器重新保存时将其移除。
 
 ## 添加新轨迹
 
 1. 在 `config/tracks/` 创建新 JSON 文件
 2. 收集轨迹的 GPS 坐标点（顺时针方向）
-3. 可选：配置坐标修正参数
+3. 生成时默认转换 GCJ-02 为 WGS-84
 
 ### 示例：添加新操场
 
@@ -83,15 +81,15 @@
 python main.py single --track track_2 --date 2025-01-01 --distance 5.0
 ```
 
-## 坐标修正说明
+## 坐标转换说明
 
-GPS设备可能存在系统性偏移，坐标修正通过平移使显示位置更准确：
+轨迹配置使用高德地图可直接拾取的 GCJ-02 坐标；FIT/TCX 运动文件按 GPS 语义使用 WGS-84 坐标：
 
 ```
-修正后坐标 = 原坐标 + (current_center - target_center)
+导出坐标 = GCJ02_TO_WGS84(轨迹坐标)
 ```
 
-偏移方向由 current_center 指向 target_center。
+`--no-correction` 会跳过该转换并保留 GCJ-02 原值，导入 Keep 等运动应用时会出现区域性偏移。
 
 ## 模板格式
 

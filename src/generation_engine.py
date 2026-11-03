@@ -194,10 +194,10 @@ class GenerationEngine:
         analyzer = TrackAnalyzer(track_def.base_coordinates)
         analysis = analyzer.analyze_track()
 
-        # 创建坐标修正器
-        corrector: Optional[CoordinateCorrector] = None
-        if config.apply_correction and track_def.coordinate_correction:
-            corrector = CoordinateCorrector(track_def.coordinate_correction)
+        # Fitness files use WGS-84 while track definitions stay in GCJ-02.
+        corrector: Optional[CoordinateCorrector] = (
+            CoordinateCorrector() if config.apply_correction else None
+        )
 
         # 创建轨迹生成器
         track_gen = TrackGenerator(

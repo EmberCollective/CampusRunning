@@ -48,6 +48,6 @@ python app.py
 
 ## 坐标系说明
 
-本项目使用**高德坐标系（GCJ-02）**。轨迹配置中的 `coordinate_correction` 定义从 `current_center`（轨迹坐标中心）到 `target_center`（实际位置中心）的偏移量。
+轨迹配置使用**高德坐标系（GCJ-02）**；FIT/TCX 导出前必须逐点转换为 WGS-84。旧版 `coordinate_correction` 仅作兼容读取，不参与转换。
 
-添加新轨迹时，只需填入高德坐标的实际值，系统会自动处理偏移校正，无需手动计算。
+添加新轨迹时，只需填入高德坐标的实际值，无需手动计算偏移。

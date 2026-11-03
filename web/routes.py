@@ -297,7 +297,7 @@ def save_track():
         return jsonify({"error": "无效的请求数据"}), 400
 
     try:
-        # 解析坐标修正（前端可能传 null）
+        # 解析旧版坐标修正字段（前端可能传 null）
         correction = None
         cc_data = data.get("coordinate_correction")
         if cc_data:

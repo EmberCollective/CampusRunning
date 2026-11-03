@@ -26,9 +26,13 @@ def test_converts_guizhou_university_coordinates_to_wgs84():
 
     corrected = CoordinateCorrector().correct_coordinate(point)
 
-    assert corrected.longitude == pytest.approx(106.65578316, abs=1e-8)
-    assert corrected.latitude == pytest.approx(26.45541253, abs=1e-8)
-    assert distance_meters(point, corrected) == pytest.approx(536.6, abs=0.2)
+    assert corrected.longitude == pytest.approx(106.65579247448424, abs=1e-10)
+    assert corrected.latitude == pytest.approx(26.455420280192072, abs=1e-10)
+    roundtrip = CoordinateCorrector()._to_gcj02(corrected)
+    assert max(
+        abs(roundtrip.longitude - point.longitude),
+        abs(roundtrip.latitude - point.latitude),
+    ) < 1e-9
 
 
 def test_converts_beijing_normal_university_coordinates_to_wgs84():
@@ -36,15 +40,69 @@ def test_converts_beijing_normal_university_coordinates_to_wgs84():
 
     corrected = CoordinateCorrector().correct_coordinate(point)
 
-    assert corrected.longitude == pytest.approx(116.37767772, abs=1e-8)
-    assert corrected.latitude == pytest.approx(39.93480247, abs=1e-8)
-    assert distance_meters(point, corrected) == pytest.approx(554.5, abs=0.2)
+    assert corrected.longitude == pytest.approx(116.37768435030148, abs=1e-10)
+    assert corrected.latitude == pytest.approx(39.934808051676384, abs=1e-10)
+    roundtrip = CoordinateCorrector()._to_gcj02(corrected)
+    assert max(
+        abs(roundtrip.longitude - point.longitude),
+        abs(roundtrip.latitude - point.latitude),
+    ) < 1e-9
 
 
 def test_keeps_coordinates_outside_china_unchanged():
     point = GeoPoint(longitude=2.2945, latitude=48.8584)
 
     assert CoordinateCorrector().correct_coordinate(point) is point
+
+
+def test_iterative_inverse_improves_reference_coordinates():
+    corrector = CoordinateCorrector()
+    reference_points = [
+        GeoPoint(longitude=106.65941053, latitude=26.45182472),
+        GeoPoint(longitude=116.38391733, latitude=39.93620032),
+    ]
+
+    for point in reference_points:
+        forward = corrector._to_gcj02(point)
+        one_step = GeoPoint(
+            longitude=2.0 * point.longitude - forward.longitude,
+            latitude=2.0 * point.latitude - forward.latitude,
+        )
+        corrected = corrector.correct_coordinate(point)
+        roundtrip = corrector._to_gcj02(corrected)
+        roundtrip_error = max(
+            abs(roundtrip.longitude - point.longitude),
+            abs(roundtrip.latitude - point.latitude),
+        )
+
+        assert distance_meters(one_step, corrected) > 0.5
+        assert roundtrip_error < 1e-9
+
+    overseas = GeoPoint(longitude=2.2945, latitude=48.8584)
+    assert corrector.correct_coordinate(overseas) is overseas
+
+
+def test_matches_wgstogcj_simple_iteration_reference():
+    corrector = CoordinateCorrector()
+    cases = [
+        (
+            GeoPoint(longitude=106.65941053, latitude=26.45182472),
+            (106.655792474353, 26.455420280111),
+        ),
+        (
+            GeoPoint(longitude=116.38391733, latitude=39.93620032),
+            (116.377684350283, 39.934808051661),
+        ),
+        (
+            GeoPoint(longitude=121.473701, latitude=31.230416),
+            (121.469163265373, 31.232345234508),
+        ),
+    ]
+
+    for point, expected in cases:
+        corrected = corrector.correct_coordinate(point)
+        assert corrected.longitude == pytest.approx(expected[0], abs=5e-10)
+        assert corrected.latitude == pytest.approx(expected[1], abs=5e-10)
 
 
 def test_generation_ignores_legacy_correction_and_converts_by_coordinate(tmp_path):

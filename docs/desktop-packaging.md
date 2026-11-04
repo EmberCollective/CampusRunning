@@ -1,4 +1,4 @@
-# 桌面版（Windows / macOS arm64）使用与打包说明
+# 桌面版（Windows / macOS arm64）使用说明
 
 桌面版把 Web 工作台装进一个原生窗口（Windows 使用 pywebview + WebView2，macOS 使用 pywebview + WKWebView），双击即用，**无需安装 Python**。功能与 `python app.py` 启动的 Web 版完全一致，另附命令行版（Windows 为 `CampusRunningGenCLI.exe`，macOS 为 `CampusRunningGenCLI`）。
 
@@ -10,7 +10,7 @@
 | Windows 便携版 | Release 页的 `CampusRunningGen-v<版本>-win64.zip` | 免安装、可放 U 盘、删除文件夹即卸载 |
 | macOS 安装版 | Release 页的 `CampusRunningGen-Setup-v<版本>-macos-arm64.pkg` | Apple Silicon Mac，标准安装体验（推荐） |
 | macOS 便携版 | Release 页的 `CampusRunningGen-v<版本>-macos-arm64.zip` | Apple Silicon Mac，免安装、可放 U 盘 |
-| 源码运行 | 克隆仓库后 `python desktop.py` | 开发者，见[构建指南](#构建指南开发者) |
+| 源码运行 | 克隆仓库后 `python desktop.py` | 开发者，见[维护者手册](maintainer/build.md) |
 
 下载入口：[GitHub Releases](https://github.com/EmberCollective/CampusRunning/releases)
 
@@ -105,87 +105,7 @@ shasum -a 256 CampusRunningGen-v1.0.0-macos-arm64.zip
 
 文件写入是**逐文件、原子操作**：已经生成完成的文件完整有效，可以正常导入运动软件；尚未完成的任务被中断，不会留下半损坏的文件。中断的任务重新生成一次即可。
 
-## 构建指南（开发者）
+## 开发者
 
-### 前置条件
-
-| 工具 | 版本 | 说明 |
-| ------ | ------ | ------ |
-| Python | 3.13+ | 建议使用 venv 隔离环境 |
-| PyInstaller | — | 随 `requirements-desktop.txt` 安装 |
-| Inno Setup 6 | 6.x | 仅打安装包需要；[官网下载](https://jrsoftware.org/isinfo.php)或 `choco install innosetup` |
-
-### 1. 安装依赖
-
-```bash
-python -m venv .venv
-source .venv/Scripts/activate    # Windows Git Bash；CMD 用 .venv\Scripts\activate.bat
-# macOS / Linux 使用：source .venv/bin/activate
-pip install -r requirements.txt -r requirements-desktop.txt
-```
-
-### 2. PyInstaller 打包
-
-```bash
-pyinstaller campus_running.spec --noconfirm --clean
-```
-
-产物在 `dist/CampusRunningGenerator/`：
-
-```text
-dist/CampusRunningGenerator/
-├── CampusRunningGen.exe        # Windows 桌面窗口版（无控制台；macOS 为 CampusRunningGen）
-├── CampusRunningGenCLI.exe     # Windows 命令行版（控制台；macOS 为 CampusRunningGenCLI）
-└── _internal/                  # 运行时依赖，与 exe 同发同删
-```
-
-首次运行后，exe 旁会自动出现 `config/`（轨迹与模板配置）、`output/`（生成结果）与 `desktop.log`（桌面端日志）。
-
-### 3. Inno Setup 安装包
-
-```bash
-"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
-```
-
-产物：`dist/CampusRunningGen-Setup-v<版本>-win64.exe`
-
-### 4. zip 便携包
-
-Windows（PowerShell）：
-
-```powershell
-Compress-Archive -Path dist/CampusRunningGenerator -DestinationPath dist/CampusRunningGen-v<版本>-win64.zip
-```
-
-macOS（保留可执行权限与签名，解压后仍是完整 .app）：
-
-```bash
-ditto -c -k --keepParent dist/CampusRunningGen.app dist/CampusRunningGen-v<版本>-macos-arm64.zip
-```
-
-### 5. macOS PKG 安装包
-
-```bash
-mkdir -p pkg-root
-cp -R dist/CampusRunningGen.app pkg-root/
-pkgbuild \
-  --root pkg-root \
-  --identifier io.github.yushenliu06.campusrunninggen \
-  --version <版本，不带前导 v> \
-  --install-location /Applications \
-  dist/CampusRunningGen-Setup-v<版本>-macos-arm64.pkg
-```
-
-注意：打包前确认 `.app` 签名完好（`codesign --verify --deep --strict`），且**不要**直接运行 `.app` 内的 CLI 做测试——其首跑会把默认配置播种到 `Contents/MacOS/config/`，破坏签名资源封印（冒烟测试请用裸 COLLECT 目录 `dist/CampusRunningGenerator/CampusRunningGenCLI`）。
-
-### 源码方式运行桌面窗口
-
-不打包也可直接体验桌面窗口：
-
-```bash
-python desktop.py
-```
-
-### CI 自动发布
-
-向仓库推送 `v*` 格式的 tag（如 `v1.0.0`）即触发 `.github/workflows/release.yml`：自动完成 Windows 安装包、Windows 便携 zip、macOS arm64 PKG 安装包与 macOS arm64 便携 zip 构建，并附 sha256 校验值发布到 [GitHub Releases](https://github.com/EmberCollective/CampusRunning/releases)。日常开发无需手动执行上述构建步骤。
+- [构建与打包（维护者手册）](maintainer/build.md)
+- [发版流程（维护者手册）](maintainer/release.md)

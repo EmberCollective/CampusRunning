@@ -151,6 +151,7 @@ python main.py daily --template easy_run --track campus_default --zip \
 - [高德 Key 申请教程](docs/amap_key_guide.md)
 - [Keep 导入教程](guied.md)
 - [更新日志](CHANGELOG.md)
+- 维护者手册：[构建与打包](docs/maintainer/build.md) · [发版流程](docs/maintainer/release.md) · [工具速查](docs/maintainer/tools.md)
 
 ## 许可
 

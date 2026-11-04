@@ -46,8 +46,5 @@
     {"longitude": 106.66328251, "latitude": 26.44038830},
     {"longitude": 106.66315913, "latitude": 26.44038350}
   ],
-  "coordinate_correction": {
-    "current_center": {"longitude": 106.663, "latitude": 26.440},
-    "target_center": {"longitude": 106.666613, "latitude": 26.436410}
-  }
+  "coordinate_correction": null
 }

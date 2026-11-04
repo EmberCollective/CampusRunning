@@ -196,14 +196,5 @@
       "latitude": 26.44497653788214
     }
   ],
-  "coordinate_correction": {
-    "current_center": {
-      "longitude": 106.671,
-      "latitude": 26.444
-    },
-    "target_center": {
-      "longitude": 106.674613,
-      "latitude": 26.44041
-    }
-  }
+  "coordinate_correction": null
 }

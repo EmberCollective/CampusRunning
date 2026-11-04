@@ -29,9 +29,9 @@ class GeoPoint:
 
 @dataclass(frozen=True)
 class CoordinateCorrection:
-    """坐标修正配置
+    """旧版坐标修正配置
 
-    用于将轨迹从当前中心点平移至目标中心点。
+    仅用于兼容旧轨迹文件；生成时不再使用该配置。
 
     Attributes:
         current_center: 当前轨迹中心坐标
@@ -45,14 +45,14 @@ class CoordinateCorrection:
 class TrackDefinition:
     """轨迹定义
 
-    定义一条完整的跑步轨迹，包括基础坐标点和可选的坐标修正参数。
+    定义一条完整的跑步轨迹，包括 GCJ-02 基础坐标点。
 
     Attributes:
         id: 轨迹唯一标识符
         name: 轨迹名称
         description: 轨迹描述
         base_coordinates: 基础坐标点列表
-        coordinate_correction: 可选的坐标修正配置
+        coordinate_correction: 旧版兼容配置，不参与坐标转换
     """
     id: str
     name: str
@@ -206,7 +206,7 @@ class GenerationConfig:
         start_time_max: 最晚开始时间（"HH:MM" 格式）
         output_dir: 输出目录
         include_track: 是否包含轨迹数据
-        apply_correction: 是否应用坐标修正
+        apply_correction: 是否将 GCJ-02 转换为 WGS-84
         enable_pace_fluctuation: 是否启用配速波动
         enable_cadence: 是否启用步频/步数数据自动生成
         output_format: 输出文件格式（"fit" 或 "tcx"；Keep 的 TCX

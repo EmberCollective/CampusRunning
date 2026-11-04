@@ -33,7 +33,7 @@
 - **真实轨迹**——基于操场坐标生成顺时针 GPS 轨迹点，内置多条校园轨迹，也可自行添加
 - **真实配速**——热身 → 稳定 → 疲劳 → 冲刺四阶段配速波动，拒绝匀速直线
 - **真实步频步数**——按配速与里程生成符合真实分布的步频曲线，FIT 与 TCX 均写入
-- **坐标修正**——GCJ-02 系统性偏移自动校正，轨迹落在它该在的位置
+- **坐标转换**——按轨迹所在地域将 GCJ-02 自动转换为 WGS-84，避免导入后区域性偏移
 - **可视化轨迹编辑器**——Web 内在高德地图上标点绘制轨迹，一键保存为配置
 
 CLI 与 Web 双入口，生成结果一致。
@@ -114,15 +114,11 @@ python main.py daily --template easy_run --track campus_default --zip \
   "base_coordinates": [
     {"longitude": 106.6591, "latitude": 26.4513},
     {"longitude": 106.6590, "latitude": 26.4516}
-  ],
-  "coordinate_correction": {
-    "current_center": {"longitude": 106.6594, "latitude": 26.4518},
-    "target_center": {"longitude": 106.6630, "latitude": 26.4482}
-  }
+  ]
 }
 ```
 
-本项目使用**高德坐标系（GCJ-02）**。`coordinate_correction` 中的 `current_center` 是轨迹坐标自身的中心点，`target_center` 是该轨迹在地图上的实际位置中心——只需填入高德坐标的实际值，系统会自动完成偏移校正。字段说明见[轨迹配置格式](docs/track_format.md)。
+本项目轨迹配置使用**高德坐标系（GCJ-02）**；生成 FIT/TCX 时会逐点转换为 GPS 使用的 WGS-84。不要手工预扣偏移，也无需配置中心点差值。字段说明见[轨迹配置格式](docs/track_format.md)。
 
 ### 使用模板
 

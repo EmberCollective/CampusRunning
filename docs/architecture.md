@@ -42,7 +42,7 @@ Exporter (TCX)
 | `models.py` | 数据模型定义（GeoPoint, TrackDefinition, GenerationConfig等） |
 | `track_analyzer.py` | 轨迹分析（Haversine距离、Shoelace方向判定） |
 | `track_generator.py` | 轨迹生成（插值、随机偏移、平滑处理） |
-| `coordinate_corrector.py` | GPS坐标修正 |
+| `coordinate_corrector.py` | GCJ-02 到 WGS-84 坐标转换 |
 | `pace_fluctuator.py` | 配速波动模拟（热身→稳定→疲劳→冲刺） |
 | `cadence_generator.py` | 步频/步数生成（速度→步频映射、Lap 级步数积分） |
 | `helpers.py` | 通用工具函数 |

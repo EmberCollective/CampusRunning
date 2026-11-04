@@ -10,6 +10,6 @@
 
 选中节点后可点「删除选中节点」或按 Delete / Backspace，一次删除占一条历史，可撤销；输入框内保留文本编辑语义。
 
-节点坐标仍由 `track_editor.js` 的 `points` 数组保存；框选只记录临时索引，通过编辑器统一删除选中点，不维护独立节点模型或重排未选节点。现有主线/闭合边随坐标重绘，保存格式及坐标修正配置保持原有机制。`SelectionGeometry` 复用图形模板旋转数学，且限制缩放翻转。
+节点坐标仍由 `track_editor.js` 的 `points` 数组保存；框选只记录临时索引，通过编辑器统一删除选中点，不维护独立节点模型或重排节点。现有主线/闭合边随坐标重绘，保存时轨迹继续使用 GCJ-02，并移除旧版 `coordinate_correction` 字段；生成 FIT/TCX 时再转换为 WGS-84。`SelectionGeometry` 复用图形模板旋转数学，且限制缩放翻转。
 
 验证：`python -m pytest` 包含 Node 几何测试；真实浏览器回归脚本为 `tests/browser/selection_regression.py`，需 Playwright 与 Chromium，并连接使用一次性配置目录的 Flask。`--output` 指向仓库外目录以保存逐步截图、坐标和 trace；`--save-id` 必须不存在。另运行 `tests/browser/shape_regression.py` 检查模板与编辑功能。

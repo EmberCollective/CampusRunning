@@ -13,9 +13,5 @@
   "enable_cadence": true,
   "output_format": "fit",
   "web_host": "0.0.0.0",
-  "web_port": 5000,
-  "default_coordinate_correction": {
-    "current_center": {"longitude": 106.671, "latitude": 26.444},
-    "target_center": {"longitude": 106.674613, "latitude": 26.440410}
-  }
+  "web_port": 5000
 }

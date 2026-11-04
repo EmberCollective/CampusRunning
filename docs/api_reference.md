@@ -32,7 +32,7 @@ python main.py daily \
 - `--start-time-min` / `--start-time-max` - 开始时间范围
 - `--output-dir` - 输出目录
 - `--no-track` - 不生成轨迹点
-- `--no-correction` - 不应用坐标修正
+- `--no-correction` - 不将 GCJ-02 转换为 WGS-84
 - `--no-pace-fluctuation` - 恒定配速
 - `--zip` - 打包为 ZIP
 - `--track` - 指定轨迹
@@ -174,6 +174,8 @@ class TrackDefinition:
     base_coordinates: list[GeoPoint]
     coordinate_correction: Optional[CoordinateCorrection]
 ```
+
+`coordinate_correction` 是旧版兼容字段，生成时会被忽略；`base_coordinates` 使用 GCJ-02，导出轨迹前默认逐点转换为 WGS-84。
 
 ### GenerationConfig
 

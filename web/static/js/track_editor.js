@@ -10,8 +10,7 @@ let points = [];                    // [{lat, lng}] 坐标唯一真源
 let undoStack = [];                 // points 快照栈，上限 100
 let redoStack = [];
 let editingTrackId = null;          // 从磁盘加载的轨迹 id；null=新建
-let activeCorrection = null;        // 保存时使用：新建→defaultCorrection；编辑→加载时的原值
-let defaultCorrection = null;       // GET /api/defaults 的 default_coordinate_correction
+let activeCorrection = null;        // 旧版坐标修正配置；仅用于保存时移除
 let dragStartSnapshot = null;       // 顶点拖拽开始时的快照
 let currentTool = 'pan';            // pan 平移 / draw 加点 / erase 删点 / select 框选
 
@@ -210,7 +209,7 @@ function handleNew() {
     SelectionLayer.clear();
     points = [];
     editingTrackId = null;
-    activeCorrection = defaultCorrection;
+    activeCorrection = null;
     document.getElementById('track-id').value = '';
     document.getElementById('track-name').value = '';
     document.getElementById('track-desc').value = '';
@@ -219,17 +218,15 @@ function handleNew() {
     updateCorrectionNote();
 }
 
-// ===== 坐标修正提示 =====
+// ===== 坐标转换提示 =====
 function updateCorrectionNote() {
     const note = document.getElementById('correction-note');
     if (editingTrackId === null) {
-        note.textContent = defaultCorrection
-            ? '保存时将应用默认坐标偏移修正'
-            : '无默认坐标修正配置（保存时不添加）';
+        note.textContent = '轨迹坐标使用 GCJ-02，导出时自动转换为 WGS-84';
     } else if (activeCorrection) {
-        note.textContent = '保留该轨迹原有坐标修正配置';
+        note.textContent = '已忽略旧版坐标修正，保存时将移除该配置';
     } else {
-        note.textContent = '该轨迹无坐标修正（保存时不添加）';
+        note.textContent = '该轨迹无旧版坐标修正配置';
     }
     note.classList.remove('hidden');
 }
@@ -316,7 +313,7 @@ function handleSaveSubmit(e) {
         name,
         description,
         base_coordinates: toGeoCoords(),
-        coordinate_correction: activeCorrection,
+        coordinate_correction: null,
         overwrite: id === editingTrackId
     });
 }
@@ -475,17 +472,6 @@ document.getElementById('save-form').addEventListener('submit', handleSaveSubmit
         commit: commitSnapshot
     });
     renderShapePanel();  // 初始化侧边栏图形区块的按钮可用态
-
-    try {
-        const response = await fetch('/api/defaults');
-        if (response.ok) {
-            const d = await response.json();
-            defaultCorrection = d.default_coordinate_correction ?? null;
-        }
-    } catch (error) {
-        // defaults 拉取失败不阻塞编辑功能，保存时不添加修正
-    }
-    activeCorrection = defaultCorrection;
 
     await refreshTrackSelect();
 

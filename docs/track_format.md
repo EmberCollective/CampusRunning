@@ -46,6 +46,7 @@
 `base_coordinates` 必须使用 GCJ-02（高德/火星坐标系）坐标。生成 FIT/TCX 时，程序会按每个点所在位置将 GCJ-02 转换为 WGS-84；不要在配置文件中手工预扣偏移。
 转换使用公开的 GCJ-02 正向偏移公式，并通过数值迭代求逆；回归测试会正向回代校验残差。这不是官方偏移数据表，GCJ-02 公式本身的模型误差无法离线消除。
 迭代结果与 [kikkimo/WgsToGcj](https://github.com/kikkimo/WgsToGcj) 的 SimpleIteration 参考实现做过数值比对；本项目未复制其代码。
+Keep 导入后轨迹偏移的问题背景见 [issue #64](https://github.com/EmberCollective/CampusRunning/issues/64)。
 
 ### 旧版 coordinate_correction 格式
 

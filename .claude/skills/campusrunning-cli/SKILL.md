@@ -50,7 +50,7 @@ python main.py total --start-date 2026-09-01 --end-date 2026-09-30 --total-km 10
 
 共享参数（三个子命令都有）：`--min-pace 7.0`、`--max-pace 8.0`、`--start-time-min 06:00`、
 `--start-time-max 08:00`、`--output-dir output`、`--no-track`（不生成轨迹点）、
-`--no-correction`（跳过坐标修正）、`--no-pace-fluctuation`（匀速）、`--zip`、
+`--no-correction`（跳过 GCJ-02 到 WGS-84 转换）、`--no-pace-fluctuation`（匀速）、`--zip`、
 `--track`、`--template`。
 
 ```bash
@@ -102,12 +102,11 @@ CLI 参数  >  模板 generation_config  >  config/default_settings.json 内置�
 
 ## 轨迹系统（config/tracks/）
 
-- 坐标系是 **GCJ-02（高德）**，不是 WGS-84。从高德地图拾取坐标直接填入即可。
+- 轨迹配置坐标系是 **GCJ-02（高德）**；生成 FIT/TCX 时会逐点转换为 WGS-84。从高德地图拾取坐标直接填入即可，不要手工预扣偏移。
 - **`--track` 的值 = 文件名去掉 `.json`**（按文件名查找，JSON 内部的 `id` 字段仅展示用）。
   现有：`campus_default`、`east_campus_stadium`、`gzu_south`、`xiyi_track`（以 `--list-tracks` 实时输出为准）。
 - `base_coordinates`：一圈闭合轨迹点（自动闭合首尾、自动强制顺时针方向）。
-- `coordinate_correction`（可选）定义平移：`修正后坐标 = 原坐标 + (current_center − target_center)`，
-  其中 current_center 是所给坐标的中心、target_center 是实际位置中心。**添加新轨迹时直接填高德实际值，系统自动算偏移，无需手动计算。**
+- `coordinate_correction` 是旧版兼容字段，生成时会被忽略；轨迹编辑器重新保存时会移除该字段。
 - 字段规格详见 `docs/track_format.md`。
 
 添加新轨迹 = 在 `config/tracks/` 放一个新 JSON（结构照抄 `campus_default.json`），立即生效，无需注册。

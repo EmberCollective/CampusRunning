@@ -100,5 +100,5 @@
    | `L.tileLayer(...)` | JS API 自带底图，无需手动添加瓦片层 |
    | `map.on('click', ...)` | `map.on('click', ...)`（事件对象字段名略有差异） |
 
-3. **坐标无需转换**：两者均直接使用 GCJ-02。唯一区别是**经纬度顺序相反**——Leaflet 处处使用 `[lat, lng]`，AMap 使用 `[lng, lat]`，迁移时需逐处调换。
+3. **编辑与预览坐标无需转换**：两者均直接使用 GCJ-02。唯一区别是**经纬度顺序相反**——Leaflet 处处使用 `[lat, lng]`，AMap 使用 `[lng, lat]`，迁移时需逐处调换。生成 FIT/TCX 时由生成引擎统一转换为 WGS-84。
 4. **Key 的存放位置**：不要把 Key 硬编码在前端代码或提交进仓库。本项目将其保存在浏览器 localStorage（`te_amap_key` / `te_amap_scode`），仅在使用者本机生效。

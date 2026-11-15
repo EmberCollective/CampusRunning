@@ -1,5 +1,15 @@
 # API 参考
 
+## Keep 设备适配实验接口
+
+独立模块位于 `experiments/keep_device/`，不新增主应用 HTTP 端点或 `main.py` 子命令，也不直接调用 Keep 上传接口。
+
+- 编码：`experiments.keep_device.history.encode_workout(data: ExportData) -> bytes`。输入为主项目已有数据模型，坐标已转换为 WGS-84，输出 B5 SPORT44 二进制；验证失败抛出 `ValueError`。
+- Windows 传输入口：`python -m experiments.keep_device.windows --model B5 --state PATH --workout PATH`，可选 `--keep-name` 临时设置实验名称；需独立 Windows 环境和 BLE 外设角色支持。
+- 模拟器传输入口：`python -m experiments.keep_device.emulator TRANSPORT --model B5 --address ADDRESS --state PATH --workout PATH`，复用 Bumble/Netsim。
+
+环境准备、从生成引擎取得 `ExportData`、手机绑定及停止流程见[实验说明](../experiments/keep_device/README.md)；完整参数、单位、设备命令及文件契约见[接口与协议契约](../experiments/keep_device/CONTRACT.md)。两种入口仅提供设备侧数据，活动是否被接受由官方 Keep 处理；当前真实验收限定 Android Keep 9.1.120 的单条 B5 活动。
+
 ## CLI 使用
 
 ### 基本用法

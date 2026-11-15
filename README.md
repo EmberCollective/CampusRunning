@@ -139,6 +139,7 @@ python main.py daily --template easy_run --track campus_default --zip \
 | `src/*.py` | 配置管理、模板管理、生成引擎编排 |
 | `web/` | Flask 路由、页面与静态资源 |
 | `config/` | 轨迹定义、预设模板、默认设置 |
+| `experiments/keep_device/` | 独立 Keep B3/B5 蓝牙设备适配实验，未接入主应用 |
 
 架构与数据流详见[架构说明](docs/architecture.md)。
 
@@ -150,6 +151,7 @@ python main.py daily --template easy_run --track campus_default --zip \
 - [模板创建指南](config/templates/TEMPLATE_GUIDE.md)
 - [高德 Key 申请教程](docs/amap_key_guide.md)
 - [Keep 导入教程](guied.md)
+- Keep 设备适配实验：[连接与运行](experiments/keep_device/README.md) · [接口与协议契约](experiments/keep_device/CONTRACT.md) · [调研与验收范围](docs/research/keep-third-party-source-63.md)。Android B5 单条有效活动已验证，iOS 和稳定重连尚未通过。
 - [更新日志](CHANGELOG.md)
 - 维护者手册：[构建与打包](docs/maintainer/build.md) · [发版流程](docs/maintainer/release.md) · [工具速查](docs/maintainer/tools.md)
 

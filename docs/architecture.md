@@ -2,7 +2,7 @@
 
 ## 系统概览
 
-校园跑步数据生成器是一个用于生成模拟跑步TCX文件的Python工具，支持CLI和Web两种使用方式。
+校园跑步数据生成器是一个用于生成模拟跑步 FIT/TCX 文件的 Python 工具，支持 CLI 和 Web 两种使用方式。
 
 ## 核心架构
 
@@ -26,10 +26,10 @@ GenerationEngine ◄──┬── Planner (daily/total/single)
     │                                    └── PaceFluctuator
     │
     ▼
-Exporter (TCX)
+Exporter (FIT / TCX)
     │
     ▼
-输出文件 (.tcx)
+输出文件 (.fit / .tcx)
 ```
 
 ## 核心模块
@@ -80,7 +80,28 @@ Exporter (TCX)
 3. **规划生成**：Planner 根据策略生成 DailyPlan 列表
 4. **轨迹生成**：TrackGenerator 生成 GPS 坐标序列
 5. **配速模拟**：PaceFluctuator 生成配速曲线
-6. **数据导出**：Exporter 生成 TCX XML 文件
+6. **数据导出**：Exporter 生成 FIT 或 TCX 文件
+
+## Keep 设备适配实验
+
+`experiments/keep_device/` 是独立的设备侧适配模块，复用主项目 `ExportData`，不改变生成规划、FIT/TCX 导出或 Web 路由。源坐标在生成阶段已经从 GCJ-02 转为 WGS-84，设备编码器不再转换。
+
+```mermaid
+flowchart LR
+    A[已有轨迹与配置] --> B[GenerationEngine / ExportData]
+    B --> C[原 FIT / TCX 导出]
+    B --> D[history.py: SPORT44]
+    D --> E[files.py: 单文件队列]
+    S[state.py: 绑定与配置] --> F[btcp.py / simple.py: 设备会话]
+    E --> F
+    F --> G[Bless / WinRT 或 Bumble / Netsim]
+    G --> H[官方 Keep: 绑定、读取与上传]
+    H --> I[活动来源、有效性与统计验收]
+```
+
+`windows.py` 和 `emulator.py` 是两个传输入口。依赖安装在仓库外独立环境；设备状态和运动文件也保存在私人目录。`files.py` 收到领取确认后原子写接收标记并隐藏队列，保留源文件；这一步先于云端有效性验收。
+
+当前 Android B5 单条活动已完成真实验收，Windows 自动重连与 iOS Keep 未通过。模块接口和线协议详见[契约](../experiments/keep_device/CONTRACT.md)，连接、退出、故障恢复和未测项见[运行说明](../experiments/keep_device/README.md)，证据见[调研报告](research/keep-third-party-source-63.md)。
 
 ## 关键设计决策
 
@@ -94,7 +115,7 @@ TrackGenerator 通过构造函数接受 TrackAnalysis、TrackAnalyzer、Coordina
 
 ### 3. 分离导出层
 
-Exporter 抽象接口允许未来扩展 GPX、FIT 等格式，只需实现 export() 方法。
+Exporter 抽象接口支持现有 FIT/TCX 实现，也允许未来扩展 GPX 等格式。Keep 设备适配仍是独立实验，不注册为主应用默认导出器。
 
 ### 4. 配置即代码
 

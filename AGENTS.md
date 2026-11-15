@@ -10,6 +10,15 @@
 - 沿用不可变数据模型（`@dataclass(frozen=True)`，`GenerationConfig` 除外）、规划器策略模式、构造注入依赖及导出器接口。
 - 坐标使用项目约定的 GCJ-02；修改轨迹、模板或导出时遵守对应格式文档。
 
+## Keep 设备适配实验
+
+- 模块位于 `experiments/keep_device/`，与主应用的 CLI、Web 和 FIT/TCX 导出隔离；不要将实验依赖加入主应用依赖。
+- 修改前阅读[连接与运行说明](experiments/keep_device/README.md)、[接口及协议契约](experiments/keep_device/CONTRACT.md)；证据与兼容性背景见 [issue #63 调研](docs/research/keep-third-party-source-63.md)。
+- `history.py` 将已有、已转换为 WGS-84 的 `ExportData` 编码为 B5 SPORT44；`files.py` 管理单文件队列；`state.py` 管理绑定与配置；`windows.py` / `emulator.py` 分别复用 Bless / Bumble 提供蓝牙传输。不要再次转换坐标或另写蓝牙栈。
+- 接收标记仅代表设备文件已领取，不代表活动有效；涉及协议或导入的修改须区分离线测试、真实连接、完整传输、活动来源与有效性验收。测试入口为 `python -m pytest experiments/keep_device -q`，需使用独立实验环境。
+- Android Keep 9.1.120 已完成单条有效活动验收；iOS Keep、稳定重连和批量同步没有通过验收。不得把原型描述为已集成的正式导入功能。
+- 状态文件含用户配置，运动文件含轨迹。APK/DEX、抓包、日志、截图、状态和生成文件一律存仓库外私人实验目录，不提交。
+
 ## 禁止事项
 
 - 不提交密钥、个人数据、本机配置、生成的数据文件、构建产物或审查截图；截图可放在 PR 评论中。

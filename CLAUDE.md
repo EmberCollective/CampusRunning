@@ -27,6 +27,24 @@ python app.py
 - `src/exporters/` - 导出器
 - `web/` - Flask Web 应用
 - `config/` - 配置文件
+- `experiments/keep_device/` - 独立 Keep B3/B5 蓝牙设备适配实验（不接入主 CLI/Web）
+
+## Keep 设备适配模块
+
+入口与完整流程见 [experiments/keep_device/README.md](experiments/keep_device/README.md)，Python 接口、蓝牙命令、文件布局及单位见 [CONTRACT.md](experiments/keep_device/CONTRACT.md)，研究证据见 [issue #63 调研](docs/research/keep-third-party-source-63.md)。
+
+| 模块 | 职责 |
+|------|------|
+| `history.py` | `encode_workout(ExportData) -> bytes`，编码 SPORT44；输入坐标已是 WGS-84 |
+| `files.py` | 单文件目录、偏移读取与持久接收标记；保留源文件 |
+| `state.py` | 设备绑定、解绑、配置及查询应答 |
+| `btcp.py` / `simple.py` | B3/B5 会话与帧、CRC、B5 通知分片 |
+| `protocol.py` / `emulator.py` | Bumble 服务及 Android Netsim 实验入口 |
+| `windows.py` | Bless/WinRT 实体蓝牙入口与临时名称恢复 |
+
+独立环境中运行 `python -m pytest experiments/keep_device -q`；Windows 蓝牙环境使用 Python 3.11 和模块内 `requirements-windows.txt`，Bumble/测试环境依赖见模块内 `requirements.txt`。不得混入主应用环境。
+
+已在 Android Keep 9.1.120 验证 B5 绑定、完整文件传输、设备来源及有效活动入账。Windows 自动重连仍不稳定，iOS Keep 尚未通过；文件领取成功不能代替活动有效性验收。所有账号配置、生成记录与研究原始材料留在仓库外。
 
 ## Commit 规范
 

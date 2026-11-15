@@ -1,0 +1,5 @@
+# Isolated experiment environment; not dependencies of the CampusRunning application.
+bumble[android]==0.0.236
+grpcio==1.85.1
+protobuf==7.36.2
+pytest==9.2.0

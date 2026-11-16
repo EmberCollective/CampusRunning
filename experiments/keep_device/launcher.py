@@ -41,6 +41,7 @@ class Status:
         self.pending = None
         self.ranges = []
         self.sent = 0
+        self.last_diagnostic = None
 
     def capture(self, line):
         message = self.address.feed(line)
@@ -103,6 +104,10 @@ class Status:
             self.emit("B5 广播已停止，正在恢复电脑蓝牙名称。")
         elif line.startswith("NAME_REGISTRY_RESTORED"):
             self.emit("电脑蓝牙名称配置已恢复；实际广播名称仍以扫描结果为准。")
+        elif line and not line.startswith(("NAME_REQUESTED", "REPLY_PACKETS", "DEVICE_REPLY_SENT",
+                                           "INFO:experiments.keep_device.files:workout_receipt")):
+            self.last_diagnostic = line
+            self.emit("原型诊断：" + line)
 
 
 def _tool(value):
@@ -205,6 +210,7 @@ def run(args, emit=print):
     status = Status(size, emit)
     with tempfile.TemporaryDirectory(prefix="keep-b5-", dir=state.parent) as private:
         stop_file = Path(private) / "stop"
+        original_error = None
         try:
             processes["btvs"] = _spawn([args.btvs, "-Mode", "Wireshark", "-Remote", "on",
                                          "-Port", str(_PORT)], "btvs", events)
@@ -247,7 +253,8 @@ def run(args, emit=print):
                     prototype_eof = True
                 if processes["prototype"].poll() is not None and prototype_eof:
                     if processes["prototype"].returncode:
-                        raise RuntimeError("B5 退出时报告失败，请检查依赖、管理员权限或名称恢复。")
+                        detail = status.last_diagnostic or "请检查依赖、管理员权限或名称恢复。"
+                        raise RuntimeError(f"B5 退出失败（exit {processes['prototype'].returncode}）：{detail}")
                     if status.last_mac is None:
                         raise RuntimeError("B5 已退出，但本轮未取得有效广播 MAC；启动未通过验证。")
                     break
@@ -257,6 +264,9 @@ def run(args, emit=print):
                     raise RuntimeError("未观察到有效 B5 广播 MAC，正在停止；不会用适配器地址代替。")
         except KeyboardInterrupt:
             emit("正在停止，请等待电脑蓝牙名称恢复。")
+        except Exception as error:
+            original_error = error
+            raise
         finally:
             previous_interrupt = signal.signal(signal.SIGINT, signal.SIG_IGN)
             try:
@@ -287,6 +297,10 @@ def run(args, emit=print):
                             cleanup_failed = True
                 if cleanup_failed:
                     raise RuntimeError("退出清理未全部完成：请检查本次进程和电脑蓝牙实际名称。")
+            except Exception as cleanup_error:
+                if original_error is None:
+                    raise
+                emit(f"附加清理失败：{cleanup_error}")
             finally:
                 signal.signal(signal.SIGINT, previous_interrupt)
 

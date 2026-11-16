@@ -291,3 +291,43 @@ def test_reset_on_missing_state_does_not_create_it_before_prototype(monkeypatch,
     with pytest.raises(RuntimeError, match="stop before processes"):
         launcher.run(args, lambda _: None)
     assert not state.exists()
+
+
+def test_prototype_error_remains_primary_when_cleanup_also_fails(monkeypatch, tmp_path):
+    args = Namespace(state=str(tmp_path / "state.json"), workout=None,
+                     btvs="btvs.exe", tshark="tshark.exe", duration=10, reset_binding=False)
+    monkeypatch.setattr(launcher.socket, "socket", Mock(return_value=Mock(
+        __enter__=Mock(return_value=Mock()), __exit__=Mock(return_value=False))))
+    monkeypatch.setattr(launcher.socket, "SO_EXCLUSIVEADDRUSE", -5, raising=False)
+    monkeypatch.setattr(launcher, "_tcp_state", Mock(return_value=True))
+    monkeypatch.setattr(launcher, "_await_capture", Mock())
+    diagnostic = "Bluetooth restart failed (exit 50); live name is unverified."
+    cleaned = []
+
+    def spawn(arguments, name, events, **kwargs):
+        process = Mock(pid=123, name=name)
+        process.owner = name
+        process.poll.return_value = None
+        if name == "prototype":
+            process.poll.return_value = process.returncode = 1
+            process.wait.return_value = 1
+            events.put(("prototype", diagnostic))
+            events.put(("prototype", None))
+        return process
+
+    def cleanup(process):
+        cleaned.append(process.owner)
+        if process.owner == "capture":
+            raise OSError("capture cleanup failed")
+
+    monkeypatch.setattr(launcher, "_spawn", spawn)
+    monkeypatch.setattr(launcher, "_terminate_child_tree", cleanup)
+    output = []
+    previous_interrupt = signal.getsignal(signal.SIGINT)
+    with pytest.raises(RuntimeError, match=r"B5.*exit 1.*exit 50") as error:
+        launcher.run(args, output.append)
+    assert diagnostic in str(error.value)
+    assert "原型诊断：" + diagnostic in output
+    assert any(line.startswith("附加清理失败：") for line in output)
+    assert cleaned == ["capture", "btvs"]
+    assert signal.getsignal(signal.SIGINT) == previous_interrupt

@@ -1,6 +1,6 @@
 # Keep 设备来源同步调研（issue #63）
 
-调研日期：2026-11-15。目标来自 [issue #63](https://github.com/EmberCollective/CampusRunning/issues/63) 及本次补充说明。
+调研日期：2026-11-15；模拟器对照更新于 2026-11-16。目标来自 [issue #63](https://github.com/EmberCollective/CampusRunning/issues/63) 及本次补充说明。
 
 本文保留研究证据与方案演进；当前操作步骤见[实验 README](../../experiments/keep_device/README.md)，模块接口、单位、线格式和拒绝边界以[CONTRACT.md](../../experiments/keep_device/CONTRACT.md)为集中参考。
 
@@ -33,8 +33,8 @@
 - **绑定检查顺序：**设备连接、读取 DeviceInfo 后才调用 `/kitbit/v2/bindCheck`。因此该 Android 路径的首次发现失败不能归因于这个服务器检查。真实 App 的本次 B5 绑定和一条有效活动已通过；独立服务器重读及恢复仍待验证。
 - **绑定状态：**绑定 SID/CID 为 `01/05`，解绑为 `01/06`，成功 protobuf 为 `08 02`。BTCP 将 SID/CID 放在应用载荷前，SIMPLE 将其放在帧头，不能混用。设备回复成功后，Keep 才提交服务器绑定；服务器失败路径没有补偿性设备解绑。原型已实现持久化绑定/解绑及本次初始化涉及的时间、用户、模式、提醒、目标等有界配置；部分命令返回等价配置，不统一回复成功码。支持的配置、查询和空目录见[实验说明](../../experiments/keep_device/README.md)，保存开关不代表实现了对应传感器或提醒功能。
 - **历史 GPS：**B5 的 SPORT44 使用 SportPlus 结构。65 字节 GPS 项的经度、纬度分别位于偏移 16、24；偏移 12 是运动开始后的秒，偏移 40 是 Unix 秒，偏移 52 是累计米数。客户端将 WGS-84 转为 GCJ-02，不能把项目原始 GCJ-02 直接放进设备文件。共享 `OutdoorGEOPoint` 与设备字段映射确认偏移 0 为 km/h、偏移 44 为秒/公里、偏移 48 为米。共享模型按总步数 × 60 ÷ 运动秒数计算平均步频，因此适配使用总 spm，本项目单脚 `run_cadence` 不能直接复制。静态上传链已连至 `POST /pd/v5/sportlog`；轨迹相对时间先从设备秒转内存毫秒，再在序列化时转成 0.1 秒计数，随后进行轨迹编码。真机已观察到设备来源活动，但没有独立核验 HTTP 请求及服务器重读；独立速度段的缩放仍未确认。
-- **广播能力：**Windows 原生 GATT 广播接口没有厂商数据参数；同时启动独立 Publisher 是否能构成同一可连接设备，尚未实测证明。Linux BlueZ/Bumble 是现成候选，但本机当前 WSL 内核缺少已确认的 RTL8922 支持；未为了未知的 iOS 广播要求升级 WSL 或切走蓝牙控制器。
-- **模拟器兼容性：**恢复的 MSA 初始化代码仅捕获 `Exception`，无法捕获实测的 `UnsatisfiedLinkError`；APK 确有相应 ARM64 原生库，不能简单解释为缺库。尚无原签 Keep 与 Netsim 稳定共存的修复，BlueStacks 登录基线保留。
+- **广播能力：**Windows 原生 GATT 广播接口没有厂商数据参数。2026-11-16 使用官方 WinRT Publisher 样例和 BTVS/TShark 对照发现：GATT 的可连接 190A 广播与 Publisher 厂商数据广播使用不同句柄和地址，后者不可连接，没有合并为同一 B5 广播。不能将并行 Publisher 作为已验证的 iOS 修复。Linux BlueZ/Bumble 是现成候选，但本机当前 WSL 内核缺少已确认的 RTL8922 支持；未为了未知的 iOS 广播要求升级 WSL 或切走蓝牙控制器。
+- **模拟器兼容性：**恢复的 MSA 初始化代码仅捕获 `Exception`，无法捕获实测的 `UnsatisfiedLinkError`；APK 确有相应 ARM64 原生库，不能简单解释为缺库。2026-11-16 将安装目录已解压的 MSA 库可逆改名、触发已有加载失败 fallback 后，原签 Keep 9.1.120 与 Netsim 完成 B5 绑定和活动同步，重启后保留记录并自动重连。安装运行环境已有干预，且模拟器曾意外退出、原因未明；不构成原版无干预或长期稳定证明，详见下节。
 
 最新 Android 包区分了三种不同身份：
 
@@ -83,6 +83,7 @@ ARM32 包仍使用同一架构选择逻辑，库改为 ARM32 和 x86。官方 AP
 | 早期 Bumble 两端虚拟链路及地址复用 | 当时 49 项测试通过，包括首帧、CRC、protobuf、未订阅拒绝、MTU 分段和重连序号 | 设备信息应答在 Bumble LocalLink 上工作，不证明 Keep 已接受 |
 | 早期原型接入 Emulator Netsim | 已广播；登录后的官方 Keep 实际连接、订阅 `0002`，向 `0001` 发出 12 字节 Write Command | 已观察 App 到探针的 GATT 交互；当时尚未实现应用层应答 |
 | API35 启动 Keep | 首次启动及服务自动重启发生 `com.bun.miitmdid.e.a()` JNI 异常；明确 force-stop 后冷启动，登录页持续约 335 秒无新增崩溃、可交互 | 获得可重试的登录基线，未证明初始化问题彻底修复或认证成功 |
+| API35 / Netsim，2026-11-16 | 可逆隔离安装目录 MSA 库后，B5 绑定、3306 字节传输/收讫、设备来源和无无效标记通过；模拟器重启后记录保留、自动重连且目录为空 | 安装运行环境有干预，仅一次恢复；意外退出原因、长期稳定及 iOS 未验证 |
 | 干净 API34 启动 Keep | 未接入 Frida即在 `AW.attachBaseContext → H.load` 崩溃，报告 `libDexHelper-x86.so` 为 EM_X86_64、预期 EM_AARCH64 | 降低系统版本未解决兼容问题，失败早于 OAID 初始化 |
 | API34 ARM64 客体 | 内核运行至 `/init` 后 SIGSEGV/panic，ADB offline | 未进入 Android |
 | API28 ARM64 客体 | 约 278 秒后 `sys.boot_completed=1`；安装 Keep 时 package 服务断开，随后系统服务重启，未安装成功 | 系统曾开机，但不能作为稳定 App 环境；日志还明确无蓝牙服务 |
@@ -114,6 +115,22 @@ Netsim 已启用 `--pcap`；运行中输出文件曾为零字节，正常关闭�
 早期 Frida 路线未取得运行时 DEX，后续成功路径见下文“运行时代码与首条应答”。额外建立 API35 独立 Android 用户可稳定停留在隐私提示，但 `frida-dexdump --realm emulated` 附加后在搜索阶段收到 `script has been destroyed`，系统记录目标自行退出（EXIT_SELF、status 0），未产生 DEX。native realm 对照也未取得 DEX；相关进程和 Frida 服务已停止。该时间关联不足以确定所有启动失败均由分析工具引起。另经官方 UI 进入“不同意，仅浏览”模式可以看到公共首页，但进入“我的”仍要求隐私同意，未开放设备流程。工具、APK、截图和原始日志留在仓库外。
 
 API28 对照使用同一官网最新版 Keep，并未降级 App。系统初始化完成后安装返回 `Failure calling service package: Broken pipe (32)`；后续可见 zygote 重启、媒体服务原生崩溃及 `IVold.mount` 超时。尚不能据此确定是 Watchdog、内存回收还是其他原因导致安装期间系统服务退出。该镜像还打印 `No Bluetooth Service (emulator)`，即使解决稳定性，也只能作为运行时分析基线。所有失败的模拟器实例已停止，保留 AVD 和日志供复查。
+
+### 2026-11-16：API35 隔离 MSA 后的 B5 对照
+
+此前 API35 的短时冷启动恢复不是稳定修复。本轮同一 AVD、原有独立用户会话下，Keep 9.1.120 连续三次在 `com.bun.miitmdid.e.a()` 报 JNI 缺失；已有 Frida 16 spawn 尝试未成功并引起 `system_server` 重启，没有安装 hook 或手写新 hook。SDK 仅补齐缺失文件，保留 userdata，没有关闭 Hyper-V。
+
+实际恢复使用标准 `adb root`：停止 Keep，将当前安装目录已解压的 `lib/arm64/libmsaoaidsec.so` 同目录改名为 `libmsaoaidsec.so.keep-lab-disabled`，保留原文件和权限，核对 SHA-256 未变。原始路径缺库后触发 `MdidManager.u` 已有的加载失败 fallback。APK、签名和登录数据未改，**安装运行环境已经修改**；这是一项可逆实验隔离，不是正式兼容补丁。恢复须停止 App，确认备份哈希和原路径未被更新安装占用后改回原名，不能覆盖新库。
+
+本轮使用现有 `emulator.py`、Bumble 与 Netsim，无实体蓝牙或 nRF 代理；固定复用实验生成的静态随机地址及独立 state，显式指定 SPORT44。用户确认硬件协议后，Keep 显示 B5 绑定成功和已连接。3306 字节文件按 offset `0/512/1024/1536/2048/2560/3072` 完整读出，最后一块 234 字节，接收标记为 true。`0e/13` 辅助运动联动状态请求仍被拒绝，约 30 秒后设置完成；未新增猜测应答，不能将总等待全部归因于该命令。
+
+随后模拟器主进程意外退出，原因未确定。重启同一 AVD、保留 MSA 改名后，Keep 约 3916 ms 冷启动进入原登录态。核对 `netsim.ini` 后确认原 Netsim/Bumble 进程仍存活，地址和 state 未变；Keep 自动重连，Bumble 回复查询，type44 目录为 0，接收标记保留，没有重新发送文件。此次不是 B5 原型进程重启后的重连验收。
+
+重启后的列表仅见一条本轮记录：11 月 16 日户外跑步，1.00 km、00:06:51、配速 06′51″，来源“Keep 手环 B5”，没有“无效数据”标记；同一列表的旧无效条目仍有该标记，可明确区分。详情显示平均步频 162，单段 1.00 km / 06:51 / 06′51″。今日统计为 6 分钟，今日洞察描述户外跑步 6 分 51 秒；未采集上传前统计基线，不能报告精确增量。
+
+本轮已实测绑定、完整传输/收讫、设备来源、无无效标记、重启后记录保留及一次自动重连；未证明长期稳定、独立服务器重读、断线续传或 iOS 兼容。运行与恢复命令见[实验 README](../../experiments/keep_device/README.md#其他连接方式)，不得删除接收标记强制重传。状态、地址、轨迹及原始证据仅保留于仓库外。
+
+iOS 分支仍缺少 Keep 对广播身份的具体匹配规则。CoreBluetooth 提供设备 UUID 而非 Android 的 BLE MAC，连接后共享 B5 协议不能证明发现方式一致。现有 iPhone 日志证明系统收到候选广播，但没有证明 Keep 已连接或订阅。现成 `ipatool` 已准备，尚未取得 IPA；商店下载需要本机 Apple 登录，取得包后还须独立确认 FairPlay 加密范围。开发者模式和 DDI 不会自动赋予发行版 Keep 的调试权限。本轮用户撤走 iPhone 后仅做离线研究，未调用实机。
 
 ### 备用环境的实际边界
 

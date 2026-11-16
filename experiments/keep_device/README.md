@@ -1,5 +1,7 @@
 # Keep B5 设备同步实验
 
+官方 API35 模拟器现也完成一次 B5 活动同步及重启保留对照，但需要可逆隔离 MSA 安装库；运行环境已有干预，长期稳定未通过。模拟器步骤与恢复边界见[其他连接方式](#其他连接方式)。
+
 Android 真机官方 Keep 9.1.120 已通过 Windows 蓝牙原型导入一条 1 km / 411 秒活动，来源显示 **“Keep 手环 B5”**，无无效标记并计入统计；重开 App 后记录和统计保留，未新增重复活动。当前是独立研究原型，没有接入主应用界面；iOS 兼容和 Windows 稳定重连尚未通过。
 
 2026-11-16 已通过 `start-b5.ps1` 完成新一轮真实验收：脚本启动、显示 MAC、仅官方 Android Keep 绑定、3306 字节完整传输及收讫、有效设备来源活动入账。随后用户在 Keep 解绑，电脑 bound 同步变为 false；正常退出并完成名称配置恢复，未遗留本轮广播或捕获进程。该轮未重新验收重开 App 后的持久性；后续测试改用 iPhone，其官方 Keep 绑定与同步仍未通过验收。
@@ -236,6 +238,10 @@ Android Keep 将添加时输入的 MAC 保存为重连目标，并按地址匹�
 
 ## 其他连接方式
 
+### 官方模拟器与 Bumble/Netsim
+
+2026-11-16，官方 API35 模拟器在隔离 MSA 原生库后，以原签 Keep 9.1.120 完成 B5 绑定、3306 字节 SPORT44 传输及收讫。活动显示“Keep 手环 B5”、1.00 km、6 分 51 秒，无无效标记；详情配速 6′51″/km、平均步频 162，单段数据一致。模拟器重启后原登录态和记录保留，Bumble 自动重连，已收讫文件目录为空，未观察到本轮重复记录。该过程修改了安装运行环境，且模拟器曾意外退出、原因未明；一次恢复成功不代表长期稳定或正式兼容修复。
+
 Bumble/Netsim 路线使用独立 Python 3.13 环境和 [requirements.txt](requirements.txt)。安装后启动支持 Netsim 的现有 Android Emulator：
 
 ```powershell
@@ -249,15 +255,33 @@ $avdName = 'YourExistingAVD'
 & "$sdkRoot/emulator/emulator.exe" -avd $avdName -packet-streamer-endpoint default
 ```
 
-开启客体蓝牙后，在另一个终端重新设置 `$toolPython` 和 `$workoutPath` 的完整路径，再运行原型。PORT 从当前 `%LOCALAPPDATA%/Temp/netsim.ini` 的 grpc.port 取得；多实例时核对目标。地址必须是本实验生成的合法随机静态地址，首次生成后固定复用，不能照搬真实设备身份。
+开启客体蓝牙，在模拟器内自行登录 Keep 并授予附近设备权限。在另一个终端重新设置 `$toolPython` 和 `$workoutPath` 的完整路径，再运行原型。PORT 从当前 `%LOCALAPPDATA%/Temp/netsim.ini` 的 `grpc.port` 取得；每次模拟器重启都重新读取，多实例时核对目标。地址必须是本实验生成的合法随机静态地址，首次生成后固定复用，不能照搬真实设备身份。使用独立于 Windows 入口的私人 state 和地址文件：
 
 ```powershell
-# 只在首次运行时生成；重启须使用此前保存的 $labAddress。
-$labAddress = (& $toolPython -c 'from bumble.hci import Address; print(Address.generate_static_address())').Trim()
-& $toolPython -m experiments.keep_device.emulator 'android-netsim:127.0.0.1:PORT' --model B5 --address $labAddress --state 'C:/path/to/private-lab/netsim-b5.json' --workout $workoutPath
+$netsimLab = 'C:/path/to/private-lab'
+$addressPath = Join-Path $netsimLab 'netsim-b5-address.txt'
+# 仅首次生成；父目录须已存在，重启后读取同一文件。
+if (-not (Test-Path -LiteralPath $addressPath)) {
+    & $toolPython -c 'from bumble.hci import Address; print(Address.generate_static_address())' |
+        Set-Content -LiteralPath $addressPath -Encoding ASCII
+}
+$labAddress = (Get-Content -LiteralPath $addressPath -Raw).Trim()
+Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'Temp/netsim.ini')
+# 将 PORT 替换为上面本轮 grpc.port；显式指定已有 SPORT44 的完整路径。
+& $toolPython -m experiments.keep_device.emulator 'android-netsim:127.0.0.1:PORT' --model B5 --address $labAddress --state (Join-Path $netsimLab 'netsim-b5.json') --workout $workoutPath
 ```
 
-Netsim 是虚拟无线链路，不能替代手机射频验收。官方模拟器的 Keep 曾能连接探针，但存在冷启动 MSA/OAID JNI 故障；BlueStacks 可作界面和静态分析对照，当前实例没有可用蓝牙桥。日常复现优先使用已通过的 Android 真机 + Windows 路线。
+在模拟器 Keep 的手动添加页面选择 B5，输入本轮 `ADVERTISING` 输出地址去掉冒号后的 12 位文本。`CONNECTED` 只证明链路连接；完整读取及收讫后，还需在 Keep 核对来源、有效性和详情。此入口没有 Windows 启动器的进度汇总界面，文件传输查看原型日志。停止时使用 Ctrl+C；恢复时保留 AVD userdata、同一 state、地址和 `.received.json`，重新读取 Netsim 端口后启动。已收讫文件返回空目录是正常行为，不删除标记来强制重传。
+
+此路线不需要实体蓝牙、BTVS/TShark 或 nRF Connect，也不能替代手机射频及 iOS 验收。BlueStacks 可作界面和静态分析对照，当前实例没有可用蓝牙桥。
+
+### API35 的 MSA 启动故障与可逆隔离
+
+本轮原环境连续三次在 `com.bun.miitmdid.e.a()` 报 JNI 缺失并崩溃；已有 Frida 16 spawn 尝试失败且导致 `system_server` 重启，没有安装 hook。实际恢复使用 Android 自带工具：先停止目标 Keep，通过 `adb root` 进入支持 root 的实验 AVD，核对当前包安装路径及已解压的 `lib/arm64/libmsaoaidsec.so`，记录 SHA-256，再将该文件在同目录改名为 `libmsaoaidsec.so.keep-lab-disabled`，保留原文件和权限。原始路径缺库后走 Keep 已有 `MdidManager.u` 加载失败 fallback，随后可进入原登录态。本轮重启后冷启动耗时约 3916 ms。
+
+恢复原环境时，先停止 Keep，核对备份文件哈希及原路径未被更新安装重新占用，再把该文件改回原名；不得覆盖更新后的库。重装或升级可能改变安装目录，不能复用旧路径。此操作只用于本次实验 AVD，不是实体手机的使用步骤；未修改 APK、签名或登录数据，但确实修改了安装运行环境，不能称为原版无干预验收。SDK 修复只补缺失文件并保留 userdata，无需关闭 Hyper-V。
+
+本轮 `0e/13` 辅助运动联动状态请求仍被拒绝，约 30 秒后设置自行完成；没有据此新增猜测应答，也不能把全部等待都归因于该命令。
 
 ## 瓶颈、未测项与自证
 
@@ -265,13 +289,14 @@ Netsim 是虚拟无线链路，不能替代手机射频验收。官方模拟器�
 |---|---|
 | Windows 持续重连 | 未通过，不是当前短期同步入口的承诺；地址变化后受控重绑 |
 | 一键入口 | 地址对照、Android Keep 绑定、3306 字节传输/收讫、有效活动入账、在线解绑与退出清理通过；本轮未复测重开持久性，iPhone 待验收 |
+| API35 / Netsim | MSA 库隔离后绑定、完整传输/收讫、设备来源、无无效标记及重启保留通过；一次自动重连并返回空目录，长期稳定未验收，曾意外退出 |
 | iOS | nRF Connect 设备信息往返通过；官方 Keep 直接绑定/同步未通过，同账号活动显示未验收 |
 | 数据覆盖 | 本次 1 km 候选有效；多公里、长时和边界输入仅离线测试 |
 | 服务端契约 | 统计和重开保留已观察；独立 HTTP 重读、一般去重/阈值未知 |
 | 其他固件功能 | 暂停、请求重组、ACK/PUSH、多手机、未知传感器字段尚未实现或验证，详见 CONTRACT |
 | 产品交付 | 尚无一键生成/同步 UI，没有改动主应用 FIT/TCX 或配置模板 |
 
-包含显式重绑恢复参数的完整回归为 **430 项通过、5 个子测试通过**。离线检查、真实绑定、文件收讫和有效活动入账分别验收，不能互相替代。现有 `pytest.ini` 的 `testpaths=tests` 不会自动发现本目录，现有 CI 的 `python -m pytest` 也不覆盖这些实验测试；修改后必须显式运行完整目录。在装有 Bumble 和 pytest 的实验环境运行：
+包含显式重绑恢复参数及启动诊断修复的完整回归为 **431 项通过、5 个子测试通过**。离线检查、真实绑定、文件收讫和有效活动入账分别验收，不能互相替代。现有 `pytest.ini` 的 `testpaths=tests` 不会自动发现本目录，现有 CI 的 `python -m pytest` 也不覆盖这些实验测试；修改后必须显式运行完整目录。在装有 Bumble 和 pytest 的实验环境运行：
 
 ```powershell
 & $toolPython -m pytest experiments/keep_device -q

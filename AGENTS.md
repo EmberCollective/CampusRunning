@@ -16,6 +16,7 @@
 - 修改前阅读[连接与运行说明](experiments/keep_device/README.md)、[接口及协议契约](experiments/keep_device/CONTRACT.md)；证据与兼容性背景见 [issue #63 调研](docs/research/keep-third-party-source-63.md)。
 - `history.py` 将已有、已转换为 WGS-84 的 `ExportData` 编码为 B5 SPORT44；`files.py` 管理单文件队列；`state.py` 管理绑定与配置；`windows.py` / `emulator.py` 分别复用 Bless / Bumble 提供蓝牙传输。不要再次转换坐标或另写蓝牙栈。
 - `start-b5.ps1` / `launcher.py` 是 Windows 一键入口，复用 `windows_mac.py` 和电脑端 BTVS/TShark 显示本轮广播 MAC、连接应答及发送进度；通过 `windows.py --stop-file` 正常退出。手机日常只需官方 Keep，不要求 nRF 或系统配对；地址变化后走受控重绑，不承诺固定地址或长期连接。
+- `emulator.py` 是独立 Bumble/Netsim 入口，不需要 BTVS/TShark 或实体蓝牙；复用同一实验静态地址、state 和接收标记，每轮读取新的 Netsim 端口。API35 在可逆隔离 MSA 安装库后已通过 B5 绑定、完整传输、设备来源、无无效标记及重启保留；这是修改安装运行环境后的单次恢复证据，不是长期稳定或 iOS 验收，操作与恢复见实验 README。
 - B5 未加载运动文件时仍须回应已支持的空目录 RPC，不能因省略 `--workout` 阻断初始化；不自动清空绑定或接收标记来重试。显式 `-ResetBinding` / `--reset-binding` 仅在用户已于 Keep 解绑后重置本地 bound，保留配置与接收标记。
 - 接收标记仅代表设备文件已领取，不代表活动有效；涉及协议或导入的修改须区分离线测试、真实连接、完整传输、活动来源与有效性验收。测试入口为 `python -m pytest experiments/keep_device -q`，需使用独立实验环境。
 - Android Keep 9.1.120 已完成单条有效活动验收；iOS Keep、稳定重连和批量同步没有通过验收。不得把原型描述为已集成的正式导入功能。

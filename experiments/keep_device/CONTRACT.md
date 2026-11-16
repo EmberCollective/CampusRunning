@@ -7,7 +7,9 @@
 | 模块 | 入口 | 输入与输出 / 职责 |
 |---|---|---|
 | [history.py](history.py) | `encode_workout(data: ExportData) -> bytes` | 将既有导出数据编码为单条 RUN=2 SPORT44；不生成轨迹、不转换坐标、不访问账号或蓝牙 |
-| [files.py](files.py) | `WorkoutFiles(path)`；`accepts(payload)`；`reply(payload)` | 启动时读取固定文件快照；请求/回复为 `SID + CID + protobuf`，维护单文件待传队列及接收标记 |
+| [exporter.py](exporter.py) | `B5Exporter(BaseExporter)` | 构造注入旧生成引擎；校验轨迹末点距离/首末时长与摘要一致，编码后 CRC 校验，原子发布 `.sport44` 且拒覆盖 |
+| [dashboard.py](dashboard.py) | `python -m experiments.keep_device.dashboard` | 仅本机的可选旧 Web 扩展，注入 B5 导出器，管理一个自有 Netsim 子进程和固定文件清单 |
+| [files.py](files.py) | `WorkoutFiles(path)` 或 `WorkoutFiles(None, paths=[...])`；`accepts(payload)`；`reply(payload)` | 启动时读取固定快照；请求/回复为 `SID + CID + protobuf`，按 UUID 路由读取并维护每文件接收标记 |
 | [state.py](state.py) | `BindingState(path, mac)`；`accepts(payload)`；`reply(payload)` | 保存设备绑定和配置；读写私人 JSON，状态成功落盘后回复 |
 | [btcp.py](btcp.py) | `DeviceInfoSession(mac, state=None, model="B3", workout=None)` | 按连接维护设备信息和 B3 发包序号；`reply_packets(request, limit)` 返回通知字节列表 |
 | [simple.py](simple.py) | `decode_request(packet)`；`encode_response(payload, request_id, limit)` | B5 校验与分片；解码返回请求 ID 和标准业务载荷，编码返回各通知包 |
@@ -18,6 +20,21 @@
 | [launcher.py](launcher.py) / [start-b5.ps1](start-b5.ps1) | 管理员启动入口，接收 BTVS/TShark、state、可选 SPORT44 和时长 | 按顺序启动地址观察与 B5，在同一窗口显示地址、订阅、业务回复及文件发送进度，并管理本次进程退出 |
 
 `accepts()` 只做路由/形状检查，不代表 protobuf、字段或业务已通过验证。非法输入通常抛 `ValueError`；`UnsupportedRequest` 是其子类；文件和状态读写失败可抛 `OSError`。传输层据此拒绝业务回复，不将异常文本或业务载荷写入诊断日志。
+
+### 可选面板接口
+
+默认 `web.routes.create_app()` 保持 FIT/TCX 页面；实验入口使用 `create_app(exporters={"b5": B5Exporter()})` 显式注入。四个原 `/api/generate/*` 端点复用原规划器，B5 使用严格失败模式，并要求轨迹、WGS-84 转换和步频开启。B5 输出固定在私人面板目录，批次最多 64 天；生成不自动载入或上传。
+
+| HTTP | 用途 |
+|---|---|
+| `GET /watch` | 面板；`?job=...` 仅显示生成结果的载入预览 |
+| `GET /api/watch/status` | running/ready/connected、mac/keep_mac、records、total_km、pending/received、error；禁止缓存 |
+| `POST /api/watch/start` / `stop` | 启停面板拥有的广播进程，不接管其他进程 |
+| `POST /api/watch/load` | JSON `{ "job_id": "..." }`；仅载入本服务生成且校验通过的完整 B5 目录，存在旧待同步记录时拒绝替换 |
+
+面板操作和 B5 生成请求要求页面会话的 `X-Watch-Token`；服务绑定 localhost 并校验 Host。页面令牌不是 Keep 凭据。清单来自加载时的不可变字节快照，之后仅按内容哈希校验并刷新收讫标记；外部新增文件不会出现在已加载清单。`connected` 来自本次进程的真实连接/断开事件，并受进程存活状态约束，不等同于 Keep 账号绑定或活动有效。摘要时间以 UTC+08:00 展示，不暴露用户配置或坐标。
+
+模拟器 `--stop-file` 必须是已有目录中的新路径；文件出现后正常停止广播。面板退出先通知其子进程，超时只终止自己拥有的进程树。进程强杀或主机断电不能保证正常退出；已持久化的收讫标记保留。
 
 Windows 启动入口面向一轮短期连接与同步，手机只使用官方 Keep；不要求 nRF、USB 调试或系统 SMP 配对。BTVS/TShark 是该 Windows 入口的电脑运行依赖，Bumble/Netsim 不需要它们。Windows 地址变化后可能需要在 Keep 受控解绑并重新添加，不承诺跨重启自动重连。
 
@@ -123,7 +140,9 @@ Keep 在设备回复成功后才提交服务器绑定，未确认服务器失败
 | `06/03` | `FileType` | `FileStatusSum(file_status_table:1 repeated)`；SPORT44 收讫项的 status:3=1，已知空目录返回空结果 |
 | `06/07` | `DelOneFile(type:1 uint32, uuid:2 uint64)` | `DelOneFileStatus(status:1 uint32)`；匹配 SPORT44 为 1，其余不存在项为 2 |
 
-目录类型是十进制：44（SPORT_PLUS）最多一条；`1–6、35–37、41–43、45、47` 返回已确认的空目录，其余类型拒绝。目录类型 44 与正文 section tag 44 属于不同命名空间。
+目录类型是十进制：44（SPORT_PLUS）返回未收讫文件；`1–6、35–37、41–43、45、47` 返回已确认的空目录，其余类型拒绝。目录类型 44 与正文 section tag 44 属于不同命名空间。
+
+单文件接口保持兼容；显式 `paths` 批量输入为 1–64 个文件、合计不超过 64 MiB，与单文件参数互斥。启动前固定并校验全部快照，重复内容或 UUID 冲突拒绝。64 条限制确保目录及批量收讫响应在 MTU 23 下仍不超过 SIMPLE 的 128 片上限。批量读取、单条收讫均按 UUID 路由，每个文件保留独立标记；批量收讫不是事务，某条落盘失败时不回复成功，已落盘的条目仍保留，重试幂等。日志 `workout_batch total/received/pending` 只统计本次文件集合，不代表有效活动数量；读取日志没有文件序号，不能把不同文件的偏移合并成总进度。
 
 B5 始终挂接文件 RPC，即使未传入 `--workout`。`WorkoutFiles(None)` 表示无待传文件：已支持类型的目录与批量收讫列表为空，读取或单文件收讫返回不存在状态，不创建运动文件或接收标记。此前无文件时拒绝这些请求会阻断初始化中的目录查询；这项修复不改变未知命令、未知类型与非法 protobuf 的拒绝规则。
 
@@ -200,6 +219,8 @@ SPORT44 删除请求在原型中表示收讫：先原子写入同目录 `<文件
 
 ## 运行与清理边界
 
+模拟器 `--workout-dir` 与 `--workout` 互斥，仅 B5 可用。它按文件名排序选择目录第一层的 `*.sport44`，启动后不扫描新文件；不接受 ZIP/FIT，也不将多条运动合并。Windows 启动入口仍只有单文件参数。2026-11-16 本批 44 条、398697 字节已被 Android Keep 逐条领取，44 个独立标记落盘；运动列表已观察到本批 B5 来源记录，但未逐条核验全部有效性，也未验收批量断线恢复或 iOS。
+
 `emulator.py` 直接使用 Bumble `android-netsim` transport，与 Windows 启动器的状态和运行依赖隔离。重启后读取本轮 `netsim.ini` 的 `grpc.port`，显式复用同一实验静态随机地址、state 和指定 SPORT44；保留接收标记，不能把目录为空视为传输故障。该入口输出连接、业务及文件日志，没有 Windows 启动器的汇总进度显示。Netsim 验收不能代替实体蓝牙或 iOS 验收。
 
 2026-11-16 API35 对照在将安装目录的 MSA 库可逆改名后完成，APK 与签名未改、登录数据保留，但安装运行环境有干预；步骤及恢复边界见 [README](README.md#api35-的-msa-启动故障与可逆隔离)。`0e/13` 为辅助运动联动状态请求，当前仍拒绝，不以猜测应答消除等待；本轮设置随后自行完成。
@@ -228,6 +249,6 @@ Windows 桥仅允许一个通知订阅客户端，排队/待调度请求上限�
 | 泛化输入 | 多公里、长时 V2、重复秒和错误边界有本地测试；无对应真实硬件/云端全面验收 |
 | 固件缺口 | opaque8、locationType 精确语义、缺测 bearing/pressure/accuracy/点热量、暂停、GPS_NEW、独立速度段未完整恢复 |
 | 传输恢复 | SIMPLE 请求重组、ACK/PUSH、多手机、断线恢复后的完整再次同步未实现或未验收 |
-| 产品集成 | 独立实验模块，未接入主应用界面、配置模板或正式导出协议 |
+| 产品集成 | 可选 dashboard 复用旧 Web 四模式并注入原生 B5，提供手表管理；默认应用不加载实验依赖，未打包发布 |
 
 凭据、state、SPORT44、接收标记、截图、抓包和反编译产物均留在私人实验目录，不提交仓库。

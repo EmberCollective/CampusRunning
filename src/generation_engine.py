@@ -44,14 +44,19 @@ class GenerationEngine:
     规划 -> 轨迹生成 -> 导出
     """
 
-    def __init__(self, config_manager: ConfigManager) -> None:
+    def __init__(self, config_manager: ConfigManager,
+                 exporters: dict[str, BaseExporter] | None = None, *, strict: bool = False) -> None:
         """初始化生成引擎
 
         Args:
             config_manager: 配置管理器实例
+            exporters: 可选格式导出器；实验适配由调用方注入。
+            strict: 任一文件失败时抛出异常，不返回部分成功结果。
         """
         self._config_manager = config_manager
         self._exporters: dict[str, BaseExporter] = {"tcx": TcxExporter()}
+        self._exporters.update(exporters or {})
+        self._strict = strict
 
         logger.info("生成引擎初始化完成")
 
@@ -220,6 +225,8 @@ class GenerationEngine:
                 logger.error(
                     "生成 %s 的数据失败: %s", plan.date, e, exc_info=True,
                 )
+                if self._strict:
+                    raise
 
         logger.info("生成完成: %d/%d 个文件", len(results), len(plans))
         return results
@@ -296,6 +303,11 @@ class GenerationEngine:
                 config.enable_pace_fluctuation,
                 config.enable_cadence,
             )
+            if len(trackpoints) >= 2:
+                duration = (datetime.datetime.fromisoformat(trackpoints[-1].time)
+                            - datetime.datetime.fromisoformat(trackpoints[0].time)).total_seconds()
+                pace = duration / (60 * distance_km)
+                calories = calculate_calories(distance_km, duration, config.calories_per_km)
 
         # 构建导出数据
         export_data = ExportData(

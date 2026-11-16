@@ -28,6 +28,7 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+#watch-load-link[hidden] { display: none; }
 
 body {
     font-family: var(--sans);

@@ -139,7 +139,7 @@ python main.py daily --template easy_run --track campus_default --zip \
 | `src/*.py` | 配置管理、模板管理、生成引擎编排 |
 | `web/` | Flask 路由、页面与静态资源 |
 | `config/` | 轨迹定义、预设模板、默认设置 |
-| `experiments/keep_device/` | 独立 Keep B3/B5 蓝牙设备适配实验，未接入主应用 |
+| `experiments/keep_device/` | 独立 Keep B3/B5 适配实验；可选手表面板复用旧页面，原生生成 B5 并显示里程、连接和 MAC |
 
 架构与数据流详见[架构说明](docs/architecture.md)。
 

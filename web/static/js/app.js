@@ -3,7 +3,7 @@
 let currentJobId = null;
 
 // 支持的输出格式白名单（与后端 models.py 校验保持一致）
-const OUTPUT_FORMATS = ['fit', 'tcx'];
+const OUTPUT_FORMATS = Array.from(document.querySelector('.output-format').options, option => option.value);
 
 // 轨迹元数据缓存：id -> {name, lap_distance_km}（来自 /api/tracks，预览卡片表头用）
 const trackMetaCache = new Map();
@@ -17,6 +17,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadTracks();
     await loadTemplates();
     initForms();
+    document.querySelectorAll('.output-format').forEach(select => {
+        const output = document.getElementById(select.id.replace('-output-format', '-output-dir'));
+        const label = document.querySelector(`label[for="${output.id}"]`);
+        const update = () => {
+            output.disabled = select.value === 'b5';
+            label.textContent = output.disabled ? '输出目录（手表数据自动保存）' : '输出目录';
+        };
+        select.addEventListener('change', update);
+        update();
+    });
 });
 
 // 加载并展示应用版本号（来自 /api/version 的 Python 侧元数据）
@@ -928,11 +938,13 @@ function collectDatesFormData() {
 async function generate(mode, data) {
     showMessage('正在生成...', 'loading');
     disableButtons(true);
+    const watchLink = document.getElementById('watch-load-link');
+    if (watchLink) watchLink.hidden = true;
 
     try {
         const response = await fetch(`/api/generate/${mode}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(window.watchToken ? {'X-Watch-Token': window.watchToken} : {}) },
             body: JSON.stringify(data)
         });
 
@@ -959,6 +971,12 @@ function showResults(result) {
     const section = document.getElementById('results-section');
     const tbody = document.getElementById('results-body');
     const downloadBtn = document.getElementById('download-btn');
+    const watchLink = document.getElementById('watch-load-link');
+    if (watchLink) {
+        const isB5 = result.files.length > 0 && result.files.every(file => file.filename.endsWith('.sport44'));
+        watchLink.hidden = !isB5;
+        if (isB5) watchLink.href = `/watch?job=${encodeURIComponent(result.job_id)}`;
+    }
 
     tbody.innerHTML = result.files.map(f => `
         <tr>

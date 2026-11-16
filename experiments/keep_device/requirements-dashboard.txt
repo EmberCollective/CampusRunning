@@ -1,0 +1,4 @@
+# Optional local watch panel, installed only in the experiment environment.
+-r requirements.txt
+Flask==3.1.2
+garmin-fit-sdk==21.221.0

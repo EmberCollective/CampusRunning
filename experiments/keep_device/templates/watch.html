@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>手表管理 · 校园跑步数据生成器</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .watch-main {max-width:1080px;margin:28px auto;padding:0 20px 40px;}
+        .watch-main .panel {margin-bottom:20px;padding:24px;}
+        .watch-head {display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;}
+        .watch-head h2 {font-size:20px;}
+        .watch-head .btn {flex:none;width:auto;}
+        .watch-note {color:var(--text-2);margin-top:8px;}
+        .watch-stats {display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:24px 0;}
+        .watch-stats>div {padding:16px;background:var(--surface-2);border-radius:var(--radius);}
+        .watch-stats strong {display:block;font-size:28px;font-family:var(--mono);}
+        .watch-mac {font:20px var(--mono);letter-spacing:.05em;overflow-wrap:anywhere;}
+        .watch-address {margin-top:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+        .watch-table {overflow:auto;max-height:520px;}
+        .watch-table table {width:100%;border-collapse:collapse;white-space:nowrap;}
+        .watch-table th,.watch-table td {padding:12px;text-align:left;border-bottom:1px solid var(--border);}
+        .watch-table th {position:sticky;top:0;background:var(--surface);}
+        #error {color:var(--danger);margin-bottom:16px;}
+        #connection {font-weight:600;color:var(--text-2);}
+        #connection[data-connected=true] {color:var(--success);}
+        [hidden] {display:none!important;}
+        @media(max-width:600px) {.watch-stats{grid-template-columns:1fr}.watch-main .panel{padding:16px}.watch-main{padding:0 12px}.topbar h1{font-size:16px}}
+    </style>
+</head>
+<body>
+    <header class="topbar"><h1>手表管理</h1><div class="topbar-side"><a class="link-btn" href="/">返回生成器 →</a></div></header>
+    <main class="watch-main">
+        <p id="error" role="alert" hidden></p>
+        {% if candidate %}
+        <section class="panel" id="candidate">
+            <div class="watch-head"><div><h2>准备载入 {{ candidate.count }} 条记录</h2><p class="watch-note">共 {{ candidate.km }} 公里。载入后，已连接的 Keep 会开始同步。</p></div>
+            <button id="load" class="btn btn-primary">载入并开始同步</button></div>
+        </section>
+        {% endif %}
+        <section class="panel">
+            <div class="watch-head"><div><h2>Keep B5</h2><p id="connection" aria-live="polite">正在读取连接状态…</p></div><button id="toggle" class="btn btn-secondary" disabled>正在检查…</button></div>
+            <div class="watch-address"><span>Keep 中填写的 MAC</span><strong class="watch-mac" id="mac">—</strong><button id="copy" class="btn btn-secondary btn-sm" disabled>复制</button></div>
+            <p class="watch-note">当前连接方式：安卓模拟器。已连接表示蓝牙链路已通，运动记录请在 Keep 对应日期查看。</p>
+            <div class="watch-stats">
+                <div><span>已载入总里程（公里）</span><strong id="km">—</strong></div>
+                <div><span>待同步（条）</span><strong id="pending">—</strong></div>
+                <div><span>Keep 已领取（条）</span><strong id="received">—</strong></div>
+            </div>
+            <p class="watch-note">总里程包含本批已领取的文件。源文件仍保留，已领取记录不会重复发送；领取不等于活动有效。</p>
+        </section>
+        <section class="panel">
+            <div class="watch-head"><h2>手表内的运动数据</h2><span id="count" class="watch-note"></span></div>
+            <p id="empty" class="watch-note" hidden>还没有载入记录。返回生成器，选择“B5 手表”输出，生成后点击“载入手表”。</p>
+            <div class="watch-table"><table><thead><tr><th>运动时间</th><th>里程（公里）</th><th>用时</th><th>状态</th></tr></thead><tbody id="records"></tbody></table></div>
+        </section>
+    </main>
+    <script>
+    const token = {{ token | tojson }};
+    const candidate = {{ candidate | tojson }};
+    const el = id => document.getElementById(id);
+    let snapshot = null, busy = false, refreshing = false;
+    function error(message) {el('error').textContent = message || '';el('error').hidden = !message;}
+    function render(data) {
+        snapshot = data;
+        el('connection').textContent = !data.running ? '广播已停止' : data.connected ? '已连接' : data.ready ? '正在广播，等待 Keep 连接' : '正在启动广播…';
+        el('connection').dataset.connected = String(data.connected);
+        el('mac').textContent = data.keep_mac;
+        el('copy').disabled = false;
+        el('toggle').textContent = data.running ? '停止广播' : '启动广播';
+        el('toggle').disabled = busy;
+        el('km').textContent = data.total_km.toFixed(2);
+        el('pending').textContent = data.pending;
+        el('received').textContent = data.received;
+        el('count').textContent = `${data.records.length} 条记录`;
+        el('empty').hidden = data.records.length !== 0;
+        el('records').replaceChildren();
+        for (const record of [...data.records].reverse()) {
+            const row = document.createElement('tr');
+            const seconds = record.duration_seconds;
+            for (const value of [record.date.slice(0,19).replace('T',' '),record.distance_km.toFixed(2),`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`,record.received?'已领取':'待同步']) {
+                const cell=document.createElement('td');cell.textContent=value;row.append(cell);
+            }
+            el('records').append(row);
+        }
+        if (data.error) error(data.error);
+    }
+    async function refresh() {
+        if (refreshing || busy) return;
+        refreshing=true;
+        try {
+            const response=await fetch('/api/watch/status',{cache:'no-store',signal:AbortSignal.timeout(6000)});
+            if(!response.ok) throw new Error('无法读取状态，请检查管理服务是否运行。');
+            render(await response.json());
+        } catch (e) {
+            el('connection').textContent='连接状态未知';el('connection').dataset.connected='false';
+            el('toggle').disabled=true;error(e.message);
+        } finally {refreshing=false;}
+    }
+    async function act(action, body={}) {
+        if(busy) return;
+        busy=true;error('');el('toggle').disabled=true;if(el('load'))el('load').disabled=true;
+        try {
+            const response=await fetch(`/api/watch/${action}`,{method:'POST',headers:{'Content-Type':'application/json','X-Watch-Token':token},body:JSON.stringify(body),signal:AbortSignal.timeout(25000)});
+            const data=await response.json();if(!response.ok)throw new Error(data.error || '操作失败');
+            render(data);if(action==='load')el('candidate').hidden=true;
+        } catch(e) {error(e.message);} finally {busy=false;if(el('load'))el('load').disabled=false;await refresh();}
+    }
+    el('toggle').onclick=()=>snapshot&&act(snapshot.running?'stop':'start');
+    el('copy').onclick=async()=>{try{await navigator.clipboard.writeText(snapshot.keep_mac);el('copy').textContent='已复制';setTimeout(()=>el('copy').textContent='复制',1500);}catch{error('复制失败，请手动复制上面的 MAC。');}};
+    if(el('load'))el('load').onclick=()=>act('load',{job_id:candidate.id});
+    refresh();setInterval(refresh,2000);
+    </script>
+</body>
+</html>

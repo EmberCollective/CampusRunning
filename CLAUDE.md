@@ -36,7 +36,9 @@ python app.py
 | 模块 | 职责 |
 |------|------|
 | `history.py` | `encode_workout(ExportData) -> bytes`，编码 SPORT44；输入坐标已是 WGS-84 |
-| `files.py` | 单文件目录、偏移读取与持久接收标记；保留源文件 |
+| `exporter.py` | 原生 `B5Exporter`，构造注入旧引擎，严格摘要校验、原子发布与拒覆盖 |
+| `dashboard.py` / `templates/watch.html` | 复用旧 Web 四模式，提供可选手表管理面板、固定清单/里程、MAC 和真实连接状态；仅本机运行 |
+| `files.py` | 单文件或固定批量目录，按 UUID 读取与逐文件持久接收标记；保留源文件 |
 | `state.py` | 设备绑定、解绑、配置及查询应答 |
 | `btcp.py` / `simple.py` | B3/B5 会话与帧、CRC、B5 通知分片 |
 | `protocol.py` / `emulator.py` | Bumble 服务及 Android Netsim 实验入口 |
@@ -45,6 +47,10 @@ python app.py
 | `launcher.py` / `start-b5.ps1` | Windows 一键启动、地址/订阅/业务应答/传输进度显示；通过 `--stop-file` 通知原型正常退出 |
 
 独立环境中运行 `python -m pytest experiments/keep_device -q`；Windows 蓝牙环境使用 Python 3.11 和模块内 `requirements-windows.txt`，Bumble/测试环境依赖见模块内 `requirements.txt`。不得混入主应用环境。
+
+可选面板依赖见 `requirements-dashboard.txt`。`GenerationEngine(config_manager, exporters=None, strict=False)` 保留默认流程；面板注入 B5 并严格失败。主应用不导入实验包，四模式不另写一套。面板中生成、预览不上传，显式“载入并开始同步”才切换本面板拥有的广播；不得把连接或收讫当作活动有效性。
+
+批量入口仅在模拟器 `emulator.py --workout-dir`：启动时固定 1–64 条 SPORT44、总计最多 64 MiB，与单文件参数互斥；Windows 一键入口保持单文件。2026-11-16 已确认 Android Keep 领取 44/44 条，且运动列表显示本批 B5 来源记录；未逐条验收全部活动有效性或批量中断恢复。每文件保留独立收讫标记，重启不重发已领取记录。
 
 已在 Android Keep 9.1.120 验证 B5 绑定、完整文件传输、设备来源及有效活动入账。Windows 自动重连仍不稳定，iOS Keep 尚未通过；文件领取成功不能代替活动有效性验收。所有账号配置、生成记录与研究原始材料留在仓库外。
 

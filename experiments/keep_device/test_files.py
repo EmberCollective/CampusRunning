@@ -312,3 +312,66 @@ def test_marker_write_failure_never_acknowledges_or_hides_file(source, wire, mon
     assert not list(source.parent.glob("*.tmp"))
     assert _entry(files, wire).id == entry.id
     assert _entry(WorkoutFiles(source), wire).id == entry.id
+
+
+@pytest.fixture
+def pair(source):
+    second = source.with_name("second.sport44")
+    changed = bytearray(source.read_bytes()[:-4])
+    changed[4] ^= 1
+    second.write_bytes(changed + struct.pack("<I", zlib.crc32(changed)))
+    return [source, second]
+
+
+def test_batch_interleaved_reads_receipt_and_restart(pair, wire):
+    files = WorkoutFiles(None, paths=pair)
+    entries = wire["Directory"].FromString(files.reply(bytes.fromhex("06 01 08 2c"))[2:]).entries
+    assert len(entries) == 2
+    buffers = [bytearray(), bytearray()]
+    while any(len(buf) < entry.size for buf, entry in zip(buffers, entries)):
+        for buf, entry in zip(buffers, entries):
+            if len(buf) == entry.size:
+                continue
+            req = wire["Read"](id=entry.id, offset=len(buf), count=2048)
+            chunk = wire["Chunk"].FromString(files.reply(b"\x06\x02" + req.SerializeToString())[2:])
+            assert chunk.state == 0 and 0 < len(chunk.data) <= 512
+            buf.extend(chunk.data)
+    assert buffers == [p.read_bytes() for p in pair]
+    delete = b"\x06\x07" + wire["Delete"](kind=44, id=entries[0].id).SerializeToString()
+    assert files.reply(delete) == files.reply(delete)
+    restarted = WorkoutFiles(None, paths=pair)
+    assert _entry(restarted, wire).id == entries[1].id
+    assert not pair[1].with_name(pair[1].name + ".received.json").exists()
+    unknown = wire["Read"](id=entries[0].id, count=512)
+    assert wire["Chunk"].FromString(restarted.reply(b"\x06\x02" + unknown.SerializeToString())[2:]).state == 2
+
+
+def test_batch_rejects_duplicate_and_invalid_selection(pair):
+    with pytest.raises(ValueError, match="Duplicate"):
+        WorkoutFiles(None, paths=[pair[0], pair[0]])
+    with pytest.raises(ValueError, match="either"):
+        WorkoutFiles(pair[0], paths=pair)
+    for paths in ([], [pair[0]] * 65):
+        with pytest.raises(ValueError, match="1 to 64"):
+            WorkoutFiles(None, paths=paths)
+
+
+def test_batch_partial_receipt_failure_preserves_pending_file(pair, wire, monkeypatch):
+    import os
+    files = WorkoutFiles(None, paths=pair)
+    entries = wire["Directory"].FromString(files.reply(bytes.fromhex("06 01 08 2c"))[2:]).entries
+    replace = os.replace
+
+    def fail_second(src, dst):
+        if dst.name == pair[1].name + ".received.json":
+            raise PermissionError("second receipt failed")
+        replace(src, dst)
+
+    monkeypatch.setattr("experiments.keep_device.files.os.replace", fail_second)
+    with pytest.raises(PermissionError):
+        files.reply(bytes.fromhex("06 03 08 2c"))
+    assert _entry(WorkoutFiles(None, paths=pair), wire).id == entries[1].id
+    monkeypatch.setattr("experiments.keep_device.files.os.replace", replace)
+    response = files.reply(bytes.fromhex("06 03 08 2c"))
+    assert len(wire["Directory"].FromString(response[2:]).entries) == 2
+    assert WorkoutFiles(None, paths=pair).reply(bytes.fromhex("06 01 08 2c")) == b"\x06\x01"

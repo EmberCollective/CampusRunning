@@ -14,7 +14,7 @@ import uuid
 import zipfile
 from typing import Optional
 
-from flask import Flask, render_template, request, jsonify, send_file, abort, after_this_request
+from flask import Flask, render_template, request, jsonify, send_file, abort, after_this_request, current_app
 
 from src import __version__, paths
 from src.config_manager import ConfigManager
@@ -78,7 +78,7 @@ def _init_tracks_cache() -> None:
     logger.info("轨迹缓存初始化完成，共 %d 条", len(_tracks_cache))
 
 
-def create_app() -> Flask:
+def create_app(*, exporters=None) -> Flask:
     """创建并配置 Flask 应用
 
     Returns:
@@ -96,6 +96,7 @@ def create_app() -> Flask:
         template_folder=template_folder,
         static_folder=static_folder,
     )
+    app.config["GENERATION_EXPORTERS"] = dict(exporters or {})
 
     _config_manager = ConfigManager(paths.get_config_dir())
     _template_manager = TemplateManager(_config_manager)
@@ -410,8 +411,8 @@ def _parse_generate_request(data: dict) -> GenerationConfig:
         生成配置对象
     """
     overrides = {
-        "min_pace": data.get("min_pace", 7.0),
-        "max_pace": data.get("max_pace", 8.0),
+        "min_pace": data.get("min_pace", data.get("pace", 7.0)),
+        "max_pace": data.get("max_pace", data.get("pace", 8.0)),
         "start_time_min": data.get("start_time_min", "06:00"),
         "start_time_max": data.get("start_time_max", "08:00"),
         "output_dir": data.get("output_dir", "output"),
@@ -445,7 +446,7 @@ def generate_daily():
 
         from src.generation_engine import GenerationEngine
 
-        engine = GenerationEngine(_config_manager)
+        engine = GenerationEngine(_config_manager, exporters=current_app.config["GENERATION_EXPORTERS"], strict=config.output_format == "b5")
         results = engine.generate_daily(start, end, min_km, max_km, config)
 
         _cleanup_old_jobs()
@@ -489,7 +490,7 @@ def generate_total():
 
         from src.generation_engine import GenerationEngine
 
-        engine = GenerationEngine(_config_manager)
+        engine = GenerationEngine(_config_manager, exporters=current_app.config["GENERATION_EXPORTERS"], strict=config.output_format == "b5")
         results = engine.generate_total(start, end, total_km, config)
 
         _cleanup_old_jobs()
@@ -525,7 +526,7 @@ def generate_single():
 
         from src.generation_engine import GenerationEngine
 
-        engine = GenerationEngine(_config_manager)
+        engine = GenerationEngine(_config_manager, exporters=current_app.config["GENERATION_EXPORTERS"], strict=config.output_format == "b5")
         result = engine.generate_single(date, distance, config)
 
         _cleanup_old_jobs()
@@ -576,7 +577,7 @@ def generate_dates():
 
         from src.generation_engine import GenerationEngine
 
-        engine = GenerationEngine(_config_manager)
+        engine = GenerationEngine(_config_manager, exporters=current_app.config["GENERATION_EXPORTERS"], strict=config.output_format == "b5")
         results = engine.generate_dates(dates, min_km, max_km, config)
 
         _cleanup_old_jobs()

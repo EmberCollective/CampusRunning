@@ -2,7 +2,7 @@
 
 官方 API35 模拟器现也完成一次 B5 活动同步及重启保留对照，但需要可逆隔离 MSA 安装库；运行环境已有干预，长期稳定未通过。模拟器步骤与恢复边界见[其他连接方式](#其他连接方式)。
 
-Android 真机官方 Keep 9.1.120 已通过 Windows 蓝牙原型导入一条 1 km / 411 秒活动，来源显示 **“Keep 手环 B5”**，无无效标记并计入统计；重开 App 后记录和统计保留，未新增重复活动。当前是独立研究原型，没有接入主应用界面；iOS 兼容和 Windows 稳定重连尚未通过。
+Android 真机官方 Keep 9.1.120 已通过 Windows 蓝牙原型导入一条 1 km / 411 秒活动，来源显示 **“Keep 手环 B5”**，无无效标记并计入统计；重开 App 后记录和统计保留，未新增重复活动。当前是独立研究原型；可选手表面板复用旧 Web 页面，默认主应用不加载实验依赖。iOS 兼容和 Windows 稳定重连尚未通过。
 
 2026-11-16 已通过 `start-b5.ps1` 完成新一轮真实验收：脚本启动、显示 MAC、仅官方 Android Keep 绑定、3306 字节完整传输及收讫、有效设备来源活动入账。随后用户在 Keep 解绑，电脑 bound 同步变为 false；正常退出并完成名称配置恢复，未遗留本轮广播或捕获进程。该轮未重新验收重开 App 后的持久性；后续测试改用 iPhone，其官方 Keep 绑定与同步仍未通过验收。
 
@@ -22,6 +22,27 @@ flowchart LR
 ```
 
 ## 1. 准备环境
+
+### 可选：原生生成与手表管理
+
+已有 Android Netsim 模拟器的环境中，使用独立实验 Python 安装 `requirements-dashboard.txt`，运行：
+
+```powershell
+& $toolPython -m pip install -r experiments/keep_device/requirements-dashboard.txt
+& $toolPython -m experiments.keep_device.dashboard `
+    --lab 'C:/path/to/private-panel' `
+    --state 'C:/path/to/existing-b5-state.json' `
+    --netsim-ini "$env:TEMP/netsim.ini" `
+    --workout-dir 'C:/path/to/private-batch' --port 5000
+```
+
+`$toolPython` 指向独立 Bumble 环境的 Python；不要使用主应用环境。已有广播需先停止，state 复用原值；无初始文件时省略 `--workout-dir`。服务仅监听 `127.0.0.1`。打开 `http://127.0.0.1:5000`，在原有四种模式中选择 **B5 手表**，生成后点 **载入手表 → 载入并开始同步**。生成本身不会上传；B5 文件自动保存到 `--lab` 下的新目录，表单原输出目录只用于 FIT/TCX。
+
+手表管理页 `/watch` 显示固定加载的文件清单、总里程、待同步/已领取数量、当前连接和 MAC。总里程包括本批已领取且保留在磁盘的源文件，不是 Keep 账号总里程。广播进程退出后显示停止；页面读不到服务时显示状态未知。载入下一批前必须完成当前待同步记录，重复点击不会启动多个广播。
+
+原生链路是旧规划器/轨迹生成器 → `ExportData` → `B5Exporter` → `encode_workout`，不经 FIT 转译。生成器按实际几何补齐距离、保留整公里采样，输出摘要使用真实首末时间；编码前检查摘要一致性，写入后校验 CRC，原子发布且不覆盖已有文件。非法数据使本次生成报错，不把部分成功包装成整批成功；已生成的有效文件仍留在私人目录但不会自动载入。原子发布依赖文件系统支持硬链接（本机 NTFS 已验证），不支持时明确报错。
+
+本机已验证四模式原生生成、旧单次页面实际生成与载入预览、44 条/122.25 公里清单、真实启停与重连、窄屏布局；本轮新原生样本未再上传 Keep，44 条是先前已领取的样本。主项目及实验回归共 **564 项、5 个子测试通过**。这是可选实验入口，不是已打包的正式导入功能。
 
 在仓库根目录操作。需要 Windows 支持 BLE Peripheral 的蓝牙适配器、Python 3.11、Git，以及已登录并获蓝牙权限的 Android Keep。手机与电脑通过蓝牙连接，不需要 USB；同一时刻只连接一部手机。
 
@@ -46,7 +67,7 @@ $statePath = Join-Path $env:KEEP_LAB_DIR 'device-b5.json'
 
 蓝牙入口只读取已有 SPORT44，不会自动生成，也不能直接接收 FIT、TCX 或 JSON。输入复用项目的 `ExportData`，坐标已是 WGS-84，包含原有速度和步频；编码器不再转换或平滑轨迹。
 
-下面是可在仓库根目录运行的**临时研究脚本**：它通过 `BaseExporter.export()` 取得生成器实际传入的 `ExportData`，调用现有 `encode_workout()`。`GenerationEngine` 没有公开的 `register_exporter`；这里注入私有 `_exporters` 仅限研究进程，不是正式注册 API，也不会改变主应用导出器。
+下面的脚本使用构造参数注入 `B5Exporter`，复用生成器实际传入的 `ExportData`。默认主应用不会注册实验导出器；`strict=True` 让任何失败直接抛出。
 
 样例生成昨天 07:00 的一条实验记录，新建输出子目录并拒绝覆盖文件。它复用现有轨迹、规划和坐标转换；若已有自己的 `ExportData`，直接调用 `encode_workout(data)` 即可，无需再生成。
 
@@ -60,44 +81,30 @@ from uuid import uuid4
 
 from src.config_manager import ConfigManager
 from src.core.models import GenerationConfig
-from src.exporters.base import BaseExporter
 from src.generation_engine import GenerationEngine
-from experiments.keep_device.history import encode_workout
+from experiments.keep_device.exporter import B5Exporter
 from experiments.keep_device.files import WorkoutFiles
-
-class Sport44LabExporter(BaseExporter):
-    def export(self, data, output_path):
-        self.data = data
-        encoded = encode_workout(data)
-        with Path(output_path).open("xb") as output:
-            output.write(encoded)
-        return output_path
-
-    def get_file_extension(self):
-        return ".sport44"
 
 output_dir = Path(os.environ["KEEP_LAB_DIR"]) / ("candidate-" + uuid4().hex[:8])
 config = GenerationConfig(
     track_id="campus_default", min_pace=7.5, max_pace=7.5,
     start_time_min="07:00", start_time_max="07:00",
-    output_dir=str(output_dir), output_format="fit",
+    output_dir=str(output_dir), output_format="b5",
     include_track=True, apply_correction=True,
     enable_cadence=True, enable_pace_fluctuation=True, points_per_km=50,
 )
-engine = GenerationEngine(ConfigManager("config"))
-exporter = Sport44LabExporter()
-engine._exporters["fit"] = exporter  # Research-only injection; no public registration API.
+engine = GenerationEngine(ConfigManager("config"), exporters={"b5": B5Exporter()}, strict=True)
 random.seed(2026111563)
 result = engine.generate_single(date.today() - timedelta(days=1), 1.0, config)
 workout_path = Path(result.filepath)
-assert workout_path.is_file() and exporter.data.trackpoints
+assert workout_path.is_file()
 WorkoutFiles(workout_path)  # Validate the file without marking receipt or uploading.
 print(workout_path)
-print(f"{len(exporter.data.trackpoints)} GPS points, {workout_path.stat().st_size} bytes")
+print(f"{workout_path.stat().st_size} bytes")
 '@ | & $windowsPython -
 ```
 
-当前样例应输出一个新 `.sport44` 路径、49 个 GPS 点和 3306 字节。生成失败时检查异常，不把空结果当成功；其他轨迹若触发分段边界拒绝，按[输入契约](CONTRACT.md#exportdata-输入单位)检查，不修改源点来凑统计。示例只作一次活动试验；后续候选应明确设置新的日期/开始时间，不通过删除接收标记重送已同步记录。
+样例输出新 `.sport44` 路径和文件大小；点数与大小随轨迹和采样而变。生成失败时检查异常，不把空结果当成功；若触发分段边界拒绝，按[输入契约](CONTRACT.md#exportdata-输入单位)检查，不修改编码器绕过校验。后续候选应明确设置新的日期/开始时间，不通过删除接收标记重送已同步记录。
 
 将刚打印的完整路径赋给 `$workoutPath`。不要自动选择目录里“最新文件”，以免把另一条活动交给手机。
 
@@ -275,6 +282,14 @@ Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'Temp/netsim.ini')
 
 此路线不需要实体蓝牙、BTVS/TShark 或 nRF Connect，也不能替代手机射频及 iOS 验收。BlueStacks 可作界面和静态分析对照，当前实例没有可用蓝牙桥。
 
+### 模拟器一次同步多条
+
+保留同一地址和 state，停止旧广播后，将上例的 `--workout $workoutPath` 替换为 `--workout-dir 'C:/path/to/private-batch'`。目录第一层放置已经校验的 `.sport44` 文件，不直接传 ZIP 或 FIT。目录包含 1–64 条、合计不超过 64 MiB；启动时全部校验并固定集合，运行期间放入的新文件不会自动发送。Windows 的 `start-b5.ps1` 仍是单文件入口。
+
+Keep 查询目录后逐条读取，不需要每条重新绑定。控制台先显示 `BATCH_READY files=...`，随后 `workout_batch total/received/pending` 显示领取数量。每条沿用自己的 `.received.json`，重启后不再列出已领取文件；不要删除标记来重发。领取不等于有效活动，历史日期的记录应在对应月份查找。
+
+2026-11-16 API35 / Android Keep 9.1.120 已在同一连接中领取 44 条、共 398697 字节，44 个独立标记落盘；运动列表已观察到本批 B5 来源记录。此前转译失败的 8 条未加入目录。全部活动有效性、同步中断恢复与 iOS 尚未逐项验收。批量实现回归为 434 项、5 个子测试通过。
+
 ### API35 的 MSA 启动故障与可逆隔离
 
 本轮原环境连续三次在 `com.bun.miitmdid.e.a()` 报 JNI 缺失并崩溃；已有 Frida 16 spawn 尝试失败且导致 `system_server` 重启，没有安装 hook。实际恢复使用 Android 自带工具：先停止目标 Keep，通过 `adb root` 进入支持 root 的实验 AVD，核对当前包安装路径及已解压的 `lib/arm64/libmsaoaidsec.so`，记录 SHA-256，再将该文件在同目录改名为 `libmsaoaidsec.so.keep-lab-disabled`，保留原文件和权限。原始路径缺库后走 Keep 已有 `MdidManager.u` 加载失败 fallback，随后可进入原登录态。本轮重启后冷启动耗时约 3916 ms。
@@ -294,12 +309,12 @@ Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'Temp/netsim.ini')
 | 数据覆盖 | 本次 1 km 候选有效；多公里、长时和边界输入仅离线测试 |
 | 服务端契约 | 统计和重开保留已观察；独立 HTTP 重读、一般去重/阈值未知 |
 | 其他固件功能 | 暂停、请求重组、ACK/PUSH、多手机、未知传感器字段尚未实现或验证，详见 CONTRACT |
-| 产品交付 | 尚无一键生成/同步 UI，没有改动主应用 FIT/TCX 或配置模板 |
+| 产品交付 | 可选手表面板复用旧四模式，提供原生 B5 生成、显式载入和状态查看；默认应用不加载实验依赖，未打包发布 |
 
-包含显式重绑恢复参数及启动诊断修复的完整回归为 **431 项通过、5 个子测试通过**。离线检查、真实绑定、文件收讫和有效活动入账分别验收，不能互相替代。现有 `pytest.ini` 的 `testpaths=tests` 不会自动发现本目录，现有 CI 的 `python -m pytest` 也不覆盖这些实验测试；修改后必须显式运行完整目录。在装有 Bumble 和 pytest 的实验环境运行：
+本次主项目与实验模块组合回归为 **564 项通过、5 个子测试通过**。离线检查、真实绑定、文件收讫和有效活动入账分别验收，不能互相替代。现有 `pytest.ini` 的 `testpaths=tests` 不会自动发现本目录，现有 CI 的 `python -m pytest` 也不覆盖这些实验测试；修改后必须显式运行完整目录。在装有 Bumble、Flask、Garmin SDK 和 pytest 的实验环境运行：
 
 ```powershell
-& $toolPython -m pytest experiments/keep_device -q
+& $toolPython -m pytest tests experiments/keep_device -q
 ```
 
 Windows 抓包使用微软 [BTVS](https://learn.microsoft.com/en-us/windows-hardware/drivers/bluetooth/testing-btp-tools-btvs) 与 Wireshark。独立诊断示例的 `-Remote off` 会尝试启动本机 Wireshark；启动器使用 `-Remote on` 避免额外启动图形客户端，再让本次 TShark 接入。两种参数都**不保证 TCP 仅监听本机接口**；本次观察到 BTVS 监听全部接口，而查询入口只连接 `127.0.0.1`。保持现有防火墙限制，不为查询开放远程访问，结束后关闭本次观察进程和 BTVS。MAC 查询不需要 Full Packet Logging 或 SSP Debug；早前完整活动核验曾开启 Full Packet Logging 并在结束后清理覆盖设置，没有旧基线时只报告恢复默认，不能宣称精确还原原值。

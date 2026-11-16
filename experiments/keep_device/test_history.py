@@ -24,7 +24,7 @@ def workout():
         GeoPoint(106.675, 26.444), GeoPoint(106.670, 26.444),
     ])
     generator = TrackGenerator(analyzer.analyze_track(), analyzer, CoordinateCorrector())
-    geometry = generator.generate_smooth_track(3.0, 20, enable_randomness=False)
+    geometry = generator.generate_smooth_track(3.5, 20, enable_randomness=False)
     start = datetime(2026, 9, 4, 7)
     random_state = random.getstate()
     try:
@@ -32,7 +32,7 @@ def workout():
         points = generator.generate_tcx_trackpoints(geometry, start, 1350.0)
     finally:
         random.setstate(random_state)
-    # This generated geometry exceeds 3 km; use a summary with a valid tail.
+    # The shared generator now measures its endpoint rather than truncating by point count.
     return ExportData(start.date(), start, 3.5, 1350.0, 180, points)
 
 

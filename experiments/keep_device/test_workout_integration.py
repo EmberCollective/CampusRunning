@@ -172,8 +172,9 @@ def test_b5_without_workout_enables_empty_file_service_before_transport(entrypoi
     class StopBeforeTransport(Exception):
         pass
 
-    def check_empty(path):
+    def check_empty(path, *, paths=None):
         assert path is None
+        assert paths is None
         assert WorkoutFiles(path).reply(bytes.fromhex("06 01 08 2c")) == b"\x06\x01"
         raise StopBeforeTransport
 

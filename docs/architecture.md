@@ -84,14 +84,14 @@ Exporter (FIT / TCX)
 
 ## Keep 设备适配实验
 
-`experiments/keep_device/` 是独立的设备侧适配模块，复用主项目 `ExportData`，不改变生成规划、FIT/TCX 导出或 Web 路由。源坐标在生成阶段已经从 GCJ-02 转为 WGS-84，设备编码器不再转换。
+`experiments/keep_device/` 是独立的设备侧适配模块，复用主项目 `ExportData`。默认主应用不加载实验依赖；可选 `dashboard.py` 复用原 Web 四模式，通过构造注入 `B5Exporter` 原生输出，并增加手表管理页。源坐标在生成阶段已经从 GCJ-02 转为 WGS-84，设备编码器不再转换。
 
 ```mermaid
 flowchart LR
     A[已有轨迹与配置] --> B[GenerationEngine / ExportData]
     B --> C[原 FIT / TCX 导出]
-    B --> D[history.py: SPORT44]
-    D --> E[files.py: 单文件队列]
+    B --> D[B5Exporter / history.py: SPORT44]
+    D --> E[files.py: 固定文件队列]
     S[state.py: 绑定与配置] --> F[btcp.py / simple.py: 设备会话]
     E --> F
     F --> G[Bless / WinRT 或 Bumble / Netsim]
@@ -115,7 +115,7 @@ TrackGenerator 通过构造函数接受 TrackAnalysis、TrackAnalyzer、Coordina
 
 ### 3. 分离导出层
 
-Exporter 抽象接口支持现有 FIT/TCX 实现，也允许未来扩展 GPX 等格式。Keep 设备适配仍是独立实验，不注册为主应用默认导出器。
+Exporter 抽象接口支持现有 FIT/TCX 实现；`GenerationEngine` 可通过 `exporters` 构造参数注入额外格式，通过 `strict=True` 令生成错误直接抛出。B5 只在可选面板显式注入，不注册为主应用默认导出器。共享轨迹生成按实际几何长度补足距离、保留整公里采样，摘要时间/配速与实际轨迹一致。
 
 ### 4. 配置即代码
 

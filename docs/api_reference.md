@@ -2,7 +2,7 @@
 
 ## Keep 设备适配实验接口
 
-独立模块位于 `experiments/keep_device/`，不新增主应用 HTTP 端点或 `main.py` 子命令，也不直接调用 Keep 上传接口。
+独立模块位于 `experiments/keep_device/`，默认主应用和 `main.py` 不加载实验功能，也不直接调用 Keep 上传接口。可选 `python -m experiments.keep_device.dashboard` 复用原 Web 生成端点并显式注入原生 B5 导出器，增加 `/watch` 和 `/api/watch/*`；参数、权限及生命周期见[契约](../experiments/keep_device/CONTRACT.md#可选面板接口)。
 
 - 编码：`experiments.keep_device.history.encode_workout(data: ExportData) -> bytes`。输入为主项目已有数据模型，坐标已转换为 WGS-84，输出 B5 SPORT44 二进制；验证失败抛出 `ValueError`。
 - Windows 传输入口：`python -m experiments.keep_device.windows --model B5 --state PATH --workout PATH`，可选 `--keep-name` 临时设置实验名称；需独立 Windows 环境和 BLE 外设角色支持。

@@ -262,7 +262,7 @@ $toolPython = Join-Path $toolEnv 'Scripts/python.exe'
 
 $sdkRoot = 'C:/path/to/Android/Sdk'
 $avdName = 'YourExistingAVD'
-& "$sdkRoot/emulator/emulator.exe" -avd $avdName -packet-streamer-endpoint default
+& "$sdkRoot/emulator/emulator.exe" -avd $avdName -timezone Asia/Shanghai -packet-streamer-endpoint default
 ```
 
 开启客体蓝牙，在模拟器内自行登录 Keep 并授予附近设备权限。在另一个终端重新设置 `$toolPython` 和 `$workoutPath` 的完整路径，再运行原型。PORT 从当前 `%LOCALAPPDATA%/Temp/netsim.ini` 的 `grpc.port` 取得；每次模拟器重启都重新读取。当前按单实例验收，多实例选择与隔离未实现，不能只凭端口认定目标正确。地址必须是本实验生成的合法随机静态地址，首次生成后固定复用，不能照搬真实设备身份。使用独立于 Windows 入口的私人 state 和地址文件：
@@ -284,6 +284,25 @@ Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'Temp/netsim.ini')
 在模拟器 Keep 的手动添加页面选择 B5，输入本轮 `ADVERTISING` 输出地址去掉冒号后的 12 位文本。`CONNECTED` 只证明链路连接；完整读取及收讫后，还需在 Keep 核对来源、有效性和详情。此入口没有 Windows 启动器的进度汇总界面，文件传输查看原型日志。停止时使用 Ctrl+C；恢复时保留 AVD userdata、同一 state、地址和 `.received.json`，重新读取 Netsim 端口后启动。已收讫文件返回空目录是正常行为，不删除标记来强制重传。
 
 此路线不需要实体蓝牙、BTVS/TShark 或 nRF Connect，也不能替代手机射频及 iOS 验收。BlueStacks 可作界面和静态分析对照，当前实例没有可用蓝牙桥。
+
+### 时间少了 8 小时：先核对模拟器时区
+
+生成器输入是北京时间，SPORT44 存标准 UTC Unix 秒。例如输入 20:00，文件中的 UTC 时间应为 12:00；在北京时间设备上应显示 20:00。不要把编码改为“20:00 UTC”来补偿显示，否则真实时间会整体晚 8 小时，凌晨记录还可能错日。
+
+2026-11-16 排查发现本次模拟器 `persist.sys.timezone` 为 `GMT`，且自动时区开启；这会使北京时间 20:00–21:00 显示成 12:00–13:00。Keep 的已分析活动转换路径还会使用 Android 默认时区填写活动时区。因此**在登录、绑定和同步之前**，将测试实例时区设为 `Asia/Shanghai`。上面的启动命令显式指定它；已运行实例可用 Android 自带命令修正：
+
+```powershell
+# 替换为本次目标实例；不要省略 -s，避免修改其他模拟器或真机。
+$adbSerial = 'emulator-5556'
+& "$sdkRoot/platform-tools/adb.exe" -s $adbSerial shell settings put global auto_time_zone 0
+& "$sdkRoot/platform-tools/adb.exe" -s $adbSerial shell cmd alarm set-timezone Asia/Shanghai
+& "$sdkRoot/platform-tools/adb.exe" -s $adbSerial shell getprop persist.sys.timezone
+& "$sdkRoot/platform-tools/adb.exe" -s $adbSerial shell date
+```
+
+应返回 `Asia/Shanghai`，系统时间与北京时间一致；自动校时可保留，这里只关闭自动时区。若设备时区已正确仍显示异常，先检查运动文件 UTC 时间及 Keep 中的活动时区，不再次偏移数据。旧记录可能保留同步时的时区或缓存，本次设置不等于已修复全部历史记录；不要删除收讫标记或改写已领取文件来重复上传。
+
+本次已实测将运行中实例从 `GMT` 改为 `Asia/Shanghai`，系统时钟恢复北京时间；现存 44 条源文件解码为北京时间 20:01–21:00。改设置后查看一条既有记录，详情仍显示原先的 UTC 钟面时间，历史记录显示尚未修复。新增晚间及凌晨跨日回归校验生成、摘要、GPS 点与面板清单一致；尚未完成修正时区后的新活动同步验收。
 
 ### 模拟器一次同步多条
 

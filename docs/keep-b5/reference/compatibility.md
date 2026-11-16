@@ -27,6 +27,7 @@
 | 加速与资源 | 硬件虚拟化和 WHPX 加速正常；本次分配 **3072 MB 内存、2 核、software GPU**，这是已跑通配置，不是测出的最低要求；主机还需保留自身运行内存 |
 | SDK 工具 | 本次 platform-tools 37.0.1；`adb` 用于准备和排障，Netsim 用于虚拟蓝牙 |
 | 启动与连接 | 启动带 `-packet-streamer-endpoint default`；客体开启蓝牙，Keep 获附近设备权限；每次重启重新读取 `netsim.ini` 中的 `grpc.port` |
+| 时区 | 启动加 `-timezone Asia/Shanghai`，同步前确认客体 `persist.sys.timezone=Asia/Shanghai`；本次曾默认 GMT，导致北京时间记录显示少 8 小时。[检查和修正步骤](../guides/connection-and-running.md#时间少了-8-小时先核对模拟器时区) |
 | Python | 独立 Python 3.13 环境，安装模块内 [requirements.txt](../../../experiments/keep_device/requirements.txt)：Bumble 0.0.236、grpcio 1.85.1、protobuf 7.36.2 等，以依赖文件为准 |
 | 可选面板 | 另用 [requirements-dashboard.txt](../../../experiments/keep_device/requirements-dashboard.txt)；复用旧 Web 四模式，先生成，再显式载入；原子发布要求文件系统支持硬链接，本机 NTFS 已验证 |
 | Keep | Android **9.1.120**，自行登录；本次需可逆隔离安装目录内的 MSA 原生库后才完成同步 |

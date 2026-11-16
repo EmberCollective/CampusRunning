@@ -76,9 +76,14 @@ _DIRECTORY_TYPES = _DAILY_FILE_TYPES | {6, 37, 44}
 
 
 class WorkoutFiles:
-    """Serve an immutable snapshot; mark receipt atomically before acknowledging."""
+    """Serve an optional immutable snapshot; None exposes empty directories."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path | None):
+        self._uuid = None
+        self._file = b""
+        self._received = False
+        if path is None:
+            return
         path = Path(path)
         if not 14 <= path.stat().st_size <= (1 << 31) - 1:
             raise ValueError("Unsupported workout file size")
@@ -92,7 +97,6 @@ class WorkoutFiles:
         self._digest = digest.hexdigest()
         self._uuid = int.from_bytes(digest.digest()[:8], "big")
         self._marker = path.with_name(path.name + ".received.json")
-        self._received = False
         try:
             marker = json.loads(self._marker.read_text(encoding="utf-8"))
         except FileNotFoundError:
@@ -151,12 +155,12 @@ class WorkoutFiles:
         else:
             if command == b"\x06\x01":
                 response = _MESSAGES["FileSum"]()
-                if request.type == 44 and not self._received:
+                if request.type == 44 and self._uuid is not None and not self._received:
                     response.file_table.add(uuid=self._uuid, file_size=len(self._file))
                 _LOGGER.info("file_transfer command=6/1 type=%d entries=%d", request.type, len(response.file_table))
             else:
                 response = _MESSAGES["FileStatusSum"]()
-                if request.type == 44:
+                if request.type == 44 and self._uuid is not None:
                     self._receive()
                     response.file_status_table.add(uuid=self._uuid, file_size=len(self._file), status=1)
                 _LOGGER.info(

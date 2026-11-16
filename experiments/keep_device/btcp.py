@@ -20,6 +20,10 @@ DEVICE_INFO_REQUEST = bytes.fromhex("01 02 03 03")
 DEVICE_NAMES = {"B3": "Keep B3 Lab", "B5": "KeepB5 Lab"}
 
 
+def is_device_info_request(payload: bytes, model: str) -> bool:
+    return payload == DEVICE_INFO_REQUEST or (model == "B5" and payload == b"\x01\x02")
+
+
 class UnsupportedRequest(ValueError):
     """A valid frame uses an unimplemented control mode or application request."""
 
@@ -105,7 +109,7 @@ class DeviceInfoSession:
 
     def reply_payload(self, payload: bytes) -> bytes:
         """Shared protobuf business commands, independent of B3/B5 packet framing."""
-        if payload == DEVICE_INFO_REQUEST:
+        if is_device_info_request(payload, self.model):
             self._info.has_bind = 1 if self._state is not None and self._state.bound else 2
             return b"\x01\x02" + self._info.SerializeToString()
         if self._workout is not None and self._workout.accepts(payload):

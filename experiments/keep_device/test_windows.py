@@ -121,6 +121,16 @@ class WindowsDeviceInfoTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(message.startswith("DEVICE_INFO_SENT bytes=11 sid=01 cid=02 flags=00")
                             for message in self.messages))
 
+    async def test_b5_device_info_query_without_body_reaches_the_subscriber(self):
+        from experiments.keep_device.test_simple import request_packet
+
+        self.bridge.model = "B5"
+        await self.request(request_packet(0x1234, b"\x01\x02"))
+        self.assertEqual(self.sent(), 1)
+        packets = [data for data, _ in self.notify.calls]
+        self.assertTrue(all(packet[:3] == b"\x34\x12\x01" for packet in packets))
+        self.assertIn(b"KeepB5 Lab", b"".join(packet[7:] for packet in packets))
+
     async def test_subscription_change_discards_queued_binding_before_state_mutation(self):
         with TemporaryDirectory() as directory:
             self.bridge.state = BindingState(Path(directory) / "device.json", self.bridge.mac)

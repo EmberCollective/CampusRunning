@@ -14,16 +14,17 @@ from contextlib import contextmanager, suppress
 import logging
 import math
 import os
+from pathlib import Path
 import subprocess
 import sys
 import threading
 
 from .btcp import (
     CHARACTERISTIC_UUIDS,
-    DEVICE_INFO_REQUEST,
     DEVICE_NAMES,
     SERVICE_UUID,
     DeviceInfoSession,
+    is_device_info_request,
     request_metadata,
     request_payload,
 )
@@ -101,7 +102,7 @@ class DeviceInfoBridge:
             stage = "frame"
             payload = request_payload(request, self.model)
             stage = "command"
-            if (payload != DEVICE_INFO_REQUEST
+            if (not is_device_info_request(payload, self.model)
                     and not (self.state is not None and self.state.accepts(payload))
                     and not (self.workout is not None and self.workout.accepts(payload))):
                 raise ValueError("unsupported-request")
@@ -312,7 +313,7 @@ def _temporary_keep_name(adapter, after_restore=None, name="Keep B3 Lab"):
                 after_restore()
 
 
-def _run_with_keep_name(duration: float, state_path: str | None = None, model: str = "B3", workout_path: str | None = None) -> None:
+def _run_with_keep_name(duration: float, state_path: str | None = None, model: str = "B3", workout_path: str | None = None, stop_file: str | None = None) -> None:
     if workout_path is not None:
         if model != "B5":
             raise ValueError("--workout requires --model B5")
@@ -327,6 +328,8 @@ def _run_with_keep_name(duration: float, state_path: str | None = None, model: s
         command.extend(["--model", model])
     if workout_path is not None:
         command.extend(["--workout", workout_path])
+    if stop_file is not None:
+        command.extend(["--stop-file", stop_file])
     child = None
     child_exited = False
 
@@ -356,11 +359,23 @@ def _run_with_keep_name(duration: float, state_path: str | None = None, model: s
         raise subprocess.CalledProcessError(returncode, command)
 
 
-async def run(duration: float = 300, state_path: str | None = None, model: str = "B3", workout_path: str | None = None) -> None:
+async def _wait_for_stop(duration: float, stop_file: str | None) -> None:
+    if stop_file is None:
+        await asyncio.sleep(duration)
+        return
+    deadline = asyncio.get_running_loop().time() + duration
+    while not Path(stop_file).exists():
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            return
+        await asyncio.sleep(min(0.2, remaining))
+
+
+async def run(duration: float = 300, state_path: str | None = None, model: str = "B3", workout_path: str | None = None, stop_file: str | None = None) -> None:
     """Run for duration seconds after advertising starts; always stop on exit."""
     if workout_path is not None and model != "B5":
         raise ValueError("--workout requires --model B5")
-    workout = WorkoutFiles(workout_path) if workout_path is not None else None
+    workout = WorkoutFiles(workout_path) if model == "B5" else None
     from bless import BlessServer, GATTAttributePermissions, GATTCharacteristicProperties
     from bleak_winrt.windows.devices.bluetooth import BluetoothAdapter
 
@@ -402,7 +417,7 @@ async def run(duration: float = 300, state_path: str | None = None, model: str =
             f"air address managed by Windows; single subscriber, persistent_binding={state is not None}; "
             f"workout_transfer={workout is not None}; cloud upload unverified"
         )
-        await asyncio.sleep(duration)
+        await _wait_for_stop(duration, stop_file)
     finally:
         if bridge is not None:
             bridge.close()
@@ -425,18 +440,22 @@ def main():
     parser.add_argument("--state", help="Private JSON state file enabling device binding")
     parser.add_argument("--model", choices=tuple(DEVICE_NAMES), default="B3", help="B3 legacy BTCP or B5 SIMPLE framing")
     parser.add_argument("--workout", help="Explicit SPORT44 file to serve; requires --model B5")
+    parser.add_argument("--stop-file", help="Private launcher signal: stop normally when this path appears")
     args = parser.parse_args()
     if args.workout is not None and args.model != "B5":
         parser.error("--workout requires --model B5")
     if sys.platform != "win32":
         parser.exit(1, "This entry point requires Windows and requirements-windows.txt.\n")
+    if args.stop_file is not None and (Path(args.stop_file).exists() or not Path(args.stop_file).parent.is_dir()):
+        parser.error("--stop-file must be absent in an existing private directory")
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("experiments.keep_device.files").setLevel(logging.INFO)
     try:
+        control = {"stop_file": args.stop_file} if args.stop_file is not None else {}
         if args.keep_name:
-            _run_with_keep_name(args.duration, args.state, args.model, args.workout)
+            _run_with_keep_name(args.duration, args.state, args.model, args.workout, **control)
         else:
-            asyncio.run(run(args.duration, args.state, args.model, args.workout))
+            asyncio.run(run(args.duration, args.state, args.model, args.workout, **control))
     except KeyboardInterrupt:
         pass
     except NameRefreshError as error:

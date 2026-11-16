@@ -14,8 +14,12 @@
 | [protocol.py](protocol.py) | `advertisement(name)`；`b3_service(...)` | Bumble 广播和 GATT 服务；历史命名 `b3_service` 同时支持 B3/B5 |
 | [emulator.py](emulator.py) | `python -m experiments.keep_device.emulator` | 将共享业务接到 Bumble transport，例如 Android Netsim |
 | [windows.py](windows.py) | `python -m experiments.keep_device.windows` | Bless/WinRT 真实蓝牙；有界运行、单订阅客户端、串行通知和退出清理 |
+| [windows_mac.py](windows_mac.py) | `python -m experiments.keep_device.windows_mac --tshark PATH` | 从本机 BTVS 的 TShark 解码字段观察实际广播 MAC；不修改蓝牙、绑定或运动文件 |
+| [launcher.py](launcher.py) / [start-b5.ps1](start-b5.ps1) | 管理员启动入口，接收 BTVS/TShark、state、可选 SPORT44 和时长 | 按顺序启动地址观察与 B5，在同一窗口显示地址、订阅、业务回复及文件发送进度，并管理本次进程退出 |
 
 `accepts()` 只做路由/形状检查，不代表 protobuf、字段或业务已通过验证。非法输入通常抛 `ValueError`；`UnsupportedRequest` 是其子类；文件和状态读写失败可抛 `OSError`。传输层据此拒绝业务回复，不将异常文本或业务载荷写入诊断日志。
+
+当前入口面向一轮短期连接与同步，手机只使用官方 Keep；不要求 nRF、USB 调试或系统 SMP 配对。BTVS/TShark 是电脑运行依赖。Windows 地址变化后可能需要在 Keep 受控解绑并重新添加，不承诺跨重启自动重连。
 
 ### ExportData 输入单位
 
@@ -58,6 +62,8 @@ Bumble 的 `--write-characteristic 2` 只用于反向对照，当前已验证方
 
 Windows `adapter_address` 用于 DeviceInfo 和 state 文件，空中临时地址由系统管理；手机手动绑定输入的是本次扫描地址，两者不可混用。Bumble 使用本实验生成的随机静态地址；带 `--state` 时必须显式 `--address`，后续复用同一地址。
 
+`windows_mac` 必须在广播启动前连接 BTVS 默认 TCP 端口 24352，通过 TShark 解析 HCI；只在相同广播句柄的配置、190a 服务、随机地址、可连接/可扫描传统广播属性及启用命令均有成功响应后，输出 `AIR_MAC` 和去冒号的 `KEEP_MAC`。失败响应不应用；停止、移除或控制器重置后失效，多组匹配时报告歧义。当前限定单控制器和上述 Windows HCI 模式，不以适配器地址补缺，不保证地址稳定。它不写原始抓包；观察结束后不保证旧输出仍然有效，手机绑定/同步仍须独立验收。BTVS 捕获流须空闲，不能与自动连接的 Wireshark 同时使用；`-Remote off` 不代表只监听 loopback，网络和退出边界见 README。
+
 ### B3 BTCP
 
 完整帧为 `A5 A5 | A0 | FSN:uint8 | payloadLength:uint16LE | payload | CRC:uint16LE`。载荷长度为 1–32767，精确匹配帧长，不接受尾随字节。CRC-16/XMODEM 初值 0，覆盖帧头到 payload，复用 `binascii.crc_hqx`。
@@ -78,6 +84,8 @@ Windows `adapter_address` 用于 DeviceInfo 和 state 文件，空中临时地�
 | 6 | 1 | CID |
 
 内部标准业务载荷为 `SID + CID + body`。校验输入为 `requestIdLE16 + typeByte + bodyLengthLE16 + SID + CID + body`；CRC-16/XMODEM 初值 0，校验值以小端附在完整 body 后，随后分片。每片都重复 7 字节头，不能对带分片索引的在线包直接计算整消息 CRC。
+
+B5 设备信息查询接受 `01 02 03 03` 和无正文的 `01 02`；本次手机尝试已观察到通过帧校验的 9 字节无正文查询。两者回复相同的设备信息并保留真实绑定状态；其他正文仍拒绝。此修正的离线通过不代表官方 iOS Keep 绑定或同步已通过。
 
 运行时通知上限为 `min(客户端允许值, 244)`，每片正文容量再减 7；最多 128 片。B5 请求只接受 `type/status/last/current = 0/0/0/0` 的完整单包，请求 body 最多 65535 字节。文件 ID 可能使请求超过默认 MTU 23，客户端仍需协商足够 MTU。
 
@@ -102,7 +110,7 @@ DeviceInfo 使用自身 MAC 去冒号的大写文本、`LAB` 前缀序列号、�
 
 state JSON 保存 `schema_version=1`、MAC、bound 和 config。时间/用户配置保存标量，其余支持项保存 protobuf 十六进制。父目录必须已存在；文件缺失时创建，损坏、未知结构或 MAC 不匹配时拒绝。临时文件 flush/fsync 后原子替换成功才更新内存并回复；一份 state 只能由一个进程使用。
 
-Keep 在设备回复成功后才提交服务器绑定，未确认服务器失败时自动回滚设备。断线不清除 bound；解绑保留 config 和运动文件。现有 `state --reset-binding` 入口只重置本地设备标志，不能解除账号云端绑定，操作顺序见 README。
+Keep 在设备回复成功后才提交服务器绑定，未确认服务器失败时自动回滚设备。断线不清除 bound；解绑保留 config 和运动文件。日常恢复使用同一启动脚本的 `-ResetBinding`（启动器 `--reset-binding`）：仅在用户已于 Keep 解绑后，显式重置本地 bound，保留 config、运动文件与接收标记。默认启动不重置；该参数不能解除账号云端绑定。底层 `state --reset-binding` 保留为诊断接口，日常操作不要求单独调用，顺序见 README。
 
 ## 文件 RPC 与收讫
 
@@ -116,6 +124,8 @@ Keep 在设备回复成功后才提交服务器绑定，未确认服务器失败
 | `06/07` | `DelOneFile(type:1 uint32, uuid:2 uint64)` | `DelOneFileStatus(status:1 uint32)`；匹配 SPORT44 为 1，其余不存在项为 2 |
 
 目录类型是十进制：44（SPORT_PLUS）最多一条；`1–6、35–37、41–43、45、47` 返回已确认的空目录，其余类型拒绝。目录类型 44 与正文 section tag 44 属于不同命名空间。
+
+B5 始终挂接文件 RPC，即使未传入 `--workout`。`WorkoutFiles(None)` 表示无待传文件：已支持类型的目录与批量收讫列表为空，读取或单文件收讫返回不存在状态，不创建运动文件或接收标记。此前无文件时拒绝这些请求会阻断初始化中的目录查询；这项修复不改变未知命令、未知类型与非法 protobuf 的拒绝规则。
 
 客户端通常请求 len=2048，原型每次返回至多 512 字节，按实际返回长度推进。offset 从 0 起；len=0 或 offset≥文件长度返回状态 1；UUID 不符或已收讫返回状态 2。读取响应使用 `File.file_data` 字段 2，不是另一发送方向消息 `FileData` 的字段 4。
 
@@ -190,6 +200,12 @@ SPORT44 删除请求在原型中表示收讫：先原子写入同目录 `<文件
 
 ## 运行与清理边界
 
+`launcher.py` 先校验仓库外 state/运动文件与工具路径，确认 BTVS 端口未被占用，再启动本次 BTVS 和 TShark；只有捕获进程存活且 TCP 已接入，才启动 B5。它不接管其他抓包进程，不自动重置绑定或接收标记，不写原始抓包。地址观察中断或未取得有效 MAC 会报错并停止原型，不能把旧地址或适配器地址作为成功结果。
+
+启动器复用 `windows_mac.AdvertisingAddress` 判断广播地址，复用原型日志呈现业务状态。订阅仅证明客户端订阅；业务应答仅证明回复完成。文件进度按已成功回复的读取区间并集计数，不重复累计重读区间；100% 与客户端收讫均不等于 Keep 云端接纳、来源正确或活动有效。
+
+`windows.py --stop-file PATH` 要求路径在已有目录内且启动时不存在；文件出现后结束广播等待，走正常清理。启动器在私人临时目录创建这一信号，退出时等待原型最多 90 秒，然后关闭本次观察进程；清理失败明确报错。它不把系统配对成功当作退出或连接成功条件。
+
 Windows 桥仅允许一个通知订阅客户端，排队/待调度请求上限为 8；订阅切换会使旧任务失效。每条通知定向发送，等待最多 10 秒，同时核对成功状态与实际发送长度。Bless 不提供写入者身份，库可能确认底层 ATT 写入，业务拒绝不是访问认证。
 
 `--keep-name` 先校验输入文件，再用 Bless 更名并重启选定适配器，之后启动新广播子进程。退出时先停止子进程，再恢复原 Local Name 值/类型；原本无覆盖值时写回 Windows 默认电脑名、重启，再移除临时覆盖。缺少 `COMPUTERNAME` 时在改名前拒绝；控制器另有缓存自定义名称的情况不在恢复保证内。
@@ -200,7 +216,8 @@ Windows 桥仅允许一个通知订阅客户端，排队/待调度请求上限�
 
 | 边界 | 当前结论 |
 |---|---|
-| Windows 稳定重连 | 本轮重开 App 后活动保留，但设备页连接失败；未独立重抓当次地址，失败原因未确认 |
+| Windows 稳定重连 | Keep 缓存添加时 MAC，Windows 广播地址可能变化；当前按本轮地址受控重绑，不承诺稳定长连或跨重启恢复 |
+| 一键入口验收 | 软件 MAC 与 Android 实扫对照一致；2026-11-16 最终 PowerShell 入口在 nRF 停止时由官方 Android Keep 完成绑定、3306 字节传输/收讫及有效设备来源活动入账；在线解绑同步本地 bound=false，退出后无本轮广播/捕获进程残留，名称配置恢复；本轮重开持久性未复测，iPhone 待验收 |
 | iPhone | nRF Connect 协议往返通过；官方 Keep 直接绑定/同步未通过，同账号活动显示未验收 |
 | 服务器 | 本次有效活动及统计、重开保留已观察；独立 HTTP 重读、阈值、一般去重和来源覆盖规则未知 |
 | 泛化输入 | 多公里、长时 V2、重复秒和错误边界有本地测试；无对应真实硬件/云端全面验收 |

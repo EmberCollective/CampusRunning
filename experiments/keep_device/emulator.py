@@ -37,7 +37,7 @@ async def run(
         raise ValueError("Advertising name must match the selected model")
     if workout_path is not None and model != "B5":
         raise ValueError("--workout requires --model B5")
-    workout = WorkoutFiles(workout_path) if workout_path is not None else None
+    workout = WorkoutFiles(workout_path) if model == "B5" else None
     advertising_data = advertisement(name)
     if state_path is not None and address is None:
         raise ValueError("--state requires --address to preserve device identity across restarts")

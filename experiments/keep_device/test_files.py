@@ -74,6 +74,28 @@ def _entry(files, wire):
     return entries[0]
 
 
+def test_no_workout_answers_empty_sync_without_touching_files(tmp_path, monkeypatch, wire):
+    monkeypatch.chdir(tmp_path)
+    files = WorkoutFiles(None)
+    for kind in (1, 2, 3, 4, 5, 6, 35, 36, 37, 41, 42, 43, 44, 45, 47):
+        for _ in range(2):
+            assert files.reply(b"\x06\x01\x08" + bytes([kind])) == b"\x06\x01"
+            assert files.reply(b"\x06\x03\x08" + bytes([kind])) == b"\x06\x03"
+        for file_id in (0, 1, 2**64 - 1):
+            request = wire["Delete"](kind=kind, id=file_id)
+            response = files.reply(b"\x06\x07" + request.SerializeToString())
+            assert wire["Status"].FromString(response[2:]).state == 2
+            request = wire["Read"](id=file_id, count=512)
+            response = files.reply(b"\x06\x02" + request.SerializeToString())
+            chunk = wire["Chunk"].FromString(response[2:])
+            assert chunk.state == 2 and chunk.data == b""
+    with pytest.raises(UnsupportedRequest):
+        files.reply(bytes.fromhex("06 01 08 7f"))
+    with pytest.raises(ValueError):
+        files.reply(bytes.fromhex("06 01 08"))
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_directory_and_chunked_read_reassemble_exact_source(source, wire):
     files = WorkoutFiles(source)
     assert files.reply(bytes.fromhex("06 01 08 06")) == b"\x06\x01"

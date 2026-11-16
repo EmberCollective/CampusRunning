@@ -41,10 +41,16 @@ python app.py
 | `btcp.py` / `simple.py` | B3/B5 会话与帧、CRC、B5 通知分片 |
 | `protocol.py` / `emulator.py` | Bumble 服务及 Android Netsim 实验入口 |
 | `windows.py` | Bless/WinRT 实体蓝牙入口与临时名称恢复 |
+| `windows_mac.py` | 复用 BTVS/TShark 观察本轮实际广播 MAC |
+| `launcher.py` / `start-b5.ps1` | Windows 一键启动、地址/订阅/业务应答/传输进度显示；通过 `--stop-file` 通知原型正常退出 |
 
 独立环境中运行 `python -m pytest experiments/keep_device -q`；Windows 蓝牙环境使用 Python 3.11 和模块内 `requirements-windows.txt`，Bumble/测试环境依赖见模块内 `requirements.txt`。不得混入主应用环境。
 
 已在 Android Keep 9.1.120 验证 B5 绑定、完整文件传输、设备来源及有效活动入账。Windows 自动重连仍不稳定，iOS Keep 尚未通过；文件领取成功不能代替活动有效性验收。所有账号配置、生成记录与研究原始材料留在仓库外。
+
+当前使用流程为启动脚本、在官方 Keep 输入软件显示的本轮 MAC、完成短期同步；手机不需 nRF、USB 调试或系统配对。电脑需 BTVS/TShark 与独立 Windows 实验环境。地址变化后先于 Keep 解绑，再用同一脚本的 `-ResetBinding` 显式恢复本地绑定标记；默认不清空 bound，恢复也保留配置与接收标记。不承诺固定 MAC 或稳定长连。未加载运动文件的 B5 也要响应已支持的空目录查询。
+
+2026-11-16 一键入口已在 nRF 停止的条件下通过官方 Android Keep 绑定、3306 字节完整传输/收讫、有效“Keep 手环 B5”来源活动及统计增加。在线解绑同步本地 bound=false，退出完成名称配置恢复且无本轮进程残留。本轮未复测重开 App 持久性；后续测试改用 iPhone，不能把共享 B5 数据协议视为其发现、绑定和同步已通过验收。
 
 ## Commit 规范
 

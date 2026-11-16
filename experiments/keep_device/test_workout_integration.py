@@ -142,6 +142,49 @@ def test_workout_is_explicit_and_b5_only(source):
             DeviceInfoSession("C1:23:45:67:89:AB", model=model).reply_payload(b"\x06\x01\x08\x2c")
 
 
+def test_b5_empty_queue_replies_through_windows_notifications():
+    async def check():
+        notify = FakeNotify()
+        bridge = windows.DeviceInfoBridge(
+            notify, "C1:23:45:67:89:AB", lambda _: None, bytes,
+            model="B5", workout=WorkoutFiles(None),
+        )
+        worker = asyncio.create_task(bridge.serve())
+        try:
+            for kind in (6, 44):
+                notify.calls.clear()
+                bridge.write_request(WRITE, request_packet(12, b"\x06\x01\x08" + bytes([kind])))
+                await asyncio.sleep(0)
+                await bridge.queue.join()
+                packets = [packet for packet, _ in notify.calls]
+                assert response_payload(packets, 12, b"\x06\x01") == b""
+        finally:
+            bridge.close()
+            worker.cancel()
+            with suppress(asyncio.CancelledError):
+                await worker
+
+    asyncio.run(asyncio.wait_for(check(), 2))
+
+
+@pytest.mark.parametrize("entrypoint", [emulator, windows])
+def test_b5_without_workout_enables_empty_file_service_before_transport(entrypoint, monkeypatch):
+    class StopBeforeTransport(Exception):
+        pass
+
+    def check_empty(path):
+        assert path is None
+        assert WorkoutFiles(path).reply(bytes.fromhex("06 01 08 2c")) == b"\x06\x01"
+        raise StopBeforeTransport
+
+    monkeypatch.setattr(entrypoint, "WorkoutFiles", check_empty)
+    arguments = {"model": "B5"}
+    if entrypoint is emulator:
+        arguments.update(transport_spec="must-not-open", name="KeepB5 Lab", write_characteristic=1)
+    with pytest.raises(StopBeforeTransport):
+        asyncio.run(entrypoint.run(**arguments))
+
+
 @pytest.mark.parametrize("entrypoint", [emulator, windows])
 def test_cli_rejects_workout_for_b3_before_run(entrypoint, monkeypatch):
     arguments = ["program", "--workout", "private.sport44"]

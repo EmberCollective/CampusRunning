@@ -40,6 +40,21 @@ def test_fixed_examples_and_known_crc_vector():
     assert encode_response(b"\x01\x02", 0, 9) == [bytes.fromhex("00 00 01 00 00 01 02 22 b9")]
 
 
+def test_b5_device_info_query_without_body_returns_the_same_identity():
+    session = DeviceInfoSession("C1:23:45:67:89:AB", model="B5")
+    full = session.reply_packets(request_packet(0x1234, b"\x01\x02\x03\x03"), 244)
+    empty = session.reply_packets(request_packet(0x1234, b"\x01\x02"), 244)
+    assert empty == full
+    assert b"KeepB5 Lab" in empty[0] and b"LABC123456789AB" in empty[0]
+
+
+@pytest.mark.parametrize("body", [b"\x03", b"\x03\x04", b"\x03\x03\x00"])
+def test_b5_device_info_query_rejects_unknown_bodies(body):
+    session = DeviceInfoSession("C1:23:45:67:89:AB", model="B5")
+    with pytest.raises(UnsupportedRequest):
+        session.reply_packets(request_packet(0x1234, b"\x01\x02" + body), 244)
+
+
 @pytest.mark.parametrize("request_id", [0, 32767, 32768, 65535])
 def test_request_id_full_16_bit_range(request_id):
     assert decode_request(request_packet(request_id, b"\x02\x01\x08\x01")) == (

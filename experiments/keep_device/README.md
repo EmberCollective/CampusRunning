@@ -10,6 +10,7 @@ Android 真机官方 Keep 9.1.120 已通过 Windows 蓝牙原型导入一条 1 k
 
 - **照步骤运行：**本文按 Windows 真机路线说明准备、生成、连接、同步和退出。
 - **查模块、接口和格式：**[CONTRACT.md](CONTRACT.md)。
+- **接入其他蓝牙后端：**[传输接口设计](TRANSPORT.md)；类型已定义，现有后端尚未迁移。
 - **查证据、方案取舍和三组对照：**[issue #63 调研报告](../../docs/research/keep-third-party-source-63.md)。
 
 ```mermaid

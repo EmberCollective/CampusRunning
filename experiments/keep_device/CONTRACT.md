@@ -4,6 +4,8 @@
 
 ## 模块与 Python 接口
 
+可替换传输接口的设计见 [TRANSPORT.md](TRANSPORT.md)，纯标准库类型位于 [transport.py](transport.py)。现有后端尚未迁移，面板仍使用 Netsim；不能将接口定义视为实体广播或多实例支持已经完成。
+
 | 模块 | 入口 | 输入与输出 / 职责 |
 |---|---|---|
 | [history.py](history.py) | `encode_workout(data: ExportData) -> bytes` | 将既有导出数据编码为单条 RUN=2 SPORT44；不生成轨迹、不转换坐标、不访问账号或蓝牙 |

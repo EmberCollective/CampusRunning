@@ -35,6 +35,7 @@ python app.py
 
 | 模块 | 职责 |
 |------|------|
+| `transport.py` / `TRANSPORT.md` | 可替换蓝牙接口及生命周期契约；当前仅定义，现有运行入口尚未迁移 |
 | `history.py` | `encode_workout(ExportData) -> bytes`，编码 SPORT44；输入坐标已是 WGS-84 |
 | `exporter.py` | 原生 `B5Exporter`，构造注入旧引擎，严格摘要校验、原子发布与拒覆盖 |
 | `dashboard.py` / `templates/watch.html` | 复用旧 Web 四模式，提供可选手表管理面板、固定清单/里程、MAC 和真实连接状态；仅本机运行 |

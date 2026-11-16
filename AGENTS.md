@@ -12,6 +12,8 @@
 
 ## Keep 设备适配实验
 
+- 可替换蓝牙接口定义在 `experiments/keep_device/transport.py`，设计契约见同目录 `TRANSPORT.md`；当前尚未迁移运行入口。模拟器/硬件选择由接入方负责，公共层保持 B5 协议与数据职责；业务身份 MAC 不等于本轮广播 MAC，未知地址不得猜测或用永久地址代替。
+
 - 模块位于 `experiments/keep_device/`，默认主应用 CLI/Web 不加载实验依赖。可选 `dashboard.py` 复用旧 Web 四模式，通过构造注入 `B5Exporter` 原生输出并提供 `/watch`；不要将实验依赖加入主应用依赖，不复制四模式生成逻辑。
 - `B5Exporter` 校验摘要与轨迹一致，原子发布且拒覆盖；共享生成器按实际几何补足目标距离与整公里采样。不得通过缩放距离字段或跳过编码校验来生成 B5。面板生成不自动同步，用户点击载入后才切换广播；固定清单、按文件独立收讫，面板只能管理自己启动的进程。
 - 修改前阅读[连接与运行说明](experiments/keep_device/README.md)、[接口及协议契约](experiments/keep_device/CONTRACT.md)；证据与兼容性背景见 [issue #63 调研](docs/research/keep-third-party-source-63.md)。

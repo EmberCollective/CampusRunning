@@ -1,5 +1,17 @@
 # 协作与仓库约定
 
+## 公开版与私有版
+
+| 版本 | 仓库与定位 | 功能边界 |
+|---|---|---|
+| 公开版 | `EmberCollective/CampusRunning`，PUBLIC；本地 `origin` 的旧个人地址也重定向到该公开仓库，`upstream` 同样指向它 | 通用轨迹生成、四种规划模式、FIT/TCX 导出及公开 Web/桌面功能 |
+| 私有版 | `YuShenLiu06/CampusRunning-private`，PRIVATE、独立仓库；本地远程名 `private`，云端主分支 `main` | 保留公开版基础，另含 Keep B5 设备模拟、协议适配、原生 SPORT44 生成、批量同步、手表管理和传输接口设计 |
+
+- **Keep 设备功能不开源。** `experiments/keep_device/`、相关逆向调研/契约，以及主生成器、Web 和协作说明中为此增加的接入代码，都属于私有版范围。不能只按目录过滤后便认定其余修改可公开。
+- 当前私有开发线只能推送到已核实为 PRIVATE 的 `private` 远程。日常显式使用 `git push private HEAD:main`；推送前检查远程 URL、目标仓库可见性与提交范围，不凭远程名称或本地分支名判断隐私。目标不明或可见性变化时停止推送。
+- 不向公开仓库推送私有提交/分支/标签，不将这些内容放进公开 PR、Issue、Release、附件或截图，也不把私有仓库改为公开。公开版改动应从公开基线单独准备，只挑选确认可公开的通用修复，不能整线合并或镜像私有主线。
+- 私有仓库不意味着可以提交运行资料：账号、密钥、APK/DEX、抓包、日志、设备状态、运动轨迹及生成文件仍存仓库外。私有版本部署与发布必须以私有目标为准，不沿用公开版发布目标。
+
 开始工作前按任务阅读相关文档：项目入口见 [README.md](README.md)，架构与数据流见 [docs/architecture.md](docs/architecture.md)，API、轨迹和模板格式分别见 [docs/api_reference.md](docs/api_reference.md)、[docs/track_format.md](docs/track_format.md) 和 [config/templates/TEMPLATE_GUIDE.md](config/templates/TEMPLATE_GUIDE.md)。提交类型沿用 [CLAUDE.md](CLAUDE.md)；子系统若有设计文档，也要对照其约束。文档与当前代码或配置不一致时，以当前证据为准，并在 PR 中指出待同步的说明。
 
 进行审查时，先显式阅读本文件和 [REVIEW.md](REVIEW.md)，并检查 `.agents/skills/` 下与改动直接相关的 `SKILL.md`。发现技能时跟随目录符号链接（如 `find -L`、`rg --follow`），或直接打开已知路径；只读相关技能，不要假定这些文件会自动载入或无差别加载全部技能。技能用于补充背景，其中的行为、默认值和依赖仍须对照当前代码与配置核实。

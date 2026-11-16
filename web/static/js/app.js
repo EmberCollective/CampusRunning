@@ -1,1032 +1,303 @@
-// 校园跑步数据生成器 - Web前端
-
-let currentJobId = null;
-
-// 支持的输出格式白名单（与后端 models.py 校验保持一致）
-const OUTPUT_FORMATS = Array.from(document.querySelector('.output-format').options, option => option.value);
-
-// 轨迹元数据缓存：id -> {name, lap_distance_km}（来自 /api/tracks，预览卡片表头用）
-const trackMetaCache = new Map();
-
-// 页面加载时初始化
-document.addEventListener('DOMContentLoaded', async () => {
-    initDates();
-    initTabs();
-    initCalendar();
-    loadAppVersion();
-    await loadTracks();
-    await loadTemplates();
-    initForms();
-    document.querySelectorAll('.output-format').forEach(select => {
-        const output = document.getElementById(select.id.replace('-output-format', '-output-dir'));
-        const label = document.querySelector(`label[for="${output.id}"]`);
-        const update = () => {
-            output.disabled = select.value === 'b5';
-            label.textContent = output.disabled ? '输出目录（手表数据自动保存）' : '输出目录';
-        };
-        select.addEventListener('change', update);
-        update();
-    });
-});
-
-// 加载并展示应用版本号（来自 /api/version 的 Python 侧元数据）
-// 版本号是非关键装饰信息：请求失败时静默降级，元素保持留空，不弹错误提示
-async function loadAppVersion() {
+'use strict';
+const Generator = (() => {
+let mode='daily', result=null, generatedFormat='fit', resultsStale=false, busy=false, revision=0, templateSeq=0;
+let tracks=[], templates=[], localTemplates={};
+let calendarMonth=new Date().toISOString().slice(0,7);
+const selectedDates=new Set();
+function isoDate(value){return value.toISOString().slice(0,10);}
+function monthShift(month,delta){const date=new Date(month+'-01T12:00:00Z');date.setUTCMonth(date.getUTCMonth()+delta);return isoDate(date).slice(0,7);}
+function renderCalendar(focusDate){
+  $('calendar-month').value=calendarMonth;
+  const grid=$('calendar');grid.replaceChildren();for(const text of ['一','二','三','四','五','六','日']){const day=document.createElement('span');day.className='weekday';day.textContent=text;grid.append(day);}
+  const first=new Date(calendarMonth+'-01T12:00:00Z'),offset=(first.getUTCDay()+6)%7;
+  const end=new Date(first);end.setUTCMonth(end.getUTCMonth()+1);end.setUTCDate(0);
+  const count=Math.ceil((offset+end.getUTCDate())/7)*7;
+  const focus=focusDate||[...selectedDates].sort().find(date=>date.startsWith(calendarMonth))||calendarMonth+'-01';
+  for(let index=0;index<count;index++){
+    const date=new Date(first);date.setUTCDate(1-offset+index);const iso=isoDate(date),button=document.createElement('button');
+    button.type='button';button.className='day'+(!iso.startsWith(calendarMonth)?' other-month':'');button.textContent=date.getUTCDate();button.dataset.date=iso;button.disabled=iso<'2000-01-01'||iso>'2099-12-31';button.tabIndex=iso===focus?0:-1;button.setAttribute('aria-label',`${date.getUTCFullYear()} 年 ${date.getUTCMonth()+1} 月 ${date.getUTCDate()} 日`);button.setAttribute('aria-pressed',String(selectedDates.has(iso)));
+    button.addEventListener('click',()=>{if(selectedDates.has(iso))selectedDates.delete(iso);else selectedDates.add(iso);if(iso.slice(0,7)!==calendarMonth)calendarMonth=iso.slice(0,7);renderCalendar(iso);grid.querySelector(`[data-date="${iso}"]`)?.focus();markStale();});
+    button.addEventListener('keydown',event=>{const delta={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[event.key];if(delta===undefined)return;event.preventDefault();const next=new Date(iso+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+delta);const target=isoDate(next);if(target<'2000-01-01'||target>'2099-12-31')return;calendarMonth=target.slice(0,7);renderCalendar(target);grid.querySelector(`[data-date="${target}"]`)?.focus();});
+    grid.append(button);
+  }
+  $('previous-month').disabled=calendarMonth<='2000-01';$('next-month').disabled=calendarMonth>='2099-12';
+  $('calendar-count').textContent=`已选 ${selectedDates.size} 天 · 本月 ${[...selectedDates].filter(date=>date.startsWith(calendarMonth)).length} 天`;
+  $('selected-dates').replaceChildren();for(const date of [...selectedDates].sort()){const chip=document.createElement('span');chip.className='date-chip';chip.append(document.createTextNode(date));const remove=document.createElement('button');remove.type='button';remove.textContent='×';remove.setAttribute('aria-label',`移除 ${date}`);remove.addEventListener('click',()=>{selectedDates.delete(date);renderCalendar();markStale();$('calendar-month').focus();});chip.append(remove);$('selected-dates').append(chip);}
+  updatePlanCount();
+}
+function dayCount() {
+    if (mode === 'dates') return selectedDates.size;
+    const start = $('start-date').value, end = mode === 'single' ? start : $('end-date').value;
+    if (!start || !end || start > end) throw new Error('结束日期不能早于开始日期');
+    return Math.round((Date.parse(end + 'T12:00:00Z') - Date.parse(start + 'T12:00:00Z')) / 86400000) + 1;
+}
+function updatePlanCount() {
+    try { $('plan-count').textContent = `${dayCount()} 天`; }
+    catch { $('plan-count').textContent = '请检查日期'; }
+}
+function markStale() {
+    revision++;
+    if (!result) return;
+    resultsStale = true;
+    $('result-next').disabled = true;
+    $('result-summary').textContent = '参数已修改，重新生成后再下载或载入';
+}
+function renderAdvanced() {
+    const b5 = $('output-format').value === 'b5';
+    for (const id of ['rest-days', 'weekend-factor', 'min-daily', 'max-daily']) {
+        $(id).parentElement.hidden = mode !== 'total';
+        $(id).disabled = mode !== 'total';
+    }
+    $('output-directory').parentElement.hidden = b5;
+    $('output-directory').disabled = b5;
+    $('advanced-section').hidden = b5 && mode !== 'total';
+    for (const id of ['include-track', 'apply-correction', 'enable-cadence']) {
+        if (b5) $(id).checked = true;
+        $(id).disabled = b5;
+    }
+    $('b5-required').hidden = !b5;
+    $('format-note').textContent = b5 ? '先检查生成结果，再由你点击载入手表' :
+        $('output-format').value === 'fit' ? '下载文件后自行导入；此方式不会载入手表' : '通用运动格式；Keep 文件导入不解析其中的步频';
+}
+function setMode(next) {
+    mode = next;
+    document.querySelectorAll('[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
+    $('start-date-field').hidden = mode === 'dates';
+    $('end-date-field').hidden = mode === 'single' || mode === 'dates';
+    $('calendar-field').hidden = mode !== 'dates';
+    $('distance-range-field').hidden = mode === 'single' || mode === 'total';
+    $('total-distance-field').hidden = mode !== 'total';
+    $('single-distance-field').hidden = mode !== 'single';
+    document.querySelector('label[for="start-date"]').textContent = mode === 'single' ? '运动日期' : '开始日期';
+    $('mode-heading').textContent = { daily: '日期与每日里程', total: '日期与总里程', single: '单次运动', dates: '选择运动日期' }[mode];
+    for (const id of ['start-date', 'end-date', 'min-distance', 'max-distance', 'total-distance', 'single-distance'])
+        $(id).disabled = $(id).closest('.fields > div').hidden;
+    renderAdvanced(); updatePlanCount(); markStale();
+}
+async function refreshTracks(selected) {
+    const list = await requestJSON('/api/tracks');
+    tracks = list;
+    const chosen = selected || $('track-choice').value;
+    $('track-choice').replaceChildren(...list.map(t => new Option(t.name, t.id)));
+    if (list.some(t => t.id === chosen)) $('track-choice').value = chosen;
+    if (!list.length) $('track-choice').add(new Option('轨迹库为空，请先创建轨迹', ''));
+    updatePreview();
+    if (result) markStale();
+    return list;
+}
+function updatePreview() {
+    const track = tracks.find(t => t.id === $('track-choice').value);
+    if (!track) { TrackPreview.reset(); return; }
+    TrackPreview.show(track.id, track);
+}
+function collect() {
+    const value = id => Number($(id).value);
+    const data = { track_id: $('track-choice').value, min_pace: value('min-pace'), max_pace: value('max-pace'),
+        start_time_min: $('earliest-time').value, start_time_max: $('latest-time').value,
+        output_format: $('output-format').value, output_dir: $('output-directory').value || 'output',
+        include_track: $('include-track').checked, apply_correction: $('apply-correction').checked,
+        enable_pace_fluctuation: $('pace-fluctuation').checked, enable_cadence: $('enable-cadence').checked };
+    if (mode === 'dates') Object.assign(data, { dates: [...selectedDates].sort(), min_km: value('min-distance'), max_km: value('max-distance') });
+    else if (mode === 'single') Object.assign(data, { date: $('start-date').value, distance: value('single-distance') });
+    else {
+        Object.assign(data, { start_date: $('start-date').value, end_date: $('end-date').value });
+        if (mode === 'daily') Object.assign(data, { min_km: value('min-distance'), max_km: value('max-distance') });
+        else Object.assign(data, { total_km: value('total-distance'), min_daily_km: value('min-daily'),
+            max_daily_km: value('max-daily'), weekend_factor: value('weekend-factor'), rest_days_per_week: value('rest-days') });
+    }
+    return data;
+}
+function generationError(message) {
+    $('generation-error').textContent = message;
+    $('generation-error').hidden = false;
+    notify(message);
+}
+function validate(data) {
+    const count = dayCount();
+    if (!count) throw new Error('请至少选择一个运动日期');
+    if (!data.track_id) throw new Error('请先选择一条轨迹');
+    if (data.output_format === 'b5' && count > 64) throw new Error('B5 每批最多 64 天，请缩短日期范围');
+    if (data.min_km > data.max_km) throw new Error('最低公里数不能大于最高公里数');
+    if (data.min_daily_km > data.max_daily_km) throw new Error('每日最低公里数不能大于最高公里数');
+    if (data.min_pace > data.max_pace) throw new Error('最快配速的用时不能大于最慢配速');
+    if (data.start_time_min > data.start_time_max) throw new Error('最早开始不能晚于最晚开始');
+}
+function renderResults() {
+    $('result-rows').replaceChildren();
+    for (const record of result.files) {
+        const row = document.createElement('tr');
+        [record.date, record.distance_km.toFixed(2), timeLabel(record.duration_seconds), timeLabel(record.pace_min_per_km * 60)].forEach((value, index) => {
+            const cell = document.createElement('td'); cell.textContent = value;
+            if (index === 1 || index === 2) cell.className = 'num'; row.append(cell);
+        });
+        $('result-rows').append(row);
+    }
+    $('result-table').hidden = false; $('empty-results').hidden = true;
+    $('result-summary').textContent = `${result.files.length} 条记录 · ${result.files.reduce((sum, r) => sum + r.distance_km, 0).toFixed(2)} km · ${generatedFormat === 'b5' ? 'B5 手表' : generatedFormat.toUpperCase()}`;
+    $('result-count').textContent = `${result.files.length} 条`;
+    $('result-next').firstChild.textContent = generatedFormat === 'b5' ? '载入手表' : '下载文件';
+    $('result-next').disabled = !result.files.length || resultsStale;
+    $('result-table').closest('.table-scroll').scrollTop = 0;
+}
+async function generate(event) {
+    event.preventDefault();
+    if (busy) return;
+    const data = collect();
+    try { validate(data); } catch (error) { generationError(error.message); return; }
+    const startRevision = revision;
+    busy = true; result = null; resultsStale = true;
+    $('generate-button').disabled = true; $('result-next').disabled = true; $('generation-error').hidden = true;
+    $('generate-button').firstChild.textContent = '正在生成…';
+    notify('正在生成本地文件，完成前请保留此页面', 'loading');
     try {
-        const response = await fetch('/api/version');
-        if (!response.ok) return;
-        const data = await response.json();
-        const el = document.getElementById('app-version');
-        if (el && data.version) {
-            el.textContent = `v${data.version}`;
-            el.title = data.name || '';
-        }
+        result = await postJSON('/api/generate/' + mode, data, 180000);
+        generatedFormat = data.output_format; resultsStale = false;
+        renderResults();
+        if (startRevision !== revision) markStale();
+        notify(`已生成 ${result.files.length} 条记录，尚未载入手表`);
+        if (innerWidth <= 760) $('generation-results').scrollIntoView({ block: 'nearest' });
     } catch (error) {
-        // 静默降级，保持留空
-    }
-}
-
-// 初始化日期默认值
-function initDates() {
-    const today = new Date();
-    const weekLater = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const dateFormat = (d) => d.toISOString().split('T')[0];
-
-    document.getElementById('daily-start-date').value = dateFormat(today);
-    document.getElementById('daily-end-date').value = dateFormat(weekLater);
-    document.getElementById('total-start-date').value = dateFormat(today);
-    document.getElementById('total-end-date').value = dateFormat(weekLater);
-    document.getElementById('single-date').value = dateFormat(today);
-}
-
-// ============================================================
-// 日历选择器（指定日期批量模式）
-// ============================================================
-const calendarState = {
-    currentYear: new Date().getFullYear(),
-    currentMonth: new Date().getMonth(), // 0-based
-    selectedDates: new Set(), // 存储 "YYYY-MM-DD" 格式
-};
-
-// 折叠态最多展示的日期标签数：超出部分收进「+N 天」，点击展开（issue #43）
-const MAX_COLLAPSED_TAGS = 8;
-let datesTagsExpanded = false;
-
-function initCalendar() {
-    renderCalendar();
-    document.getElementById('cal-prev').addEventListener('click', () => {
-        calendarState.currentMonth--;
-        if (calendarState.currentMonth < 0) {
-            calendarState.currentMonth = 11;
-            calendarState.currentYear--;
-        }
-        renderCalendar();
-    });
-    document.getElementById('cal-next').addEventListener('click', () => {
-        calendarState.currentMonth++;
-        if (calendarState.currentMonth > 11) {
-            calendarState.currentMonth = 0;
-            calendarState.currentYear++;
-        }
-        renderCalendar();
-    });
-    document.getElementById('cal-clear').addEventListener('click', () => {
-        calendarState.selectedDates.clear();
-        renderCalendar();
-        renderSelectedTags();
-    });
-    document.getElementById('cal-select-weekdays').addEventListener('click', () => {
-        selectDaysByType('weekday');
-    });
-    document.getElementById('cal-select-weekends').addEventListener('click', () => {
-        selectDaysByType('weekend');
-    });
-}
-
-function renderCalendar() {
-    const year = calendarState.currentYear;
-    const month = calendarState.currentMonth;
-
-    // 更新标题
-    const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月',
-                        '7月', '8月', '9月', '10月', '11月', '12月'];
-    document.getElementById('cal-title').textContent = `${year}年 ${monthNames[month]}`;
-
-    const grid = document.getElementById('cal-grid');
-    grid.innerHTML = '';
-
-    const today = new Date();
-    const todayStr = formatDateStr(today);
-
-    // 本月第一天是星期几（0=日,1=一,...,6=六）=> 转换为周一=0
-    const firstDay = new Date(year, month, 1);
-    let startWeekday = firstDay.getDay() - 1; // 周一=0
-    if (startWeekday < 0) startWeekday = 6; // 周日 => 6
-
-    // 本月天数
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    // 上月补位
-    const prevMonthDays = new Date(year, month, 0).getDate();
-    for (let i = startWeekday - 1; i >= 0; i--) {
-        const day = prevMonthDays - i;
-        const el = document.createElement('div');
-        el.className = 'cal-day cal-empty cal-other-month';
-        el.textContent = day;
-        grid.appendChild(el);
-    }
-
-    // 本月日期
-    for (let d = 1; d <= daysInMonth; d++) {
-        const dateStr = formatDateStr(new Date(year, month, d));
-        const el = document.createElement('div');
-        el.className = 'cal-day';
-        el.textContent = d;
-
-        // 判断是否周末（0=日, 6=六）
-        const dayOfWeek = new Date(year, month, d).getDay();
-        if (dayOfWeek === 0 || dayOfWeek === 6) {
-            el.classList.add('cal-weekend');
-        }
-
-        if (dateStr === todayStr) {
-            el.classList.add('cal-today');
-        }
-
-        if (calendarState.selectedDates.has(dateStr)) {
-            el.classList.add('cal-selected');
-        }
-
-        el.addEventListener('click', () => toggleDate(dateStr, el));
-        grid.appendChild(el);
-    }
-
-    // 下月补位（补齐到6行 = 42格）
-    const totalCells = grid.children.length;
-    const remaining = totalCells <= 35 ? (35 - totalCells) : (42 - totalCells);
-    for (let i = 1; i <= remaining; i++) {
-        const el = document.createElement('div');
-        el.className = 'cal-day cal-empty cal-other-month';
-        el.textContent = i;
-        grid.appendChild(el);
-    }
-}
-
-function toggleDate(dateStr, el) {
-    if (calendarState.selectedDates.has(dateStr)) {
-        calendarState.selectedDates.delete(dateStr);
-        el.classList.remove('cal-selected');
-    } else {
-        calendarState.selectedDates.add(dateStr);
-        el.classList.add('cal-selected');
-    }
-    renderSelectedTags();
-}
-
-function renderSelectedTags() {
-    const container = document.getElementById('selected-dates-tags');
-    const countEl = document.getElementById('dates-count');
-    const dates = Array.from(calendarState.selectedDates).sort();
-
-    countEl.textContent = `(已选 ${dates.length} 天)`;
-
-    if (dates.length === 0) {
-        datesTagsExpanded = false;
-        document.getElementById('dates-tags-toggle')?.remove();
-        container.innerHTML = '<span class="dates-placeholder">点击日历上的日期进行选择</span>';
-        return;
-    }
-
-    // 数量回落到阈值内时自动回到折叠态
-    if (dates.length <= MAX_COLLAPSED_TAGS) {
-        datesTagsExpanded = false;
-    }
-
-    // 用 DOM API 构建：日期字符串可能来自上传的模板文件，
-    // 只经 textContent/dataset 写入，禁止拼入 innerHTML（防存储型 XSS，与 loadTracks 同策略）
-    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-    container.innerHTML = '';
-    const visibleDates = datesTagsExpanded ? dates : dates.slice(0, MAX_COLLAPSED_TAGS);
-    visibleDates.forEach(d => {
-        const dt = new Date(d + 'T00:00:00');
-        // 非法日期字符串（模板中的脏数据）直接显示原文，避免渲染出 "NaN-NaN 周NaN"
-        const label = Number.isNaN(dt.getTime())
-            ? d
-            : `${(dt.getMonth()+1).toString().padStart(2,'0')}-${dt.getDate().toString().padStart(2,'0')} 周${weekdays[dt.getDay()]}`;
-
-        const tag = document.createElement('span');
-        tag.className = 'date-tag';
-        tag.dataset.date = d;
-        tag.appendChild(document.createTextNode(label));
-
-        const remove = document.createElement('span');
-        remove.className = 'tag-remove';
-        remove.textContent = '×';
-        remove.addEventListener('click', () => removeDateTag(d));
-        tag.appendChild(remove);
-
-        container.appendChild(tag);
-    });
-
-    // 超出阈值时在标签盒下方显示「+N 天 / 收起」切换按钮。
-    // 置于滚动容器外：<button> 键盘可达，展开大量日期时不会被滚出视口
-    let toggleBtn = document.getElementById('dates-tags-toggle');
-    if (dates.length > MAX_COLLAPSED_TAGS) {
-        if (!toggleBtn) {
-            toggleBtn = document.createElement('button');
-            toggleBtn.type = 'button';
-            toggleBtn.id = 'dates-tags-toggle';
-            toggleBtn.className = 'tag-toggle-btn';
-            toggleBtn.addEventListener('click', () => {
-                datesTagsExpanded = !datesTagsExpanded;
-                renderSelectedTags();
-            });
-            container.parentElement.appendChild(toggleBtn);
-        }
-        toggleBtn.textContent = datesTagsExpanded
-            ? '收起'
-            : `+${dates.length - MAX_COLLAPSED_TAGS} 天`;
-    } else {
-        toggleBtn?.remove();
-    }
-}
-
-function removeDateTag(dateStr) {
-    calendarState.selectedDates.delete(dateStr);
-    renderSelectedTags();
-    renderCalendar(); // 刷新日历上的选中状态
-}
-
-function selectDaysByType(type) {
-    const year = calendarState.currentYear;
-    const month = calendarState.currentMonth;
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    for (let d = 1; d <= daysInMonth; d++) {
-        const dayOfWeek = new Date(year, month, d).getDay();
-        const dateStr = formatDateStr(new Date(year, month, d));
-        if (type === 'weekday' && dayOfWeek >= 1 && dayOfWeek <= 5) {
-            calendarState.selectedDates.add(dateStr);
-        } else if (type === 'weekend' && (dayOfWeek === 0 || dayOfWeek === 6)) {
-            calendarState.selectedDates.add(dateStr);
-        }
-    }
-    renderCalendar();
-    renderSelectedTags();
-}
-
-function formatDateStr(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
-// 获取当前选中的输出格式（脏值兜底为默认 fit）
-function getSelectedFormat() {
-    const sel = document.querySelector('.mode-content.active .output-format');
-    return sel && OUTPUT_FORMATS.includes(sel.value) ? sel.value : 'fit';
-}
-
-// 初始化Tab切换
-function initTabs() {
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const modeContents = document.querySelectorAll('.mode-content');
-
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const mode = button.dataset.mode;
-
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            button.classList.add('active');
-
-            modeContents.forEach(content => {
-                content.classList.remove('active');
-                if (content.id === `${mode}-mode`) {
-                    content.classList.add('active');
-                }
-            });
-        });
-    });
-}
-
-// 加载轨迹列表
-async function loadTracks() {
-    try {
-        const response = await fetch('/api/tracks');
-        if (!response.ok) throw new Error('加载轨迹失败');
-
-        const tracks = await response.json();
-        const select = document.getElementById('track-select');
-        // 用 DOM API 构建（name 来自 JSON 文件的任意文本，禁止拼入 innerHTML 防存储型 XSS）
-        select.replaceChildren();
-        tracks.forEach(t => select.add(new Option(`${t.name} (${t.lap_distance_km}km/圈)`, t.id)));
-
-        trackMetaCache.clear();
-        tracks.forEach(t => trackMetaCache.set(t.id, t));
-        updateTrackPreview();
-    } catch (error) {
-        showMessage('加载轨迹列表失败: ' + error.message, 'error');
-    }
-}
-
-// 同步左栏轨迹预览卡片到当前下拉选择（列表加载完成、手动切换、模板应用后调用）
-function updateTrackPreview() {
-    if (typeof TrackPreview === 'undefined') return;  // 预览脚本加载失败时优雅降级
-    const trackId = document.getElementById('track-select').value;
-    const meta = trackMetaCache.get(trackId);
-    if (trackId && meta) {
-        TrackPreview.show(trackId, meta);
-    } else {
-        TrackPreview.reset();
-    }
-}
-
-// 本地模板缓存键
-const TEMPLATE_CACHE_KEY = 'template_cache';
-
-// 保存模板到本地缓存
-function saveTemplateToLocal(template) {
-    const cache = JSON.parse(localStorage.getItem(TEMPLATE_CACHE_KEY) || '{}');
-    cache[template.id] = template;
-    localStorage.setItem(TEMPLATE_CACHE_KEY, JSON.stringify(cache));
-}
-
-// 获取本地缓存的模板列表
-function getLocalTemplates() {
-    const cache = JSON.parse(localStorage.getItem(TEMPLATE_CACHE_KEY) || '{}');
-    return Object.values(cache);
-}
-
-// 从本地缓存删除模板
-function removeLocalTemplate(id) {
-    const cache = JSON.parse(localStorage.getItem(TEMPLATE_CACHE_KEY) || '{}');
-    delete cache[id];
-    localStorage.setItem(TEMPLATE_CACHE_KEY, JSON.stringify(cache));
-}
-
-// 加载模板列表
-async function loadTemplates() {
-    try {
-        const response = await fetch('/api/templates');
-        if (!response.ok) throw new Error('加载模板失败');
-
-        const templates = await response.json();
-        const select = document.getElementById('template-select');
-
-        // 构建下拉框选项
-        let optionsHtml = '<option value="">不使用模板</option>' +
-            '<option value="__upload__">上传模板...</option>';
-
-        // 服务器模板
-        templates.forEach(t => {
-            optionsHtml += `<option value="${t.id}">${t.name}</option>`;
-        });
-
-        // 本地缓存模板
-        const localTemplates = getLocalTemplates();
-        if (localTemplates.length > 0) {
-            optionsHtml += '<optgroup label="本地模板">';
-            localTemplates.forEach(t => {
-                optionsHtml += `<option value="local_${t.id}">${t.name}</option>`;
-            });
-            optionsHtml += '</optgroup>';
-        }
-
-        select.innerHTML = optionsHtml;
-
-        // 监听模板选择变化
-        select.addEventListener('change', async (e) => {
-            const templateId = e.target.value;
-            if (!templateId) {
-                resetFormsToDefaults();
-                return;
-            }
-            if (templateId === '__upload__') {
-                document.getElementById('template-upload').click();
-                return;
-            }
-            if (templateId.startsWith('local_')) {
-                // 本地模板
-                const id = templateId.replace('local_', '');
-                const cache = JSON.parse(localStorage.getItem(TEMPLATE_CACHE_KEY) || '{}');
-                if (cache[id]) {
-                    applyTemplateToForms(cache[id]);
-                }
-                return;
-            }
-            try {
-                const resp = await fetch(`/api/template/${templateId}`);
-                if (!resp.ok) throw new Error('获取模板失败');
-                const template = await resp.json();
-                applyTemplateToForms(template);
-            } catch (error) {
-                showMessage('加载模板失败: ' + error.message, 'error');
-            }
-        });
-
-        // 监听文件上传
-        document.getElementById('template-upload').addEventListener('change', handleTemplateUpload);
-    } catch (error) {
-        showMessage('加载模板列表失败: ' + error.message, 'error');
-    }
-}
-
-// 处理模板文件上传
-function handleTemplateUpload(e) {
-    const file = e.target.files[0];
-    if (!file) {
-        // 用户取消选择，恢复下拉框
-        document.getElementById('template-select').value = '';
-        return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        try {
-            const template = JSON.parse(event.target.result);
-            // 保存到本地缓存
-            saveTemplateToLocal(template);
-            // 应用模板到表单
-            applyTemplateToForms(template);
-            showMessage('模板导入成功', 'success');
-            // 刷新模板列表以显示本地模板
-            loadTemplates();
-            // 选中新导入的模板
-            document.getElementById('template-select').value = `local_${template.id}`;
-        } catch (error) {
-            showMessage('模板文件格式错误: ' + error.message, 'error');
-        }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-}
-
-// 切换到指定模式
-function switchToMode(mode) {
-    const tabButton = document.querySelector(`.tab-button[data-mode="${mode}"]`);
-    if (tabButton && !tabButton.classList.contains('active')) {
-        tabButton.click();
-    }
-}
-
-// 应用模板到表单
-function applyTemplateToForms(template) {
-    // 检查哪个配置节有内容，自动切换到对应模式
-    const hasDaily = template.daily_config && Object.keys(template.daily_config).length > 0;
-    const hasTotal = template.total_config && Object.keys(template.total_config).length > 0;
-    const hasSingle = template.single_config && Object.keys(template.single_config).length > 0;
-    const hasDates = template.dates_config && Object.keys(template.dates_config).length > 0;
-
-    if (hasDaily) {
-        switchToMode('daily');
-    } else if (hasTotal) {
-        switchToMode('total');
-    } else if (hasSingle) {
-        switchToMode('single');
-    } else if (hasDates) {
-        switchToMode('dates');
-    }
-
-    const activeMode = document.querySelector('.mode-content.active').id;
-    let config = {};
-
-    // 根据当前模式获取对应配置
-    if (activeMode === 'daily-mode' && template.daily_config) {
-        config = template.daily_config;
-    } else if (activeMode === 'total-mode' && template.total_config) {
-        config = template.total_config;
-    } else if (activeMode === 'single-mode' && template.single_config) {
-        config = template.single_config;
-    } else if (activeMode === 'dates-mode' && template.dates_config) {
-        config = template.dates_config;
-    } else {
-        // 兼容旧格式（无模式分离）
-        config = template.generation_config || {};
-    }
-
-    // 应用轨迹选择
-    if (template.track_id) {
-        document.getElementById('track-select').value = template.track_id;
-        updateTrackPreview();  // 程序化设 value 不触发 change 事件，需显式刷新预览
-    }
-
-    // 应用输出格式（白名单过滤，脏值保持默认 FIT）
-    if (OUTPUT_FORMATS.includes(config.output_format)) {
-        document.querySelectorAll('.output-format').forEach(sel => {
-            sel.value = config.output_format;
-        });
-    }
-
-    // 通用字段（配速、时间）
-    if (config.min_pace !== undefined) {
-        document.getElementById('daily-min-pace').value = config.min_pace;
-        document.getElementById('total-min-pace').value = config.min_pace;
-        document.getElementById('dates-min-pace').value = config.min_pace;
-    }
-    if (config.max_pace !== undefined) {
-        document.getElementById('daily-max-pace').value = config.max_pace;
-        document.getElementById('total-max-pace').value = config.max_pace;
-        document.getElementById('dates-max-pace').value = config.max_pace;
-    }
-    if (config.start_time_min !== undefined) {
-        document.getElementById('daily-start-time-min').value = config.start_time_min;
-        document.getElementById('total-start-time-min').value = config.start_time_min;
-        document.getElementById('dates-start-time-min').value = config.start_time_min;
-    } else if (config.start_hour_min !== undefined) {
-        // 向后兼容旧模板
-        const minTime = String(config.start_hour_min).padStart(2, '0') + ':00';
-        document.getElementById('daily-start-time-min').value = minTime;
-        document.getElementById('total-start-time-min').value = minTime;
-        document.getElementById('dates-start-time-min').value = minTime;
-    }
-    if (config.start_time_max !== undefined) {
-        document.getElementById('daily-start-time-max').value = config.start_time_max;
-        document.getElementById('total-start-time-max').value = config.start_time_max;
-        document.getElementById('dates-start-time-max').value = config.start_time_max;
-    } else if (config.start_hour_max !== undefined) {
-        // 向后兼容旧模板
-        const maxTime = String(config.start_hour_max).padStart(2, '0') + ':00';
-        document.getElementById('daily-start-time-max').value = maxTime;
-        document.getElementById('total-start-time-max').value = maxTime;
-        document.getElementById('dates-start-time-max').value = maxTime;
-    }
-
-    // 处理恒定配速checkbox（模板的enable_pace_fluctuation是true表示启用，checkbox是checked表示禁用）
-    const dailyNoFluctuation = document.getElementById('daily-no-fluctuation');
-    const totalNoFluctuation = document.getElementById('total-no-fluctuation');
-    const dailyNoTrack = document.getElementById('daily-no-track');
-    const totalNoTrack = document.getElementById('total-no-track');
-    const dailyNoCorrection = document.getElementById('daily-no-correction');
-    const totalNoCorrection = document.getElementById('total-no-correction');
-
-    if (config.enable_pace_fluctuation !== undefined) {
-        if (dailyNoFluctuation) dailyNoFluctuation.checked = !config.enable_pace_fluctuation;
-        if (totalNoFluctuation) totalNoFluctuation.checked = !config.enable_pace_fluctuation;
-    }
-    if (config.include_track !== undefined) {
-        if (dailyNoTrack) dailyNoTrack.checked = !config.include_track;
-        if (totalNoTrack) totalNoTrack.checked = !config.include_track;
-    }
-    if (config.apply_correction !== undefined) {
-        if (dailyNoCorrection) dailyNoCorrection.checked = !config.apply_correction;
-        if (totalNoCorrection) totalNoCorrection.checked = !config.apply_correction;
-    }
-
-    // 日期字段
-    if (config.start_date) {
-        document.getElementById('daily-start-date').value = config.start_date;
-        document.getElementById('total-start-date').value = config.start_date;
-    }
-    if (config.end_date) {
-        document.getElementById('daily-end-date').value = config.end_date;
-        document.getElementById('total-end-date').value = config.end_date;
-    }
-
-    // 每日模式特有字段
-    if (activeMode === 'daily-mode') {
-        if (config.min_km !== undefined) {
-            document.getElementById('daily-min-km').value = config.min_km;
-        }
-        if (config.max_km !== undefined) {
-            document.getElementById('daily-max-km').value = config.max_km;
-        }
-    }
-
-    // 总公里数模式特有字段
-    if (activeMode === 'total-mode') {
-        if (config.total_km !== undefined) {
-            document.getElementById('total-km').value = config.total_km;
-        }
-        if (config.weekend_factor !== undefined) {
-            document.getElementById('total-weekend-factor').value = config.weekend_factor;
-        }
-        if (config.min_daily_km !== undefined) {
-            document.getElementById('total-min-daily').value = config.min_daily_km;
-        }
-        if (config.max_daily_km !== undefined) {
-            document.getElementById('total-max-daily').value = config.max_daily_km;
-        }
-        if (config.rest_days_per_week !== undefined) {
-            document.getElementById('total-rest-days').value = config.rest_days_per_week;
-        }
-    }
-
-    // 单文件模式字段
-    if (activeMode === 'single-mode') {
-        if (config.pace !== undefined) {
-            document.getElementById('single-pace').value = config.pace;
-        }
-    }
-
-    // 指定日期批量模式字段
-    if (activeMode === 'dates-mode') {
-        if (config.min_km !== undefined) {
-            document.getElementById('dates-min-km').value = config.min_km;
-        }
-        if (config.max_km !== undefined) {
-            document.getElementById('dates-max-km').value = config.max_km;
-        }
-        if (config.dates && Array.isArray(config.dates)) {
-            calendarState.selectedDates = new Set(config.dates);
-            renderCalendar();
-            renderSelectedTags();
-        }
-    }
-}
-
-// 重置表单为默认值
-function resetFormsToDefaults() {
-    // 每日模式默认值
-    document.getElementById('daily-min-km').value = 2.0;
-    document.getElementById('daily-max-km').value = 5.0;
-    document.getElementById('daily-min-pace').value = 7.0;
-    document.getElementById('daily-max-pace').value = 8.0;
-    document.getElementById('daily-start-time-min').value = '06:00';
-    document.getElementById('daily-start-time-max').value = '08:00';
-
-    // 总公里数模式默认值
-    document.getElementById('total-weekend-factor').value = 1.5;
-    document.getElementById('total-min-daily').value = 2.0;
-    document.getElementById('total-max-daily').value = 8.0;
-    document.getElementById('total-rest-days').value = 1;
-    document.getElementById('total-min-pace').value = 7.0;
-    document.getElementById('total-max-pace').value = 8.0;
-    document.getElementById('total-start-time-min').value = '06:00';
-    document.getElementById('total-start-time-max').value = '08:00';
-
-    // 指定日期批量模式默认值
-    document.getElementById('dates-min-km').value = 2.0;
-    document.getElementById('dates-max-km').value = 5.0;
-    document.getElementById('dates-min-pace').value = 7.0;
-    document.getElementById('dates-max-pace').value = 8.0;
-    document.getElementById('dates-start-time-min').value = '06:00';
-    document.getElementById('dates-start-time-max').value = '08:00';
-
-    // 输出格式重置为默认 FIT
-    document.querySelectorAll('.output-format').forEach(sel => {
-        sel.value = 'fit';
-    });
-}
-
-// 初始化表单提交
-function initForms() {
-    document.getElementById('track-select').addEventListener('change', updateTrackPreview);
-    document.getElementById('daily-form').addEventListener('submit', handleDailySubmit);
-    document.getElementById('total-form').addEventListener('submit', handleTotalSubmit);
-    document.getElementById('single-form').addEventListener('submit', handleSingleSubmit);
-    document.getElementById('dates-form').addEventListener('submit', handleDatesSubmit);
-    document.getElementById('download-btn').addEventListener('click', downloadFiles);
-    document.getElementById('daily-export-btn').addEventListener('click', showExportModal);
-    document.getElementById('total-export-btn').addEventListener('click', showExportModal);
-    document.getElementById('single-export-btn').addEventListener('click', showExportModal);
-    document.getElementById('dates-export-btn').addEventListener('click', showExportModal);
-    document.getElementById('export-form').addEventListener('submit', handleExportSubmit);
-    document.querySelector('#export-modal .modal-close').addEventListener('click', hideExportModal);
-    document.querySelector('#export-modal .modal-cancel').addEventListener('click', hideExportModal);
-}
-
-// 显示导出模态框
-function showExportModal() {
-    document.getElementById('export-template-name').value = '';
-    document.getElementById('export-modal').style.display = 'flex';
-}
-
-// 隐藏导出模态框
-function hideExportModal() {
-    document.getElementById('export-modal').style.display = 'none';
-}
-
-// 处理导出提交
-function handleExportSubmit(e) {
-    e.preventDefault();
-    const name = document.getElementById('export-template-name').value.trim();
-    if (!name) return;
-    hideExportModal();
-    doExportTemplate(name);
-}
-
-// 执行导出
-let pendingExportConfig = null;
-
-function doExportTemplate(name) {
-    const data = getCurrentActiveFormData();
-    const activeMode = document.querySelector('.mode-content.active').id;
-
-    let config = {};
-    if (activeMode === 'daily-mode') {
-        config = {
-            min_pace: data.min_pace,
-            max_pace: data.max_pace,
-            start_time_min: data.start_time_min,
-            start_time_max: data.start_time_max,
-            start_date: data.start_date,
-            end_date: data.end_date,
-            min_km: data.min_km,
-            max_km: data.max_km,
-            include_track: data.include_track,
-            apply_correction: data.apply_correction,
-            enable_pace_fluctuation: data.enable_pace_fluctuation,
-            output_format: data.output_format,
-        };
-    } else if (activeMode === 'total-mode') {
-        config = {
-            min_pace: data.min_pace,
-            max_pace: data.max_pace,
-            start_time_min: data.start_time_min,
-            start_time_max: data.start_time_max,
-            start_date: data.start_date,
-            end_date: data.end_date,
-            total_km: data.total_km,
-            weekend_factor: data.weekend_factor,
-            min_daily_km: data.min_daily_km,
-            max_daily_km: data.max_daily_km,
-            rest_days_per_week: data.rest_days_per_week,
-            include_track: data.include_track,
-            apply_correction: data.apply_correction,
-            enable_pace_fluctuation: data.enable_pace_fluctuation,
-            output_format: data.output_format,
-        };
-    } else if (activeMode === 'dates-mode') {
-        config = {
-            dates: data.dates,
-            min_km: data.min_km,
-            max_km: data.max_km,
-            min_pace: data.min_pace,
-            max_pace: data.max_pace,
-            start_time_min: data.start_time_min,
-            start_time_max: data.start_time_max,
-            output_format: data.output_format,
-        };
-    } else {
-        config = {
-            pace: data.pace,
-            include_track: data.include_track,
-            apply_correction: data.apply_correction,
-            enable_pace_fluctuation: data.enable_pace_fluctuation,
-            output_format: data.output_format,
-        };
-    }
-
-    const template = {
-        id: `custom_${Date.now()}`,
-        name: name,
-        description: '',
-        track_id: data.track_id || '',
-        daily_config: activeMode === 'daily-mode' ? config : {},
-        total_config: activeMode === 'total-mode' ? config : {},
-        single_config: activeMode === 'single-mode' ? config : {},
-        dates_config: activeMode === 'dates-mode' ? config : {},
-    };
-
-    // 保存到本地缓存
-    saveTemplateToLocal(template);
-
-    // 下载JSON文件
-    const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${name.replace(/[^a-zA-Z0-9一-龥]/g, '_')}_${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    showMessage('模板已导出', 'success');
-}
-
-// 获取当前活动表单的配置数据
-function getCurrentActiveFormData() {
-    const activeMode = document.querySelector('.mode-content.active').id;
-
-    if (activeMode === 'daily-mode') {
-        return collectDailyFormData();
-    } else if (activeMode === 'total-mode') {
-        return collectTotalFormData();
-    } else if (activeMode === 'dates-mode') {
-        return collectDatesFormData();
-    } else {
-        return collectSingleFormData();
-    }
-}
-
-// 处理每日模式提交
-async function handleDailySubmit(e) {
-    e.preventDefault();
-    const data = collectDailyFormData();
-    await generate('daily', data);
-}
-
-// 处理总公里数模式提交
-async function handleTotalSubmit(e) {
-    e.preventDefault();
-    const data = collectTotalFormData();
-    await generate('total', data);
-}
-
-// 处理单文件模式提交
-async function handleSingleSubmit(e) {
-    e.preventDefault();
-    const data = collectSingleFormData();
-    await generate('single', data);
-}
-
-// 收集每日表单数据
-function collectDailyFormData() {
-    const trackId = document.getElementById('track-select').value;
-    const templateId = document.getElementById('template-select').value;
-
-    return {
-        track_id: trackId,
-        template_id: templateId || undefined,
-        start_date: document.getElementById('daily-start-date').value,
-        end_date: document.getElementById('daily-end-date').value,
-        min_km: parseFloat(document.getElementById('daily-min-km').value),
-        max_km: parseFloat(document.getElementById('daily-max-km').value),
-        min_pace: parseFloat(document.getElementById('daily-min-pace').value),
-        max_pace: parseFloat(document.getElementById('daily-max-pace').value),
-        start_time_min: document.getElementById('daily-start-time-min').value || '06:00',
-        start_time_max: document.getElementById('daily-start-time-max').value || '08:00',
-        output_dir: document.getElementById('daily-output-dir').value,
-        include_track: !(document.getElementById('daily-no-track')?.checked ?? false),
-        apply_correction: !(document.getElementById('daily-no-correction')?.checked ?? false),
-        enable_pace_fluctuation: !(document.getElementById('daily-no-fluctuation')?.checked ?? false),
-        output_format: getSelectedFormat(),
-    };
-}
-
-// 收集总公里数表单数据
-function collectTotalFormData() {
-    const trackId = document.getElementById('track-select').value;
-    const templateId = document.getElementById('template-select').value;
-
-    return {
-        track_id: trackId,
-        template_id: templateId || undefined,
-        start_date: document.getElementById('total-start-date').value,
-        end_date: document.getElementById('total-end-date').value,
-        total_km: parseFloat(document.getElementById('total-km').value),
-        weekend_factor: parseFloat(document.getElementById('total-weekend-factor').value),
-        min_daily_km: parseFloat(document.getElementById('total-min-daily').value),
-        max_daily_km: parseFloat(document.getElementById('total-max-daily').value),
-        rest_days_per_week: parseInt(document.getElementById('total-rest-days').value),
-        min_pace: parseFloat(document.getElementById('total-min-pace').value),
-        max_pace: parseFloat(document.getElementById('total-max-pace').value),
-        start_time_min: document.getElementById('total-start-time-min').value || '06:00',
-        start_time_max: document.getElementById('total-start-time-max').value || '08:00',
-        output_dir: document.getElementById('total-output-dir').value,
-        output_format: getSelectedFormat(),
-    };
-}
-
-// 收集单文件表单数据
-function collectSingleFormData() {
-    const trackId = document.getElementById('track-select').value;
-    const templateId = document.getElementById('template-select').value;
-    const pace = document.getElementById('single-pace').value;
-
-    return {
-        track_id: trackId,
-        template_id: templateId || undefined,
-        date: document.getElementById('single-date').value,
-        distance: parseFloat(document.getElementById('single-distance').value),
-        pace: pace ? parseFloat(pace) : undefined,
-        output_dir: document.getElementById('single-output-dir').value,
-        start_time_min: document.getElementById('single-start-time').value || '07:00',
-        start_time_max: document.getElementById('single-start-time').value || '07:00',
-        include_track: !(document.getElementById('single-no-track')?.checked ?? false),
-        apply_correction: !(document.getElementById('single-no-correction')?.checked ?? false),
-        enable_pace_fluctuation: !(document.getElementById('single-no-fluctuation')?.checked ?? false),
-        output_format: getSelectedFormat(),
-    };
-}
-
-// 处理指定日期批量模式提交
-async function handleDatesSubmit(e) {
-    e.preventDefault();
-    if (calendarState.selectedDates.size === 0) {
-        showMessage('请至少选择一个日期', 'error');
-        return;
-    }
-    const data = collectDatesFormData();
-    await generate('dates', data);
-}
-
-// 收集指定日期批量表单数据
-function collectDatesFormData() {
-    const trackId = document.getElementById('track-select').value;
-    const templateId = document.getElementById('template-select').value;
-    const dates = Array.from(calendarState.selectedDates).sort();
-
-    return {
-        track_id: trackId,
-        template_id: templateId || undefined,
-        dates: dates,
-        min_km: parseFloat(document.getElementById('dates-min-km').value),
-        max_km: parseFloat(document.getElementById('dates-max-km').value),
-        min_pace: parseFloat(document.getElementById('dates-min-pace').value),
-        max_pace: parseFloat(document.getElementById('dates-max-pace').value),
-        start_time_min: document.getElementById('dates-start-time-min').value || '06:00',
-        start_time_max: document.getElementById('dates-start-time-max').value || '08:00',
-        output_dir: document.getElementById('dates-output-dir').value,
-        output_format: getSelectedFormat(),
-    };
-}
-
-// 调用API生成
-async function generate(mode, data) {
-    showMessage('正在生成...', 'loading');
-    disableButtons(true);
-    const watchLink = document.getElementById('watch-load-link');
-    if (watchLink) watchLink.hidden = true;
-
-    try {
-        const response = await fetch(`/api/generate/${mode}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(window.watchToken ? {'X-Watch-Token': window.watchToken} : {}) },
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            throw new Error(result.error || '生成失败');
-        }
-
-        currentJobId = result.job_id;
-        showResults(result);
-        showMessage(`生成完成！共 ${result.total_files} 个文件`, 'success');
-
-    } catch (error) {
-        showMessage('生成失败: ' + error.message, 'error');
-        currentJobId = null;
+        result = null;
+        generationError(error.name === 'TimeoutError' ? '生成等待超时，文件结果未知；请先检查输出目录再重试' : '生成未完成：' + error.message);
+        $('result-summary').textContent = '本次生成未完成，检查参数后重试';
     } finally {
-        disableButtons(false);
+        busy = false; $('generate-button').disabled = false; $('generate-button').firstChild.textContent = '生成并查看结果';
     }
 }
-
-// 显示结果
-function showResults(result) {
-    const section = document.getElementById('results-section');
-    const tbody = document.getElementById('results-body');
-    const downloadBtn = document.getElementById('download-btn');
-    const watchLink = document.getElementById('watch-load-link');
-    if (watchLink) {
-        const isB5 = result.files.length > 0 && result.files.every(file => file.filename.endsWith('.sport44'));
-        watchLink.hidden = !isB5;
-        if (isB5) watchLink.href = `/watch?job=${encodeURIComponent(result.job_id)}`;
+async function nextResult() {
+    if (!result || resultsStale) return;
+    if (generatedFormat === 'b5') {
+        WatchPanel.setCandidate({ id: result.job_id, count: result.files.length,
+            km: result.files.reduce((sum, row) => sum + row.distance_km, 0) });
+        location.hash = 'watch';
+        return;
     }
-
-    tbody.innerHTML = result.files.map(f => `
-        <tr>
-            <td>${f.date}</td>
-            <td>${f.distance_km.toFixed(2)} km</td>
-            <td>${f.pace_min_per_km.toFixed(2)} min/km</td>
-            <td>${formatDuration(f.duration_seconds)}</td>
-            <td>${f.calories}</td>
-        </tr>
-    `).join('');
-
-    section.classList.add('show');
-    downloadBtn.disabled = false;
-
-    // 新一轮结果从顶部展示，并将结果块平滑带入视野 (#49)
-    const scrollBox = section.querySelector('.results-scroll');
-    if (scrollBox) scrollBox.scrollTop = 0;
-    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    $('result-next').disabled = true;
+    try {
+        const response = await fetch('/api/download/' + encodeURIComponent(result.job_id), { signal: AbortSignal.timeout(60000) });
+        if (!response.ok) throw new Error((await response.json()).error || '文件下载失败');
+        const blob = await response.blob();
+        downloadBlob(blob, result.files.length === 1 ? result.files[0].filename : result.job_id + '.zip');
+        notify('下载已开始');
+    } catch (error) { notify('下载未完成：' + error.message); }
+    finally { $('result-next').disabled = resultsStale; }
 }
-
-// 格式化时长
-function formatDuration(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.round(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob), link = document.createElement('a');
+    link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
-
-// 下载文件
-function downloadFiles() {
-    if (!currentJobId) return;
-    window.location.href = `/api/download/${currentJobId}`;
+function cacheTemplate(template) {
+    localTemplates = { ...localTemplates, [template.id]: template };
+    try { localStorage.setItem('template_cache', JSON.stringify(localTemplates)); }
+    catch { notify('模板已在本页导入；浏览器无法保留模板，请保管下载的 JSON'); }
 }
-
-// 显示消息
-function showMessage(text, type) {
-    const msg = document.getElementById('message');
-    msg.textContent = text;
-    msg.className = `message ${type} show`;
-
-    if (type !== 'loading') {
-        setTimeout(() => {
-            msg.classList.remove('show');
-        }, 5000);
+function renderTemplates(selected = '') {
+    const select = $('template-choice');
+    select.replaceChildren(new Option('自定义参数', ''), new Option('导入模板…', '__upload__'));
+    for (const group of [{ label: '预设模板', rows: templates, prefix: 'server:' }, { label: '本地模板', rows: Object.values(localTemplates), prefix: 'local:' }]) {
+        if (!group.rows.length) continue;
+        const el = document.createElement('optgroup'); el.label = group.label;
+        for (const template of group.rows) el.append(new Option(template.name, group.prefix + template.id));
+        select.append(el);
     }
+    select.value = selected;
 }
-
-// 禁用/启用按钮
-function disableButtons(disabled) {
-    document.querySelectorAll('button[type="submit"]').forEach(btn => {
-        btn.disabled = disabled;
-    });
-    document.getElementById('download-btn').disabled = disabled;
+function applyTemplate(template) {
+    if (!template || typeof template !== 'object' || Array.isArray(template)) throw new Error('模板必须是 JSON 对象');
+    const next = ['daily', 'total', 'single', 'dates'].find(key => template[key + '_config'] && Object.keys(template[key + '_config']).length);
+    if (next) setMode(next);
+    const config = template[mode + '_config'] || template.generation_config || {};
+    const fields = { min_pace: 'min-pace', max_pace: 'max-pace', start_time_min: 'earliest-time', start_time_max: 'latest-time',
+        start_date: 'start-date', end_date: 'end-date', date: 'start-date', distance: 'single-distance',
+        min_km: 'min-distance', max_km: 'max-distance', total_km: 'total-distance', min_daily_km: 'min-daily',
+        max_daily_km: 'max-daily', rest_days_per_week: 'rest-days', weekend_factor: 'weekend-factor', output_dir: 'output-directory' };
+    for (const [key, id] of Object.entries(fields)) if (['number', 'string'].includes(typeof config[key])) $(id).value = config[key];
+    if (config.pace !== undefined) $('min-pace').value = $('max-pace').value = config.pace;
+    for (const [key, id] of [['start_hour_min', 'earliest-time'], ['start_hour_max', 'latest-time']])
+        if (config[key] !== undefined && Number.isInteger(config[key]) && config[key] >= 0 && config[key] < 24) $(id).value = `${String(config[key]).padStart(2, '0')}:00`;
+    for (const [key, id] of [['include_track', 'include-track'], ['apply_correction', 'apply-correction'], ['enable_pace_fluctuation', 'pace-fluctuation'], ['enable_cadence', 'enable-cadence']])
+        if (typeof config[key] === 'boolean') $(id).checked = config[key];
+    if ([...$('output-format').options].some(o => o.value === config.output_format)) $('output-format').value = config.output_format;
+    const trackId = template.track_id || config.track_id;
+    if (tracks.some(t => t.id === trackId)) $('track-choice').value = trackId;
+    if (Array.isArray(config.dates)) {
+        selectedDates.clear();
+        for (const date of config.dates) if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= '2000-01-01' && date <= '2099-12-31' && isoDate(new Date(date + 'T12:00:00Z')) === date) selectedDates.add(date);
+        if (selectedDates.size) calendarMonth = [...selectedDates].sort()[0].slice(0, 7);
+    }
+    renderAdvanced(); renderCalendar(); updatePreview(); markStale();
 }
+async function chooseTemplate() {
+    const value = $('template-choice').value, seq = ++templateSeq;
+    if (value === '__upload__') { $('template-choice').value = ''; $('template-upload').click(); return; }
+    if (!value) return;
+    try {
+        const template = value.startsWith('local:') ? localTemplates[value.slice(6)] : await requestJSON('/api/template/' + encodeURIComponent(value.slice(7)));
+        if (seq !== templateSeq) return;
+        applyTemplate(template); notify('参数模板已应用，可继续修改');
+    } catch (error) { notify('模板未应用：' + error.message); }
+}
+async function init() {
+    const now = new Date(), today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    $('start-date').value = today.slice(0, 7) + '-01'; $('end-date').value = today;
+    calendarMonth = today.slice(0, 7); selectedDates.add(today);
+    try {
+        const stored = JSON.parse(localStorage.getItem('template_cache') || '{}');
+        if (stored && typeof stored === 'object' && !Array.isArray(stored))
+            localTemplates = Object.fromEntries(Object.entries(stored).filter(([, value]) => value && typeof value.id === 'string' && typeof value.name === 'string'));
+    } catch { localTemplates = {}; }
+    const loaded = await Promise.allSettled([refreshTracks(), requestJSON('/api/templates'), requestJSON('/api/defaults')]);
+    if (loaded[0].status === 'rejected') generationError('无法读取轨迹库，请恢复服务后刷新页面');
+    if (loaded[1].status === 'fulfilled') templates = loaded[1].value;
+    else notify('预设模板读取失败，本地模板仍可使用');
+    if (loaded[2].status === 'fulfilled') {
+        const d = loaded[2].value;
+        if (d.default_pace_range) [$('min-pace').value, $('max-pace').value] = d.default_pace_range;
+        if (d.default_start_time_range) [$('earliest-time').value, $('latest-time').value] = d.default_start_time_range;
+        if (tracks.some(t => t.id === d.default_track_id)) $('track-choice').value = d.default_track_id;
+        for (const [key, id] of [['weekend_factor', 'weekend-factor'], ['rest_days_per_week', 'rest-days'], ['min_daily_km', 'min-daily'], ['max_daily_km', 'max-daily']]) if (d[key] !== undefined) $(id).value = d[key];
+        if (!workbenchConfig.watch && ['fit', 'tcx'].includes(d.output_format)) $('output-format').value = d.output_format;
+        updatePreview();
+    }
+    renderTemplates(); setMode(mode); renderCalendar();
+}
+document.querySelectorAll('[data-mode]').forEach(button => button.onclick = () => setMode(button.dataset.mode));
+$('generate-form').addEventListener('submit', generate);
+$('generate-form').addEventListener('input', () => { markStale(); updatePlanCount(); });
+$('generate-form').addEventListener('change', markStale);
+$('output-format').addEventListener('change', renderAdvanced);
+$('track-choice').addEventListener('change', updatePreview);
+$('result-next').onclick = nextResult;
+$('template-choice').onchange = chooseTemplate;
+$('template-upload').onchange = async event => {
+    const file = event.target.files[0]; if (!file) return;
+    try {
+        if (file.size > 1024 * 1024) throw new Error('模板文件不能超过 1 MiB');
+        const template = JSON.parse(await file.text());
+        if (!template || typeof template !== 'object' || Array.isArray(template) || typeof template.name !== 'string') throw new Error('缺少模板名称或格式不正确');
+        if (typeof template.id !== 'string' || !template.id) template.id = 'custom_' + crypto.randomUUID();
+        applyTemplate(template); cacheTemplate(template); renderTemplates('local:' + template.id);
+        notify('模板已导入');
+    } catch (error) { notify('模板导入失败：' + error.message); }
+    event.target.value = '';
+};
+$('save-template').onclick = () => { $('template-name').value = ''; $('template-dialog').showModal(); };
+$('template-form').onsubmit = event => {
+    event.preventDefault();
+    const template = { id: 'custom_' + crypto.randomUUID(), name: $('template-name').value.trim(), description: '', track_id: $('track-choice').value, [mode + '_config']: collect() };
+    if (!template.name) return;
+    downloadBlob(new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' }), template.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') + '.json');
+    cacheTemplate(template); renderTemplates('local:' + template.id); $('template-dialog').close(); notify('参数模板已导出');
+};
+for (const [id, delta] of [['previous-month', -1], ['next-month', 1]]) $(id).onclick = () => { calendarMonth = monthShift(calendarMonth, delta); renderCalendar(); };
+$('calendar-month').onchange = () => { if ($('calendar-month').checkValidity() && $('calendar-month').value) { calendarMonth = $('calendar-month').value; renderCalendar(); } };
+$('current-month').onclick = () => { const d = new Date(); calendarMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; renderCalendar(); };
+$('clear-dates').onclick = () => { selectedDates.clear(); renderCalendar(); markStale(); };
+$('edit-preview-track').onclick = event => {
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault(); TrackPreview.edit();
+};
+document.addEventListener('workbench:page', event => { if (event.detail === 'generate') TrackPreview.resize(); });
+document.addEventListener('DOMContentLoaded', init);
+return { refreshTracks, markStale, selectTrack(id) { $('track-choice').value = id; updatePreview(); markStale(); }, tracks: () => tracks };
+})();

@@ -1,490 +1,339 @@
-// 轨迹编辑器 - 前端逻辑（地图引擎无关：渲染/定位经 MapEngine 转发）
-//
-// 依赖（按页面加载顺序在其前）：
-//   map_adapter_leaflet.js / map_adapter_amap.js（引擎适配器）
-//   map_engine.js（MapEngine：模式切换/Key 管理）
-//   search_box.js（initSearchBox，主 init 中调用）
-
-// ===== 状态 =====
-let points = [];                    // [{lat, lng}] 坐标唯一真源
-let undoStack = [];                 // points 快照栈，上限 100
-let redoStack = [];
-let editingTrackId = null;          // 从磁盘加载的轨迹 id；null=新建
-let activeCorrection = null;        // 旧版坐标修正配置；仅用于保存时移除
-let dragStartSnapshot = null;       // 顶点拖拽开始时的快照
-let currentTool = 'pan';            // pan 平移 / draw 加点 / erase 删点 / select 框选
-
+// Coordinates stay in GCJ-02. MapEngine and SelectionLayer own projection and gestures.
+let points = [], undoStack = [], redoStack = [], editingTrackId = null, activeCorrection = null;
+let currentTool = 'pan', dragStartSnapshot = null, pendingShape = null;
 const UNDO_LIMIT = 100;
-
-// 地图舞台元素（工具光标切换、中键临时态都要用）
 const mapStageEl = document.querySelector('.map-stage');
-
-// ===== 工具切换 =====
-function applyToolButtons() {
-    document.getElementById('tool-pan').classList.toggle('active', currentTool === 'pan');
-    document.getElementById('tool-draw').classList.toggle('active', currentTool === 'draw');
-    document.getElementById('tool-erase').classList.toggle('active', currentTool === 'erase');
-    document.getElementById('tool-select').classList.toggle('active', currentTool === 'select');
-}
-
-function setTool(tool) {
-    if (!['pan', 'draw', 'erase', 'select'].includes(tool) || !MapEngine.isReady()) return;
-    SelectionLayer.setActive(tool === 'select');
-    currentTool = tool;
-    applyToolButtons();
-    // 画笔模式下锁定地图拖动：按住左键移动不再被判成拖图（平移请切回拖动模式）
-    MapEngine.setDragEnabled(tool !== 'draw' && tool !== 'select');
-    // 地图光标反馈：画笔为十字，橡皮擦悬停顶点变红（CSS），拖动用地图默认（抓手）
-    mapStageEl.classList.toggle('draw-mode', tool === 'draw');
-    mapStageEl.classList.toggle('erase-mode', tool === 'erase');
-    mapStageEl.classList.toggle('select-mode', tool === 'select');
-}
-
-// ===== 边界转换（{lat,lng} 与项目 JSON {longitude,latitude} 的唯一转换点）=====
-const toGeoCoords = () => points.map(p => ({ longitude: p.lng, latitude: p.lat }));
-
-// ===== 编辑事件处理（由地图适配器回调，只操作 points）=====
-const HANDLERS = {
-    onMapClick() {
-        // 加点已改由 onMapMouseDown 承担：click 在按下后移动（地图拖动平移）时被引擎抑制，
-        // 会导致"按住左键稍一动点就丢"；这里保留空实现避免适配器侧再加一条加点路径
-    },
-    onMapMouseDown(pt) {
-        // 仅画笔模式下左键按下即加点（按下瞬间完成，之后拖动平移地图也不丢点）
-        if (currentTool !== 'draw') return;
-        pushUndo();
-        points.push({ lat: pt.lat, lng: pt.lng });
-        renderTrack();
-    },
-    onVertexDragStart() {
-        dragStartSnapshot = points.map(pt => ({ ...pt }));
-    },
-    onVertexDragEnd(i, pt) {
-        commitSnapshot(dragStartSnapshot);
-        dragStartSnapshot = null;
-        points[i] = { lat: pt.lat, lng: pt.lng };
-        renderTrack();
-    },
-    onVertexClick(i) {
-        // 仅橡皮擦模式下点击顶点才删点，避免拖动/画笔模式下拖拽顶点时误触删除
-        if (currentTool !== 'erase') return;
-        pushUndo();
-        points.splice(i, 1);
-        renderTrack();
-    },
-    onMidpointClick(i, mid) {
-        // 橡皮擦模式下点击中点不插点（该模式意图是删除，误触插点很反直觉）
-        if (currentTool === 'erase' || currentTool === 'select') return;
-        pushUndo();
-        points.splice(i + 1, 0, { lat: mid.lat, lng: mid.lng });
-        renderTrack();
-    }
-};
-
-// ===== 渲染（转发到当前活跃引擎，全量重建）=====
-function renderTrack() {
-    MapEngine.renderTrack(points, HANDLERS);
-    updateStats();
-}
-
-// ===== 撤销/重做 =====
-function pushUndo() {
-    SelectionLayer.clear();
-    commitSnapshot(points.map(p => ({ ...p })));
-}
-
-function commitSnapshot(snap) {
-    undoStack.push(snap);
-    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
-    redoStack = [];
-    updateButtonStates();
-}
-
-function clearHistory() {
-    undoStack = [];
-    redoStack = [];
-    updateButtonStates();
-}
-
-function undo() {
-    SelectionLayer.clear();
-    if (!undoStack.length) return;
-    redoStack.push(points.map(p => ({ ...p })));
-    points = undoStack.pop();
-    renderTrack();
-    updateButtonStates();
-}
-
-function redo() {
-    SelectionLayer.clear();
-    if (!redoStack.length) return;
-    undoStack.push(points.map(p => ({ ...p })));
-    points = redoStack.pop();
-    renderTrack();
-    updateButtonStates();
-}
-
-function updateButtonStates() {
-    document.getElementById('undo-btn').disabled = undoStack.length === 0;
-    document.getElementById('redo-btn').disabled = redoStack.length === 0;
-}
-
-// ===== 统计（Haversine 已收敛到 shape_geometry.js，唯一实现；与后端 TrackAnalyzer 同参：R=6371000，环线含闭合段）=====
-function totalLoopDistance(pts) {
-    if (pts.length < 2) return 0;
-    let total = 0;
-    for (let i = 0; i < pts.length; i++) {
-        total += haversineMeters(pts[i], pts[(i + 1) % pts.length]);
-    }
-    return total;
-}
-
-function updateStats() {
-    document.getElementById('stat-points').textContent = points.length;
-    document.getElementById('stat-distance').textContent = `${totalLoopDistance(points).toFixed(1)} m`;
-}
-
-// ===== 轨迹列表 =====
-async function refreshTrackSelect() {
-    try {
-        const response = await fetch('/api/tracks');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const tracks = await response.json();
-        const select = document.getElementById('load-track-select');
-        // 用 DOM API 构建（name 来自 JSON 文件的任意文本，禁止拼入 innerHTML 防存储型 XSS）
-        select.replaceChildren(new Option('选择轨迹...', ''));
-        tracks.forEach(t => select.add(new Option(`${t.name} (${t.lap_distance_km} km/圈)`, t.id)));
-        if (editingTrackId) select.value = editingTrackId;
-    } catch (error) {
-        showMessage('加载轨迹列表失败: ' + error.message, 'error');
-    }
-}
-
-// ===== 加载轨迹 =====
-async function handleLoad() {
-    const id = document.getElementById('load-track-select').value;
-    if (!id) {
-        showMessage('请先选择一个轨迹', 'error');
-        return;
-    }
-    await loadTrackById(id);
-}
-
-// 按轨迹 id 拉取坐标并载入画布（「加载到地图」按钮与 URL ?track= 参数共用）
-async function loadTrackById(id) {
-    try {
-        // id 可能来自 URL 查询参数（手改地址栏），编码防特殊字符破坏路径
-        const response = await fetch(`/api/tracks/${encodeURIComponent(id)}/coords`);
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            showMessage(err.error || `加载失败 (${response.status})`, 'error');
-            return;
-        }
-
-        const data = await response.json();
-        SelectionLayer.clear();
-        points = data.base_coordinates.map(p => ({ lat: p.latitude, lng: p.longitude }));
-        editingTrackId = data.id || id;
-        activeCorrection = data.coordinate_correction ?? null;
-
-        document.getElementById('track-id').value = editingTrackId;
-        document.getElementById('track-name').value = data.name || '';
-        document.getElementById('track-desc').value = data.description || '';
-
-        clearHistory();
-        renderTrack();
-        if (points.length > 0) {
-            MapEngine.fitTrack(points);
-        }
-        updateCorrectionNote();
-        showMessage(`已加载轨迹: ${data.name || id}`, 'success');
-    } catch (error) {
-        showMessage('网络错误：无法连接服务器', 'error');
-    }
-}
-
-// ===== 新建空白 =====
-function handleNew() {
-    SelectionLayer.clear();
-    points = [];
-    editingTrackId = null;
-    activeCorrection = null;
-    document.getElementById('track-id').value = '';
-    document.getElementById('track-name').value = '';
-    document.getElementById('track-desc').value = '';
-    clearHistory();
-    renderTrack();
-    updateCorrectionNote();
-}
-
-// ===== 坐标转换提示 =====
-function updateCorrectionNote() {
-    const note = document.getElementById('correction-note');
-    if (editingTrackId === null) {
-        note.textContent = '轨迹坐标使用 GCJ-02，导出时自动转换为 WGS-84';
-    } else if (activeCorrection) {
-        note.textContent = '已忽略旧版坐标修正，保存时将移除该配置';
-    } else {
-        note.textContent = '该轨迹无旧版坐标修正配置';
-    }
-    note.classList.remove('hidden');
-}
-
-// ===== 图形模板 =====
-// 模板只在点击时采样一次；生成后只留下普通 points 与临时节点选择。
-function renderShapePanel() {
-    ['rect', 'circle', 'stadium'].forEach(type => {
-        document.getElementById('shape-btn-' + type).disabled = !MapEngine.isReady();
-    });
-}
-
-function handleShapeGenerate(type) {
-    if (!MapEngine.isReady()) return;
-    SelectionLayer.cancelDrag();
-    const { width, height } = mapStageEl.getBoundingClientRect();
-    const center = { x: width / 2, y: height / 2 };
-    const geo = p => MapEngine.containerToLatLng(p.x, p.y);
-    const metersPerPixel = haversineMeters(geo(center), geo({ x: center.x, y: center.y - 50 })) / 50;
-    const shape = viewportShape(type, width * metersPerPixel, height * metersPerPixel);
-    const generated = shapeToLocalLoop(shape, Number(document.getElementById('shape-spacing').value))
-        .map(p => geo({ x: center.x + p.x / metersPerPixel, y: center.y - p.y / metersPerPixel }));
-    if (!generated.every(SelectionGeometry.validGeo)) {
-        showMessage('当前地图范围无法放置图形，请移到地图中部或放大后重试', 'error');
-        return;
-    }
+const TrackEditor = (() => {
+    let initialized = false, initializing = null, activeKey = null, loadSeq = 0, saving = false;
+    const drafts = new Map();
+    const editable = () => pendingShape ? pendingShape.points : points;
+    const snapshot = rows => rows.map(p => ({ ...p }));
     const pixel = p => MapEngine.latLngToContainer(p.lat, p.lng);
-    const join = joinLoops(points.map(pixel), generated.map(pixel));
-    if (!join) {
-        showMessage('新图形与当前轨迹重叠或无法接入。请平移地图，让新图形避开原轨迹后重试', 'error');
-        return;
+    const geo = p => MapEngine.containerToLatLng(p.x, p.y);
+    function fingerprint() {
+        return JSON.stringify([points, $('track-id').value, $('track-name').value, $('track-description').value]);
     }
-    const start = join.after + 1;
-    pushUndo();
-    points.splice(start, 0, ...join.order.map(i => generated[i]));
-    renderTrack();
-    setTool('select');
-    SelectionLayer.selectIndices(join.order.map((_, i) => start + i));
-    showMessage(`已添加 ${generated.length} 个节点，可整组调整；切换拖动或橡皮擦可逐点编辑`, 'success');
-}
-
-function deleteSelectedPoints() {
-    SelectionLayer.cancelDrag();
-    const selected = new Set(SelectionLayer.indices());
-    if (!selected.size) return;
-    pushUndo();
-    points = points.filter((_, i) => !selected.has(i));
-    renderTrack();
-    showMessage(`已删除 ${selected.size} 个节点，可撤销恢复`, 'success');
-}
-
-['rect', 'circle', 'stadium'].forEach(type => {
-    document.getElementById('shape-btn-' + type).addEventListener('click', () => handleShapeGenerate(type));
-});
-document.getElementById('shape-spacing').addEventListener('change', e => {
-    const value = Number(e.target.value);
-    e.target.value = Number.isFinite(value) ? Math.min(MAX_SPACING, Math.max(MIN_SPACING, value)) : DEFAULT_SPACING;
-});
-document.getElementById('delete-selection-btn').addEventListener('click', deleteSelectedPoints);
-
-// ===== 保存 =====
-function handleSaveSubmit(e) {
-    e.preventDefault();
-    SelectionLayer.cancelDrag();
-    const id = document.getElementById('track-id').value.trim();
-    const name = document.getElementById('track-name').value.trim();
-    const description = document.getElementById('track-desc').value.trim();
-
-    if (!/^[a-z0-9_-]+$/.test(id)) {
-        showMessage('轨迹ID仅能包含小写字母、数字、下划线、连字符', 'error');
-        return;
+    let savedFingerprint = '';
+    function changed() {
+        $('editor-dirty').textContent = fingerprint() === savedFingerprint ? '已保存' : '未保存';
     }
-    if (!name) {
-        showMessage('名称不能为空', 'error');
-        return;
+    function storeDraft() {
+        if (activeKey === null) return;
+        drafts.set(activeKey, { points: snapshot(points), undo: undoStack.map(snapshot), redo: redoStack.map(snapshot),
+            id: $('track-id').value, name: $('track-name').value, description: $('track-description').value,
+            editingTrackId, activeCorrection, savedFingerprint });
     }
-    if (points.length < 3) {
-        showMessage('至少需要 3 个轨迹点才能保存', 'error');
-        return;
+    function renderLibrary() {
+        const list = $('track-library'); list.replaceChildren();
+        const all = new Map(Generator.tracks().map(t => [t.id, { name: t.name, count: t.num_points }]));
+        for (const [key, item] of drafts) all.set(key, { name: item.name || '未命名轨迹', count: item.points.length });
+        for (const [key, item] of all) {
+            const button = document.createElement('button');
+            button.className = 'track-row'; button.setAttribute('aria-pressed', String(key === activeKey));
+            const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); icon.setAttribute('class', 'icon'); icon.setAttribute('aria-hidden', 'true');
+            const use = document.createElementNS('http://www.w3.org/2000/svg', 'use'); use.setAttribute('href', '#i-map'); icon.append(use);
+            const text = document.createElement('span'), name = document.createElement('strong'), count = document.createElement('small');
+            name.textContent = item.name; count.textContent = `${item.count} 节点`; text.append(name, count); button.append(icon, text);
+            button.onclick = () => open(key); list.append(button);
+        }
     }
-
-    doSave({
-        id,
-        name,
-        description,
-        base_coordinates: toGeoCoords(),
-        coordinate_correction: null,
-        overwrite: id === editingTrackId
-    });
-}
-
-async function doSave(payload) {
-    showMessage('正在保存...', 'loading');
-    disableButtons(true);
-
-    try {
-        const response = await fetch('/api/tracks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await response.json().catch(() => ({}));
-
-        // 已存在：确认后覆盖重发
-        if (response.status === 409 && data.exists) {
-            if (window.confirm(`轨迹 ${payload.id} 已存在，覆盖保存？`)) {
-                return await doSave({ ...payload, overwrite: true });
+    function activate(key, data) {
+        cancelShape(); SelectionLayer.clear(); activeKey = key;
+        points = snapshot(data.points); undoStack = (data.undo || []).map(snapshot); redoStack = (data.redo || []).map(snapshot);
+        editingTrackId = data.editingTrackId ?? null; activeCorrection = data.activeCorrection ?? null;
+        $('track-id').value = data.id || ''; $('track-name').value = data.name || ''; $('track-description').value = data.description || '';
+        savedFingerprint = data.savedFingerprint ?? fingerprint();
+        renderTrack(); updateButtonStates(); renderLibrary();
+        if (points.length) MapEngine.fitTrack(points);
+        if (activeCorrection) notify('旧版坐标修正已忽略，保存时会移除；轨迹仍按 GCJ-02 使用');
+    }
+    async function open(id) {
+        if (saving) { notify('正在保存，请等待保存完成后切换轨迹'); return; }
+        await init();
+        if (!id || id === activeKey) return;
+        const seq = ++loadSeq;
+        storeDraft();
+        if (drafts.has(id)) { activate(id, drafts.get(id)); return; }
+        try {
+            const data = await requestJSON('/api/tracks/' + encodeURIComponent(id) + '/coords');
+            if (seq !== loadSeq) return;
+            activate(id, { points: data.base_coordinates.map(p => ({ lat: p.latitude, lng: p.longitude })),
+                id: data.id, name: data.name, description: data.description, editingTrackId: data.id, activeCorrection: data.coordinate_correction });
+            storeDraft();
+        } catch (error) { notify('轨迹未载入：' + error.message); }
+    }
+    function newTrack() {
+        if (!initialized || saving) return;
+        loadSeq++; storeDraft();
+        const key = 'new:' + crypto.randomUUID();
+        activate(key, { points: [], name: '未命名轨迹', id: 'track_' + Date.now().toString(36), savedFingerprint: '' });
+        storeDraft(); setTool('draw'); $('track-name').focus();
+    }
+    function renderOriginal() {
+        const svg = $('shape-background').firstElementChild; svg.replaceChildren();
+        if (!pendingShape || points.length < 2 || !MapEngine.isReady()) return;
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M' + points.map(pixel).map(p => `${p.x},${p.y}`).join('L') + (points.length > 2 ? 'Z' : ''));
+        svg.append(path);
+    }
+    function renderSelection(ids, frame) {
+        $('selection-empty').hidden = !!ids.length;
+        $('selection-properties').hidden = !ids.length;
+        $('pending-actions').hidden = !pendingShape;
+        $('selected-actions').hidden = !!pendingShape;
+        $('selection-title').textContent = pendingShape ? '放置快捷图形' : '节点选区';
+        if (frame) {
+            const scale = metersPerPixel(frame);
+            for (const [id, value] of [['selection-width', frame.width * scale], ['selection-height', frame.height * scale], ['selection-angle', frame.angle * 180 / Math.PI]])
+                if (document.activeElement !== $(id)) $(id).value = id === 'selection-angle' ? String(Number(value.toFixed(1))) : value.toFixed(1);
+            $('selection-width').disabled = frame.width < 1e-6;
+            $('selection-height').disabled = frame.height < 1e-6;
+        }
+        if (pendingShape) {
+            const canJoin = !!joinLoops(points.map(pixel), pendingShape.points.map(pixel));
+            $('add-shape').disabled = !canJoin;
+            $('pending-warning').textContent = canJoin ? '仅为放置预览；确认后加入轨迹，取消不改变原节点' : '与已有轨迹重叠或无法接入，请移动图形后再添加';
+        }
+    }
+    function metersPerPixel(center) {
+        return haversineMeters(geo(center), geo({ x: center.x + 50, y: center.y })) / 50;
+    }
+    function commit(snap) {
+        if (pendingShape) return;
+        undoStack.push(snap); if (undoStack.length > UNDO_LIMIT) undoStack.shift(); redoStack = [];
+        updateButtonStates(); changed();
+    }
+    function startShape(type) {
+        if (!initialized || saving) return;
+        cancelShape(); SelectionLayer.cancelDrag();
+        const previousSelection = SelectionLayer.indices(), previousTool = currentTool;
+        const { width, height } = mapStageEl.getBoundingClientRect(), center = { x: width / 2, y: height / 2 };
+        const scale = metersPerPixel(center);
+        const shape = viewportShape(type, width * scale, height * scale);
+        const generated = shapeToLocalLoop(shape, Number($('shape-spacing').value)).map(p => geo({ x: center.x + p.x / scale, y: center.y - p.y / scale }));
+        if (!generated.every(SelectionGeometry.validGeo)) { notify('此地图范围无法放置图形，请放大地图后重试'); return; }
+        pendingShape = { type, points: generated, previousSelection, previousTool };
+        setTool('select'); renderTrack(); SelectionLayer.selectIndices(generated.map((_, i) => i));
+        document.querySelectorAll('[data-shape]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.shape === type)));
+    }
+    function cancelShape() {
+        if (!pendingShape) return;
+        SelectionLayer.cancelDrag();
+        const previous = pendingShape; pendingShape = null; SelectionLayer.clear();
+        setTool(previous.previousTool);
+        if (previous.previousTool === 'select') SelectionLayer.selectIndices(previous.previousSelection);
+        document.querySelectorAll('[data-shape]').forEach(button => button.setAttribute('aria-pressed', 'false'));
+        renderTrack();
+    }
+    function addShape() {
+        if (!pendingShape) return;
+        SelectionLayer.cancelDrag();
+        const generated = snapshot(pendingShape.points), joined = joinLoops(points.map(pixel), generated.map(pixel));
+        if (!joined) { notify('图形与原轨迹重叠，请移开后再添加'); return; }
+        cancelShape();
+        const start = joined.after + 1, before = snapshot(points);
+        points.splice(start, 0, ...joined.order.map(i => generated[i])); commit(before); renderTrack();
+        setTool('select');
+        SelectionLayer.selectIndices(joined.order.map((_, i) => start + i)); notify('快捷图形已加入，可撤销恢复');
+    }
+    function transformField(id) {
+        const frame = SelectionLayer.frame(); if (!frame) return;
+        const input = $(id), value = Number(input.value);
+        if (!input.checkValidity() || !Number.isFinite(value)) { SelectionLayer.render(); notify('请填写有效的选区尺寸或角度'); return; }
+        const next = { ...frame };
+        if (id === 'selection-angle') next.angle = value * Math.PI / 180;
+        else next[id === 'selection-width' ? 'width' : 'height'] = value / metersPerPixel(frame);
+        if (!SelectionLayer.transformTo(next)) notify('变换超出地图有效范围，已保留原轨迹');
+    }
+    function rotate(delta) {
+        const frame = SelectionLayer.frame(); if (frame) SelectionLayer.transformTo({ ...frame, angle: frame.angle + delta * Math.PI / 180 });
+    }
+    function deleteSelected() {
+        if (pendingShape) { cancelShape(); return; }
+        SelectionLayer.cancelDrag(); const selected = new Set(SelectionLayer.indices());
+        if (!selected.size) return;
+        const before = snapshot(points); SelectionLayer.clear(); points = points.filter((_, i) => !selected.has(i));
+        commit(before); renderTrack();
+    }
+    async function save() {
+        if (saving) return false;
+        if (pendingShape) { notify('请先确认添加或取消放置快捷图形'); return false; }
+        SelectionLayer.cancelDrag();
+        loadSeq++; // A late track fetch must not replace the geometry being saved.
+        const id = $('track-id').value.trim(), name = $('track-name').value.trim();
+        if (!/^[a-z0-9_-]+$/.test(id)) { notify('轨迹 ID 仅支持小写字母、数字、下划线和连字符'); $('track-id').focus(); return false; }
+        if (!name) { notify('请填写轨迹名称'); $('track-name').focus(); return false; }
+        if (points.length < 3) { notify('至少需要 3 个节点才能保存轨迹'); return false; }
+        const payload = { id, name, description: $('track-description').value.trim(), coordinate_correction: null,
+            base_coordinates: points.map(p => ({ longitude: p.lng, latitude: p.lat })), overwrite: id === editingTrackId };
+        const sentFingerprint = fingerprint();
+        saving = true; $('save-track').disabled = $('use-track').disabled = true; notify('正在保存轨迹…', 'loading');
+        try {
+            let data;
+            try { data = await postJSON('/api/tracks', payload); }
+            catch (error) {
+                if (error.status !== 409 || !error.data.exists) throw error;
+                if (!confirm(`轨迹 ${id} 已存在，覆盖保存？`)) { notify('已取消覆盖，当前编辑保留'); return false; }
+                data = await postJSON('/api/tracks', { ...payload, overwrite: true });
             }
-            showMessage('已取消保存', 'error');
-            return;
-        }
-
-        if (response.status === 400) {
-            showMessage(data.error || '保存失败 (400)', 'error');
-            return;
-        }
-
-        if (!response.ok) {
-            showMessage(`保存失败 (${response.status})`, 'error');
-            return;
-        }
-
-        // 201 成功：校验服务端距离与本地计算一致
-        editingTrackId = data.id;
-        if (Math.abs(data.distance_meters - totalLoopDistance(points)) >= 0.5) {
-            showMessage('警告：服务端距离与本地计算不一致', 'error');
-        } else {
-            showMessage(`已保存 ${data.filepath}（环线 ${(data.distance_meters / 1000).toFixed(3)} km）`, 'success');
-        }
-        await refreshTrackSelect();
-    } catch (error) {
-        showMessage('网络错误：无法连接服务器', 'error');
-    } finally {
-        disableButtons(false);
+            editingTrackId = id; activeCorrection = null; savedFingerprint = sentFingerprint;
+            const oldKey = activeKey; activeKey = id; drafts.delete(oldKey); storeDraft(); changed();
+            if (Math.abs(data.distance_meters - totalLoopDistance(payload.base_coordinates.map(p => ({ lat: p.latitude, lng: p.longitude })))) >= .5)
+                notify('轨迹已保存，但服务端与本页距离不一致，请重新载入核对');
+            else notify('轨迹已保存到本地轨迹库');
+            try { await Generator.refreshTracks(id); await TrackPreview.revalidate(); renderLibrary(); }
+            catch { notify('轨迹已保存，但列表刷新失败；请恢复服务后刷新页面'); }
+            return true;
+        } catch (error) { notify('保存未完成，当前编辑保留：' + error.message); return false; }
+        finally { saving = false; $('save-track').disabled = $('use-track').disabled = false; }
     }
-}
-
-// ===== 消息与按钮状态（对齐 app.js 模式）=====
-function showMessage(text, type) {
-    const msg = document.getElementById('message');
-    msg.textContent = text;
-    msg.className = `message ${type} show`;
-
-    if (type !== 'loading') {
-        setTimeout(() => {
-            msg.classList.remove('show');
-        }, 5000);
+    async function init() {
+        if (initialized) return;
+        if (initializing) return initializing;
+        initializing = (async () => {
+            await MapEngine.init();
+            initSearchBox();
+            SelectionLayer.init({ getPoints: editable,
+                apply(next) { if (pendingShape) pendingShape.points = next; else points = next; renderTrack(); },
+                commit, onChange: renderSelection });
+            MapEngine.bindViewHooks({ onChange() { renderOriginal(); }, onZoomStart() {}, onZoomEnd() {} });
+            new ResizeObserver(() => {
+                if (currentPage() === 'tracks') MapEngine.activeAdapter().map.invalidateSize?.({ animate: false });
+            }).observe(mapStageEl);
+            initialized = true;
+            document.querySelectorAll('[data-shape], button[data-tool]').forEach(b => { b.disabled = false; });
+            renderTrack(); updateButtonStates();
+        })();
+        try { await initializing; } finally { initializing = null; }
     }
-}
-
-function disableButtons(disabled) {
-    document.querySelectorAll('button[type="submit"]').forEach(btn => {
-        btn.disabled = disabled;
+    async function show() {
+        try {
+            await init();
+            const adapter = MapEngine.activeAdapter(); adapter.activate(adapter.getView());
+            if (activeKey === null) {
+                const queryId = new URLSearchParams(location.search).get('track');
+                await open(queryId || $('track-choice').value || (await Generator.refreshTracks())[0]?.id);
+            }
+        } catch (error) { notify('地图未就绪：' + error.message); }
+    }
+    document.querySelectorAll('button[data-tool]').forEach(button => { button.disabled = true; button.onclick = () => setTool(button.dataset.tool); });
+    document.querySelectorAll('[data-shape]').forEach(button => { button.disabled = true; button.onclick = () => startShape(button.dataset.shape); });
+    $('shape-spacing').onchange = () => {
+        const value = Number($('shape-spacing').value);
+        $('shape-spacing').value = Number.isFinite(value) ? Math.max(MIN_SPACING, Math.min(MAX_SPACING, value)) : DEFAULT_SPACING;
+    };
+    $('new-track').onclick = $('new-track-inline').onclick = newTrack;
+    $('save-track').onclick = save;
+    $('use-track').onclick = async () => {
+        if (pendingShape) { notify('请先确认或取消放置图形'); return; }
+        if ((fingerprint() !== savedFingerprint || !editingTrackId) && !await save()) return;
+        Generator.selectTrack(editingTrackId); location.hash = 'generate';
+    };
+    for (const id of ['track-name', 'track-id', 'track-description']) $(id).addEventListener('input', changed);
+    $('select-all').onclick = () => { if (!initialized) return; setTool('select'); SelectionLayer.selectIndices(editable().map((_, i) => i)); };
+    $('deselect').onclick = () => SelectionLayer.clear();
+    $('delete-selection').onclick = deleteSelected;
+    $('add-shape').onclick = addShape; $('cancel-shape').onclick = cancelShape;
+    for (const id of ['selection-width', 'selection-height', 'selection-angle']) $(id).onchange = () => transformField(id);
+    $('rotate-left').onclick = () => rotate(-15); $('rotate-right').onclick = () => rotate(15);
+    $('editor-shortcuts').onclick = () => $('shortcuts-dialog').showModal();
+    $('editor-focus').onclick = () => { $('editor-workspace').classList.toggle('focus-canvas'); $('editor-focus').setAttribute('aria-pressed', String($('editor-workspace').classList.contains('focus-canvas'))); };
+    $('editor-fit').onclick = () => { if (initialized && editable().length) MapEngine.fitTrack(editable()); };
+    $('zoom-in').onclick = () => zoom(1); $('zoom-out').onclick = () => zoom(-1);
+    function zoom(delta) {
+        if (!initialized) return;
+        const adapter = MapEngine.activeAdapter(), view = adapter.getView(); adapter.flyTo(view.lat, view.lng, Math.max(3, Math.min(20, view.zoom + delta)));
+    }
+    $('map-style').onchange = () => { if (initialized) MapEngine.switchMode($('map-style').value); };
+    $('map-search-form').onsubmit = event => { event.preventDefault(); if (initialized) doSearch($('search-input').value.trim()); };
+    $('clear-track').onclick = () => { if (points.length || pendingShape) $('clear-dialog').showModal(); };
+    $('confirm-clear').onclick = () => {
+        cancelShape(); const before = snapshot(points); SelectionLayer.clear(); points = []; commit(before); renderTrack(); $('clear-dialog').close();
+    };
+    document.addEventListener('workbench:page', event => { if (event.detail === 'tracks') show(); });
+    window.addEventListener('beforeunload', event => {
+        if (!initialized) return;
+        storeDraft();
+        const dirty = pendingShape || [...drafts.values()].some(d => JSON.stringify([d.points, d.id, d.name, d.description]) !== d.savedFingerprint);
+        if (dirty) { event.preventDefault(); event.returnValue = ''; }
     });
-}
-
-// ===== 事件绑定 =====
-document.addEventListener('keydown', (e) => {
-    // 输入框内保留浏览器原生文本撤销，不劫持为轨迹 undo
-    if (e.target.closest('input, textarea, select, [contenteditable]')) return;
-    if (currentTool === 'select' && (e.key === 'Delete' || e.key === 'Backspace')
-        && SelectionLayer.indices().length) {
-        e.preventDefault();
-        deleteSelectedPoints();
-        return;
-    }
-    if (!(e.ctrlKey || e.metaKey)) return;
-    const key = e.key.toLowerCase();
-    const isUndo = key === 'z' && !e.shiftKey;
-    const isRedo = (key === 'z' && e.shiftKey) || key === 'y';
-    if (isUndo) {
-        e.preventDefault();
-        undo();
-    } else if (isRedo) {
-        e.preventDefault();
-        redo();
-    }
-});
-
-// 中键拖动地图时临时高亮「拖动」按钮并取消特殊光标，松开恢复当前工具态
-// 画笔模式下地图拖动被锁定，中键按下时临时解锁（capture 阶段先于引擎的拖动监听，时序可行）
-function showTempPanUI() {
-    document.getElementById('tool-pan').classList.add('active');
-    document.getElementById('tool-draw').classList.remove('active');
-    document.getElementById('tool-erase').classList.remove('active');
-    document.getElementById('tool-select').classList.remove('active');
-    mapStageEl.classList.remove('draw-mode');
-    mapStageEl.classList.remove('erase-mode');
-    mapStageEl.classList.remove('select-mode');
-    if (!MapEngine.isReady()) return;
-    MapEngine.setDragEnabled(true);
-}
-
-function restoreToolUI() {
-    applyToolButtons();
-    mapStageEl.classList.toggle('draw-mode', currentTool === 'draw');
-    mapStageEl.classList.toggle('erase-mode', currentTool === 'erase');
-    mapStageEl.classList.toggle('select-mode', currentTool === 'select');
-    // 恢复当前工具对应的拖动状态（画笔=锁定；restoreToolUI 幂等）
-    if (MapEngine.isReady()) MapEngine.setDragEnabled(currentTool !== 'draw' && currentTool !== 'select');
-}
-
-window.addEventListener('mousedown', (e) => {
-    if (e.button !== 1) return;
-    showTempPanUI();
-}, true);  // capture：确保在地图引擎的拖动监听之前解锁
-window.addEventListener('mouseup', (e) => {
-    if (e.button !== 1) return;
-    restoreToolUI();
-}, true);
-// 中键拖出窗口外松开时收不到 mouseup，鼠标离开窗口即恢复工具态
-document.documentElement.addEventListener('mouseleave', restoreToolUI);
-
-document.getElementById('tool-pan').addEventListener('click', () => setTool('pan'));
-document.getElementById('tool-draw').addEventListener('click', () => setTool('draw'));
-document.getElementById('tool-erase').addEventListener('click', () => setTool('erase'));
-document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
-document.getElementById('undo-btn').addEventListener('click', undo);
-document.getElementById('redo-btn').addEventListener('click', redo);
-document.getElementById('load-btn').addEventListener('click', handleLoad);
-document.getElementById('new-btn').addEventListener('click', handleNew);
-document.getElementById('fit-btn').addEventListener('click', () => {
-    if (points.length > 0) {
-        MapEngine.fitTrack(points);
-    }
-});
-document.getElementById('clear-btn').addEventListener('click', () => {
-    if (points.length === 0) return;
-    pushUndo();
-    points = [];
-    renderTrack();
-});
-document.getElementById('save-form').addEventListener('submit', handleSaveSubmit);
-
-// ===== 初始化 =====
-(async function init() {
-    // 地图引擎与搜索（异步初始化，需先加载高德 Key 配置）
-    await MapEngine.init();
-    initSearchBox();
-    SelectionLayer.init({
-        getPoints: () => points,
-        apply: next => { points = next; renderTrack(); },
-        commit: commitSnapshot
+    document.addEventListener('keydown', event => {
+        if (currentPage() !== 'tracks' || !initialized || document.querySelector('dialog[open]') || event.target.closest('input, textarea, select, [contenteditable]')) return;
+        const key = event.key.toLowerCase(), modifier = event.ctrlKey || event.metaKey;
+        if (modifier && key === 'a') { event.preventDefault(); $('select-all').click(); }
+        else if (modifier && key === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
+        else if (modifier && key === 'y') { event.preventDefault(); redo(); }
+        else if (modifier && key === 's') { event.preventDefault(); save(); }
+        else if (!modifier && !event.altKey && ['h', 'p', 'e', 'v'].includes(key)) { event.preventDefault(); setTool({ h: 'pan', p: 'draw', e: 'erase', v: 'select' }[key]); }
+        else if (event.key === 'Escape') { event.preventDefault(); pendingShape ? cancelShape() : SelectionLayer.clear(); }
+        else if (event.key === 'Enter' && pendingShape) { event.preventDefault(); addShape(); }
+        else if (['Delete', 'Backspace'].includes(event.key) && SelectionLayer.indices().length) { event.preventDefault(); deleteSelected(); }
+        else if (key === 'f') { event.preventDefault(); $('editor-fit').click(); }
+        else if (event.key.startsWith('Arrow') && SelectionLayer.indices().length) {
+            event.preventDefault(); const frame = SelectionLayer.frame(), step = event.shiftKey ? 10 : 1;
+            const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
+            if (frame && delta) SelectionLayer.transformTo({ ...frame, x: frame.x + delta[0], y: frame.y + delta[1] });
+        }
     });
-    renderShapePanel();  // 初始化侧边栏图形区块的按钮可用态
-
-    await refreshTrackSelect();
-
-    // URL ?track= 参数：从生成器预览卡跳入时自动加载指定轨迹。
-    // 必须在 refreshTrackSelect 重建 options 之后赋值，否则被占位选项覆盖。
-    const trackParam = new URLSearchParams(window.location.search).get('track');
-    if (trackParam) {
-        document.getElementById('load-track-select').value = trackParam;
-        await loadTrackById(trackParam);
-    }
-
-    updateCorrectionNote();
-    updateButtonStates();
-    updateStats();
-    renderTrack();  // 空渲染一次：向地图适配器注入事件回调，否则刷新后首次点击不会加点
+    return { open, init, cancelShape, commit, changed, renderOriginal, updateSelection: renderSelection, editable,
+        pending: () => !!pendingShape, isReady: () => initialized };
 })();
+function setTool(tool) {
+    if (!MapEngine.isReady()) return;
+    if (pendingShape && tool !== 'select') TrackEditor.cancelShape();
+    SelectionLayer.setActive(tool === 'select'); currentTool = tool;
+    document.querySelectorAll('button[data-tool]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.tool === tool)));
+    MapEngine.setDragEnabled(tool !== 'draw' && tool !== 'select');
+    for (const key of ['draw', 'erase', 'select']) mapStageEl.classList.toggle(key + '-mode', tool === key);
+    $('canvas-tip').textContent = { pan: '拖动地图与节点，点击线段中点插入节点', draw: '点击地图添加节点；中键临时平移地图', erase: '点击节点删除，可以撤销恢复', select: '拖出矩形框选；选框内移动，边柄缩放，顶部柄旋转；Esc 取消' }[tool];
+}
+const HANDLERS = {
+    onMapClick() {},
+    onMapMouseDown(pt) {
+        if (currentTool !== 'draw' || pendingShape) return;
+        pushUndo(); points.push({ lat: pt.lat, lng: pt.lng }); renderTrack();
+    },
+    onVertexDragStart() { dragStartSnapshot = points.map(p => ({ ...p })); },
+    onVertexDragEnd(i, pt) {
+        if (pendingShape) return;
+        TrackEditor.commit(dragStartSnapshot); dragStartSnapshot = null; points[i] = { lat: pt.lat, lng: pt.lng }; renderTrack();
+    },
+    onVertexClick(i) { if (currentTool === 'erase' && !pendingShape) { pushUndo(); points.splice(i, 1); renderTrack(); } },
+    onMidpointClick(i, mid) { if (currentTool !== 'erase' && currentTool !== 'select' && !pendingShape) { pushUndo(); points.splice(i + 1, 0, { lat: mid.lat, lng: mid.lng }); renderTrack(); } }
+};
+function renderTrack() {
+    if (!MapEngine.isReady()) return;
+    MapEngine.renderTrack(TrackEditor.editable(), HANDLERS);
+    $('editor-point-count').textContent = `${points.length} 节点`;
+    $('editor-loop-distance').textContent = `${totalLoopDistance(points).toFixed(1)} m`;
+    TrackEditor.renderOriginal(); TrackEditor.changed();
+}
+function totalLoopDistance(rows) {
+    if (rows.length < 2) return 0;
+    return rows.reduce((sum, p, i) => sum + haversineMeters(p, rows[(i + 1) % rows.length]), 0);
+}
+function pushUndo() { SelectionLayer.clear(); TrackEditor.commit(points.map(p => ({ ...p }))); }
+function updateButtonStates() { $('editor-undo').disabled = !undoStack.length; $('editor-redo').disabled = !redoStack.length; }
+function undo() {
+    if (pendingShape) { TrackEditor.cancelShape(); return; }
+    SelectionLayer.clear(); if (!undoStack.length) return;
+    redoStack.push(points.map(p => ({ ...p }))); points = undoStack.pop(); renderTrack(); updateButtonStates();
+}
+function redo() {
+    if (pendingShape) { TrackEditor.cancelShape(); return; }
+    SelectionLayer.clear(); if (!redoStack.length) return;
+    undoStack.push(points.map(p => ({ ...p }))); points = redoStack.pop(); renderTrack(); updateButtonStates();
+}
+$('editor-undo').onclick = undo; $('editor-redo').onclick = redo;
+mapStageEl.addEventListener('mousedown', event => {
+    if (event.button !== 1 || !MapEngine.isReady()) return;
+    MapEngine.setDragEnabled(true); mapStageEl.classList.remove('draw-mode', 'erase-mode', 'select-mode');
+}, true);
+function restoreToolUI() {
+    if (!MapEngine.isReady()) return;
+    MapEngine.setDragEnabled(currentTool !== 'draw' && currentTool !== 'select');
+    for (const key of ['draw', 'erase', 'select']) mapStageEl.classList.toggle(key + '-mode', currentTool === key);
+}
+window.addEventListener('mouseup', event => { if (event.button === 1) restoreToolUI(); }, true);
+window.addEventListener('blur', restoreToolUI);
+document.documentElement.addEventListener('mouseleave', restoreToolUI);

@@ -37,15 +37,14 @@ const SelectionLayer = (() => {
         svg.setAttribute('width', stage.clientWidth);
         svg.setAttribute('height', stage.clientHeight);
         host.classList.toggle('is-active', active);
-        const status = document.getElementById('selection-status');
-        status.hidden = !active;
-        document.getElementById('delete-selection-btn').disabled = !active || !indices.length;
-        status.textContent = indices.length ? `已选 ${indices.length} 个节点 · Delete 删除 · Esc 取消选择`
-            : '拖出矩形框选节点 · 中键平移地图';
+        const status = document.getElementById('editor-selected-count');
+        document.getElementById('delete-selection').disabled = !active || !indices.length;
+        status.textContent = indices.length ? `已选 ${indices.length} 个节点` : '未选择节点';
+        if (api.onChange) api.onChange(indices.slice(), frame());
         if (!active) return;
         indices.forEach(i => {
             const p = pixel(api.getPoints()[i]);
-            svg.appendChild(node('circle', { cx: p.x, cy: p.y, r: 8, 'data-index': i }, 'selection-node'));
+            svg.appendChild(node('circle', { cx: p.x, cy: p.y, r: 3.5, 'data-index': i }, 'selection-node'));
         });
         if (drag && drag.key === 'marquee') {
             const a = drag.start, b = drag.last;
@@ -62,7 +61,7 @@ const SelectionLayer = (() => {
             'data-selection-key': 'move' }, 'selection-frame'));
         Object.entries(G.handles).forEach(([key, [x, y]]) => {
             const disabled = !(x && f.width > 1e-6 || y && f.height > 1e-6);
-            const handle = node('circle', { cx: x * w / 2, cy: y * h / 2, r: 5,
+            const handle = node('rect', { x: x * w / 2 - 3.5, y: y * h / 2 - 3.5, width: 7, height: 7,
                 'data-selection-key': key, 'data-disabled': disabled }, 'shape-handle selection-handle');
             const cursors = ['e', 'se', 's', 'sw', 'w', 'nw', 'n', 'ne'];
             const angle = Math.atan2(y, x) + f.angle + 2 * Math.PI;
@@ -143,6 +142,27 @@ const SelectionLayer = (() => {
         e.preventDefault();
         render();
     }
+    function transformTo(nextFrame) {
+        finish(true);
+        const previous = frame();
+        if (!previous || !Object.values(nextFrame).every(Number.isFinite)
+            || nextFrame.width < 0 || nextFrame.height < 0) return false;
+        const snapshot = api.getPoints().map(p => ({ ...p }));
+        const next = snapshot.map(p => ({ ...p }));
+        for (const i of indices) {
+            const q = G.point(pixel(snapshot[i]), previous, nextFrame), ll = geo(q);
+            const back = G.validGeo(ll) ? pixel(ll) : null;
+            if (!back || Math.hypot(back.x - q.x, back.y - q.y) > 0.1) return false;
+            next[i] = { ...next[i], ...ll };
+        }
+        if (!same(snapshot, next)) {
+            api.apply(next);
+            api.commit(snapshot);
+        }
+        rememberFrame(nextFrame);
+        render();
+        return true;
+    }
     return {
         init(callbacks) {
             api = callbacks;
@@ -158,7 +178,8 @@ const SelectionLayer = (() => {
             }));
             window.addEventListener('blur', () => finish(true));
             document.addEventListener('keydown', e => {
-                if (active && e.key === 'Escape') { clear(); e.preventDefault(); }
+                if (active && e.key === 'Escape' && currentPage() === 'tracks'
+                    && !document.querySelector('dialog[open]')) { clear(); e.preventDefault(); }
             });
             MapEngine.bindViewHooks({
                 onChange() { finish(true); MapEngine.mountOverlay(host); render(); },
@@ -176,6 +197,9 @@ const SelectionLayer = (() => {
             render();
         },
         clear,
+        frame,
+        transformTo,
+        render,
         cancelDrag: () => finish(true),
         indices: () => indices.slice()
     };

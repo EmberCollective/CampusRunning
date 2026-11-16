@@ -70,7 +70,9 @@ class Watch:
             running = self.running()
             return dict(running=running, ready=running and self.ready,
                         connected=running and self.connected, mac=self.mac,
-                        keep_mac=self.mac.replace(":", ""), records=records, error=error,
+                        keep_mac=self.mac.replace(":", ""),
+                        binding_address=dict(value=self.mac if running and self.ready else None, medium="virtual"),
+                        transport="netsim", records=records, error=error,
                         total_km=round(sum(r["distance_km"] for r in records), 3),
                         pending=sum(not r["received"] for r in records),
                         received=sum(r["received"] for r in records))

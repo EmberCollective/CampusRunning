@@ -33,7 +33,7 @@ def main():
                 pixels: points.map(p => MapEngine.latLngToContainer(p.lat, p.lng)),
                 tool: currentTool, undo: undoStack.length, redo: redoStack.length,
                 view: MapEngine.activeAdapter().getView(), trackId: editingTrackId,
-                correction: activeCorrection, message: document.querySelector('#message').textContent,
+                correction: activeCorrection, message: document.querySelector('#toast').textContent,
                 stage: {w: document.querySelector('.map-stage').clientWidth,
                         h: document.querySelector('.map-stage').clientHeight}})''')
 
@@ -51,7 +51,15 @@ def main():
                 raise
 
         def click(selector):
-            return lambda: page.locator(selector).click()
+            def action():
+                page.locator(selector).click()
+                if selector.startswith('[data-shape='):
+                    if page.locator('#add-shape').is_enabled():
+                        page.locator('#add-shape').click()
+                    else:
+                        assert page.locator('#pending-warning').is_visible()
+                        page.locator('#cancel-shape').click()
+            return action
 
         def drag(a, b):
             page.mouse.move(*a)
@@ -86,29 +94,29 @@ def main():
 
         try:
             step('打开真实编辑器，无模板专属覆盖层',
-                 lambda: page.goto(args.url + '/track-editor', wait_until='networkidle'),
+                 lambda: (page.goto(args.url + '/track-editor', wait_until='networkidle'), page.locator('#new-track').click()),
                  lambda b, a: not a['coords'] and page.locator('#shape-layer').count() == 0)
-            assert args.save_id not in page.locator('#load-track-select option').evaluate_all('(es)=>es.map(e=>e.value)')
+            assert args.save_id not in page.evaluate('Generator.tracks().map(t=>t.id)')
             for width, height, zoom_level in [(1440, 1000, 3), (900, 700, 17), (650, 700, 20)]:
                 page.set_viewport_size({'width': width, 'height': height})
                 zoom(zoom_level)
                 for shape in ['rect', 'circle', 'stadium']:
-                    page.locator('#new-btn').click()
+                    page.locator('#new-track:visible, #new-track-inline:visible').click()
                     step(f'{shape} 一次生成普通点 {width}x{height} zoom={zoom_level}',
-                         click('#shape-btn-' + shape), lambda b, a: valid(a) and a['undo'] == 1)
+                         click('[data-shape="' + shape + '"]'), lambda b, a: valid(a) and a['undo'] == 1)
                     original = state()['coords']
                     step('间距变化只影响下一次添加', lambda: page.locator('#shape-spacing').fill('30'),
                          lambda b, a: a['coords'] == b['coords'])
                     page.locator('#shape-spacing').press('Tab')
-                    step('撤销整次生成', click('#undo-btn'), lambda b, a: not a['coords'] and not a['indices'])
-                    step('重做恢复同一普通点列', click('#redo-btn'), lambda b, a: a['coords'] == original)
+                    step('撤销整次生成', click('#editor-undo'), lambda b, a: not a['coords'] and not a['indices'])
+                    step('重做恢复同一普通点列', click('#editor-redo'), lambda b, a: a['coords'] == original)
 
             page.set_viewport_size({'width': 1440, 'height': 1000})
             zoom(18)
-            page.locator('#new-btn').click()
+            page.locator('#new-track:visible, #new-track-inline:visible').click()
             page.locator('#shape-spacing').fill('30')
             page.locator('#shape-spacing').press('Tab')
-            step('生成后立即自动框选', click('#shape-btn-stadium'), lambda b, a: valid(a))
+            step('生成后立即自动框选', click('[data-shape="stadium"]'), lambda b, a: valid(a))
             generated = state()['coords']
             step('整组移动占一次历史', lambda: drag_handle('move', 35, 20),
                  lambda b, a: a['coords'] != b['coords'] and a['undo'] == b['undo'] + 1)
@@ -117,11 +125,11 @@ def main():
             step('旋转后普通框选缩放', lambda: drag_handle('se', 30, 20),
                  lambda b, a: a['coords'] != b['coords'] and a['undo'] == b['undo'] + 1)
             page.screenshot(path=str(args.output / '01-generated-selected.png'), full_page=True)
-            step('按钮删除整组节点', click('#delete-selection-btn'), lambda b, a: not a['coords'])
-            step('撤销整组删除', click('#undo-btn'), lambda b, a: len(a['coords']) == len(generated))
-            step('重做整组删除', click('#redo-btn'), lambda b, a: not a['coords'])
-            page.locator('#undo-btn').click()
-            page.locator('#tool-pan').click()
+            step('按钮删除整组节点', click('#delete-selection'), lambda b, a: not a['coords'])
+            step('撤销整组删除', click('#editor-undo'), lambda b, a: len(a['coords']) == len(generated))
+            step('重做整组删除', click('#editor-redo'), lambda b, a: not a['coords'])
+            page.locator('#editor-undo').click()
+            page.locator('[data-tool="pan"]').click()
             def move_vertex():
                 p = state()['pixels'][2]
                 a = stage_xy(p)
@@ -129,14 +137,14 @@ def main():
             step('模板点可直接单点拖动', move_vertex,
                  lambda b, a: len(a['coords']) == len(b['coords']) and a['coords'][2] != b['coords'][2]
                  and a['coords'][:2] == b['coords'][:2] and a['coords'][3:] == b['coords'][3:])
-            page.locator('#tool-erase').click()
+            page.locator('[data-tool="erase"]').click()
             step('橡皮擦删除一个普通节点', lambda: page.mouse.click(*stage_xy(state()['pixels'][3])),
                  lambda b, a: len(a['coords']) == len(b['coords'])-1)
-            step('撤销单点删除', click('#undo-btn'), lambda b, a: len(a['coords']) == len(b['coords'])+1)
-            page.locator('#tool-pan').click()
+            step('撤销单点删除', click('#editor-undo'), lambda b, a: len(a['coords']) == len(b['coords'])+1)
+            page.locator('[data-tool="pan"]').click()
             step('普通中点插入', lambda: page.locator('.midpoint-handle').nth(2).click(),
                  lambda b, a: len(a['coords']) == len(b['coords'])+1)
-            page.locator('#tool-select').click()
+            page.locator('[data-tool="select"]').click()
             def select_part():
                 s = state(); ps = s['pixels']; x = s['stage']['w']/2
                 drag(stage_xy({'x': min(p['x'] for p in ps)-12, 'y': min(p['y'] for p in ps)-12}),
@@ -149,24 +157,24 @@ def main():
             page.screenshot(path=str(args.output / '02-edit-part.png'), full_page=True)
             step('键盘删除部分节点', lambda: page.keyboard.press('Delete'),
                  lambda b, a: len(a['coords']) == len(b['coords'])-len(b['indices']))
-            page.locator('#undo-btn').click()
-            page.locator('#tool-select').click()
+            page.locator('#editor-undo').click()
+            page.locator('[data-tool="select"]').click()
             select_all()
             page.locator('#track-name').fill('普通节点回归（合成数据）')
             step('输入框 Delete 不删轨迹', lambda: page.locator('#track-name').press('Delete'),
                  lambda b, a: a['coords'] == b['coords'])
-            page.locator('#tool-select').click()
+            page.locator('[data-tool="select"]').click()
             select_all()
-            page.locator('#tool-select').focus()
+            page.locator('[data-tool="select"]').focus()
             step('Backspace 整组删除', lambda: page.keyboard.press('Backspace'), lambda b, a: not a['coords'])
 
             # 真实追加：先把第一组整体移到左侧，第二组在当前视野中心生成。
-            page.locator('#new-btn').click()
-            page.locator('#shape-btn-rect').click()
+            page.locator('#new-track:visible, #new-track-inline:visible').click()
+            click('[data-shape="rect"]')()
             drag_handle('se', -360, -220)
             drag_handle('move', -260, -100)
             first = state()['coords']
-            step('追加新模板，旧节点保持原坐标和顺序', click('#shape-btn-circle'),
+            step('追加新模板，旧节点保持原坐标和顺序', click('[data-shape="circle"]'),
                  lambda b, a: len(a['coords']) > len(first)
                  and [p for i, p in enumerate(a['coords']) if i not in a['indices']] == first)
             join_state = state()
@@ -177,26 +185,26 @@ def main():
                         || !segmentsConflict(p, ps[(i+1)%ps.length], q, ps[(j+1)%ps.length])));
                  }'''))
             page.screenshot(path=str(args.output / '03-appended.png'), full_page=True)
-            step('重叠模板拒绝追加，原轨迹与历史保持', click('#shape-btn-circle'),
-                 lambda b, a: a['coords'] == b['coords'] and a['undo'] == b['undo'] and '重叠' in a['message'])
-            step('仅删除追加一组，完整恢复原节点列', click('#delete-selection-btn'), lambda b, a: a['coords'] == first)
-            step('撤销追加组删除', click('#undo-btn'), lambda b, a: a['coords'] == join_state['coords'])
-            step('撤销模板追加', click('#undo-btn'), lambda b, a: a['coords'] == first)
-            step('重做模板追加', click('#redo-btn'), lambda b, a: a['coords'] == join_state['coords'])
+            step('重叠模板拒绝追加，原轨迹与历史保持', click('[data-shape="circle"]'),
+                 lambda b, a: a['coords'] == b['coords'] and a['undo'] == b['undo'])
+            step('仅删除追加一组，完整恢复原节点列', click('#delete-selection'), lambda b, a: a['coords'] == first)
+            step('撤销追加组删除', click('#editor-undo'), lambda b, a: a['coords'] == join_state['coords'])
+            step('撤销模板追加', click('#editor-undo'), lambda b, a: a['coords'] == first)
+            step('重做模板追加', click('#editor-redo'), lambda b, a: a['coords'] == join_state['coords'])
 
             saved = state()['coords']
             page.locator('#track-id').fill(args.save_id)
             page.locator('#track-name').fill('图形节点回归（合成数据）')
             def save():
-                page.locator('#save-form button[type="submit"]').click()
-                page.wait_for_function("document.querySelector('#message').textContent.startsWith('已保存')")
+                page.locator('#save-track').click()
+                page.wait_for_function("document.querySelector('#toast').textContent.includes('已保存')")
             step('实际 POST 保存普通轨迹格式', save, lambda b, a: a['trackId'] == args.save_id)
             response = ctx.request.get(args.url + '/api/tracks/' + args.save_id + '/coords').json()
             assert response['base_coordinates'] == [{'longitude': p['lng'], 'latitude': p['lat']} for p in saved]
             assert 'segments' not in response
             step('刷新按 ID 重开', lambda: page.goto(args.url + '/track-editor?track=' + args.save_id, wait_until='networkidle'),
                  lambda b, a: a['coords'] == saved and not a['indices'] and a['undo'] == 0)
-            page.locator('#tool-pan').click()
+            page.locator('[data-tool="pan"]').click()
             step('重开后仍可单点编辑', move_vertex, lambda b, a: a['coords'] != b['coords'])
             edited = state()['coords']
             step('实际覆盖保存原 ID', save, lambda b, a: a['trackId'] == args.save_id)

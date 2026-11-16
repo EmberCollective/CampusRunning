@@ -1,420 +1,124 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>校园跑步数据生成器</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" media="print" onload="this.media='all'">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
+  <title>CampusRunning · 工作台</title>
+  <link rel="icon" href="/static/img/app-icon.png">
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/track_editor.css">
+  <!-- Design process credit: unslop by Damir Sokolovsky (@heydamir), CC BY 4.0. -->
 </head>
 <body>
-    <!-- 应用顶栏 -->
-    <header class="topbar">
-        <!-- 应用图标点击跳转 GitHub 主页；target=_blank 在桌面版（WebView2）
-             落到系统默认浏览器打开，不劫持应用窗口 -->
-        <a class="app-icon-link" href="https://github.com/EmberCollective/CampusRunning" target="_blank" rel="noopener" title="GitHub 主页">
-            <img class="app-icon" src="/static/img/app-icon.png" alt="校园跑步数据生成器图标">
-        </a>
-        <h1>校园跑步数据生成器</h1>
-        <!-- 版本号由前端经 /api/version 异步填充，加载失败时保持留空 -->
-        <span class="mono-tag app-version" id="app-version"></span>
-        <span class="mono-tag">FIT / TCX · GCJ-02</span>
-        <div class="topbar-side">
-            {% if config.WATCH_ENABLED %}<a href="/watch" class="link-btn">手表管理</a>{% endif %}
-            <a href="/track-editor" class="link-btn">轨迹编辑器 &rarr;</a>
-        </div>
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs>
+    <!-- Lucide-compatible line icons, one size and stroke throughout. -->
+    <symbol id="i-run" viewBox="0 0 24 24"><path d="m7 18 4-7 4 3 3 6M5 21l3-5M5 8l4-2 4 3 4-1"/><circle cx="15" cy="4" r="2"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15"/></symbol>
+    <symbol id="i-watch" viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="3"/><path d="m8 6 1-4h6l1 4M8 18l1 4h6l1-4M12 9v3l2 1"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4M12 17h.01"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7h.01"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="m15 4 5 5M4 15l12-12 5 5L9 20l-6 1z"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M3 10h11a7 7 0 0 1 0 14M3 10l5-5M3 10l5 5" transform="translate(0 -3)"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+
+
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="m9 3 1-1h4l1 3 3 1 3 2v4l-2 2-1 3-2 3h-4l-2-2-3-1-3-2v-4l2-2 1-3Z"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+<symbol id="i-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+<symbol id="i-select" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/><path d="M8 3h1m3 0h1m-10 8v2m18-2v2M11 21h2"/></symbol>
+<symbol id="i-erase" viewBox="0 0 24 24"><path d="m4 15 9-11 8 7-9 10H8l-4-4zM9 9l8 7M12 21h9"/></symbol>
+<symbol id="i-redo" viewBox="0 0 24 24"><path d="M21 7H10a7 7 0 0 0 0 14M21 7l-5-5m5 5-5 5"/></symbol>
+<symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/><rect x="8" y="8" width="8" height="8"/></symbol>
+<symbol id="i-panels" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M8 4v16M16 4v16"/></symbol>
+<symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol></defs></svg>
+  <div class="app-shell">
+    <header class="appbar">
+      <a class="brand" href="#generate" aria-label="CampusRunning 生成记录"><svg viewBox="0 0 36 36" fill="none" aria-hidden="true"><rect x="7" y="3" width="22" height="30" rx="11" stroke="currentColor" stroke-width="2" transform="rotate(28 18 18)"/><rect x="12" y="8" width="12" height="20" rx="6" stroke="currentColor" stroke-width="1.5" transform="rotate(28 18 18)"/><circle cx="26" cy="8" r="3" fill="currentColor" stroke="white" stroke-width="2"/></svg><span class="brand-name">CampusRunning</span><span class="brand-cn">校园跑步数据生成器</span></a>
+      <nav class="main-nav" aria-label="工作台导航"><a class="nav-item" href="#generate" data-nav="generate"><svg class="icon" aria-hidden="true"><use href="#i-run"/></svg>生成记录</a><a class="nav-item" href="#tracks" data-nav="tracks"><svg class="icon" aria-hidden="true"><use href="#i-map"/></svg>轨迹编辑</a>{% if config.WATCH_ENABLED %}<a class="nav-item" href="#watch" data-nav="watch"><svg class="icon" aria-hidden="true"><use href="#i-watch"/></svg>手表控制<span id="nav-status" class="nav-end">待连接</span></a>{% endif %}</nav>
+      <div class="appbar-end"><span class="draft-label"><span id="app-version">本地工作台</span></span><button class="btn quiet" id="open-settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>设置</button></div>
     </header>
-
-    <div class="gen-frame">
-        <!-- 工作台：左配置栏 + 主参数区 -->
-        <div class="workbench">
-
-            <!-- 左栏：数据源 + 生成模式 -->
-            <aside class="cfg-side">
-                <div class="panel">
-                    <div class="panel-sec">
-                        <div class="group-label"><span class="step-no">01</span>数据源 SOURCE</div>
-                        <div class="setting-item">
-                            <label for="track-select">选择轨迹</label>
-                            <select id="track-select">
-                                <option value="campus_default">加载中...</option>
-                            </select>
-                        </div>
-                        <div class="setting-item">
-                            <label>轨迹预览 PREVIEW</label>
-                            <!-- 整卡为链接：点击进入轨迹编辑器并自动加载该轨迹（?track=）；
-                                 真实 <a> 保证中键/Cmd+点击可新标签打开 -->
-                            <a id="track-preview-card" class="track-preview-card" href="/track-editor" title="在轨迹编辑器中查看 / 编辑">
-                                <div class="preview-head">
-                                    <span class="preview-name" id="preview-name">&mdash;</span>
-                                    <span class="preview-lap" id="preview-lap"></span>
-                                    <span class="preview-edit" id="preview-edit">编辑 &nearr;</span>
-                                </div>
-                                <div class="preview-map-wrap">
-                                    <div id="preview-map"></div>
-                                    <div class="preview-overlay" id="preview-overlay" hidden><span id="preview-overlay-text"></span></div>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="setting-item">
-                            <label for="template-select">预设模板</label>
-                            <select id="template-select">
-                                <option value="">不使用模板</option>
-                                <option value="__upload__">上传模板...</option>
-                            </select>
-                            <input type="file" id="template-upload" accept=".json" style="display:none">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="panel">
-                    <div class="panel-sec">
-                        <div class="group-label"><span class="step-no">02</span>生成模式 MODE</div>
-                        <div class="mode-list">
-                            <button type="button" class="tab-button active" data-mode="daily">
-                                <span class="mode-name"><span class="idx">A</span>每日公里数范围</span>
-                                <span class="mode-desc">每天在设定公里数区间内随机生成</span>
-                            </button>
-                            <button type="button" class="tab-button" data-mode="total">
-                                <span class="mode-name"><span class="idx">B</span>总公里数生成</span>
-                                <span class="mode-desc">按目标总量与周末系数分配到每天</span>
-                            </button>
-                            <button type="button" class="tab-button" data-mode="single">
-                                <span class="mode-name"><span class="idx">C</span>单个文件</span>
-                                <span class="mode-desc">生成一天的单个运动数据文件</span>
-                            </button>
-                            <button type="button" class="tab-button" data-mode="dates">
-                                <span class="mode-name"><span class="idx">D</span>指定日期批量</span>
-                                <span class="mode-desc">在日历中选择多个日期批量生成</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </aside>
-
-            <!-- 主区：参数（随模式切换）+ 执行 -->
-            <main class="panel param-main">
-                <div class="section-head">
-                    <h2>参数</h2>
-                    <span class="mono-tag">OUTPUT &rarr; ./OUTPUT</span>
-                </div>
-
-                <!-- 每日模式 -->
-                <div id="daily-mode" class="mode-content active">
-                    <div class="section-body">
-                        <form id="daily-form">
-                            <div class="form-grid">
-                                <div class="form-group">
-                                    <label for="daily-start-date">开始日期</label>
-                                    <input type="date" id="daily-start-date" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="daily-end-date">结束日期</label>
-                                    <input type="date" id="daily-end-date" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="daily-min-km">最低公里数</label>
-                                    <input type="number" id="daily-min-km" step="0.1" min="0.1" value="2.0" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="daily-max-km">最高公里数</label>
-                                    <input type="number" id="daily-max-km" step="0.1" min="0.1" value="5.0" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="daily-min-pace">最快配速 (min/km)</label>
-                                    <input type="number" id="daily-min-pace" step="0.1" min="1" value="7.0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="daily-max-pace">最慢配速 (min/km)</label>
-                                    <input type="number" id="daily-max-pace" step="0.1" min="1" value="8.0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="daily-start-time-min">最早开始时间</label>
-                                    <input type="time" id="daily-start-time-min" value="06:00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="daily-start-time-max">最晚开始时间</label>
-                                    <input type="time" id="daily-start-time-max" value="08:00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="daily-output-format">输出格式</label>
-                                    <select id="daily-output-format" class="output-format">
-                                        <option value="fit" selected>FIT</option>
-                                        <option value="tcx">TCX (Keep 无步幅)</option>
-                                        {% if config.WATCH_ENABLED %}<option value="b5">B5 手表</option>{% endif %}
-                                    </select>
-                                </div>
-                                <div class="form-group full-width">
-                                    <label for="daily-output-dir">输出目录</label>
-                                    <input type="text" id="daily-output-dir" value="output">
-                                </div>
-                            </div>
-                            <div class="run-bar">
-                                <button type="submit" class="btn btn-primary">开始生成</button>
-                                <button type="button" id="daily-export-btn" class="btn btn-secondary">导出模板</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- 总公里数模式 -->
-                <div id="total-mode" class="mode-content">
-                    <div class="section-body">
-                        <form id="total-form">
-                            <div class="form-grid">
-                                <div class="form-group">
-                                    <label for="total-start-date">开始日期</label>
-                                    <input type="date" id="total-start-date" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-end-date">结束日期</label>
-                                    <input type="date" id="total-end-date" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-km">目标总公里数</label>
-                                    <input type="number" id="total-km" step="0.1" min="0.1" value="50" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-weekend-factor">周末系数</label>
-                                    <input type="number" id="total-weekend-factor" step="0.1" min="0.1" value="1.5">
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-min-daily">每日最低 (km)</label>
-                                    <input type="number" id="total-min-daily" step="0.1" min="0.1" value="2.0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-max-daily">每日最高 (km)</label>
-                                    <input type="number" id="total-max-daily" step="0.1" min="0.1" value="8.0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-rest-days">每周休息天数</label>
-                                    <input type="number" id="total-rest-days" min="0" max="7" value="1">
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-min-pace">最快配速 (min/km)</label>
-                                    <input type="number" id="total-min-pace" step="0.1" min="1" value="7.0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-max-pace">最慢配速 (min/km)</label>
-                                    <input type="number" id="total-max-pace" step="0.1" min="1" value="8.0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-start-time-min">最早开始时间</label>
-                                    <input type="time" id="total-start-time-min" value="06:00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-start-time-max">最晚开始时间</label>
-                                    <input type="time" id="total-start-time-max" value="08:00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-output-format">输出格式</label>
-                                    <select id="total-output-format" class="output-format">
-                                        <option value="fit" selected>FIT</option>
-                                        <option value="tcx">TCX (Keep 无步幅)</option>
-                                        {% if config.WATCH_ENABLED %}<option value="b5">B5 手表</option>{% endif %}
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="total-output-dir">输出目录</label>
-                                    <input type="text" id="total-output-dir" value="output">
-                                </div>
-                            </div>
-                            <div class="run-bar">
-                                <button type="submit" class="btn btn-primary">开始生成</button>
-                                <button type="button" id="total-export-btn" class="btn btn-secondary">导出模板</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- 单文件模式 -->
-                <div id="single-mode" class="mode-content">
-                    <div class="section-body">
-                        <form id="single-form">
-                            <div class="form-grid">
-                                <div class="form-group">
-                                    <label for="single-date">日期</label>
-                                    <input type="date" id="single-date" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="single-distance">距离 (km)</label>
-                                    <input type="number" id="single-distance" step="0.1" min="0.1" value="3.0" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="single-pace">配速 (min/km，留空随机)</label>
-                                    <input type="number" id="single-pace" step="0.1" min="1" placeholder="留空随机">
-                                </div>
-                                <div class="form-group">
-                                    <label for="single-start-time">开始时间</label>
-                                    <input type="time" id="single-start-time" value="07:00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="single-output-format">输出格式</label>
-                                    <select id="single-output-format" class="output-format">
-                                        <option value="fit" selected>FIT</option>
-                                        <option value="tcx">TCX (Keep 无步幅)</option>
-                                        {% if config.WATCH_ENABLED %}<option value="b5">B5 手表</option>{% endif %}
-                                    </select>
-                                </div>
-                                <div class="form-group full-width">
-                                    <label for="single-output-dir">输出目录</label>
-                                    <input type="text" id="single-output-dir" value="output">
-                                </div>
-                            </div>
-                            <div class="run-bar">
-                                <button type="submit" class="btn btn-primary">开始生成</button>
-                                <button type="button" id="single-export-btn" class="btn btn-secondary">导出模板</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- 指定日期批量模式 -->
-                <div id="dates-mode" class="mode-content">
-                    <div class="section-body">
-                        <form id="dates-form">
-                            <!-- 日历 + 已选日期 横向铺满 -->
-                            <div class="dates-cal-row">
-                                <div class="calendar-container" id="calendar-container">
-                                    <div class="calendar-header">
-                                        <button type="button" class="cal-nav-btn" id="cal-prev">&lsaquo;</button>
-                                        <span class="cal-title" id="cal-title"></span>
-                                        <button type="button" class="cal-nav-btn" id="cal-next">&rsaquo;</button>
-                                    </div>
-                                    <div class="calendar-weekdays">
-                                        <span>一</span><span>二</span><span>三</span>
-                                        <span>四</span><span>五</span><span>六</span><span>日</span>
-                                    </div>
-                                    <div class="calendar-grid" id="cal-grid"></div>
-                                    <div class="calendar-actions">
-                                        <button type="button" class="cal-action-btn" id="cal-clear">清空</button>
-                                        <button type="button" class="cal-action-btn" id="cal-select-weekdays">工作日</button>
-                                        <button type="button" class="cal-action-btn" id="cal-select-weekends">周末</button>
-                                    </div>
-                                </div>
-                                <div class="dates-side">
-                                    <label>已选日期 <span id="dates-count" class="dates-count">(0 天)</span></label>
-                                    <div class="selected-dates-tags" id="selected-dates-tags">
-                                        <span class="dates-placeholder">点击日历选择日期</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- 参数行 -->
-                            <div class="form-grid">
-                                <div class="form-group">
-                                    <label for="dates-min-km">最低公里数</label>
-                                    <input type="number" id="dates-min-km" step="0.1" min="0.1" value="2.0" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="dates-max-km">最高公里数</label>
-                                    <input type="number" id="dates-max-km" step="0.1" min="0.1" value="5.0" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="dates-min-pace">最快配速 (min/km)</label>
-                                    <input type="number" id="dates-min-pace" step="0.1" min="1" value="7.0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="dates-max-pace">最慢配速 (min/km)</label>
-                                    <input type="number" id="dates-max-pace" step="0.1" min="1" value="8.0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="dates-start-time-min">最早开始时间</label>
-                                    <input type="time" id="dates-start-time-min" value="06:00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="dates-start-time-max">最晚开始时间</label>
-                                    <input type="time" id="dates-start-time-max" value="08:00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="dates-output-format">输出格式</label>
-                                    <select id="dates-output-format" class="output-format">
-                                        <option value="fit" selected>FIT</option>
-                                        <option value="tcx">TCX (Keep 无步幅)</option>
-                                        {% if config.WATCH_ENABLED %}<option value="b5">B5 手表</option>{% endif %}
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="dates-output-dir">输出目录</label>
-                                    <input type="text" id="dates-output-dir" value="output">
-                                </div>
-                            </div>
-                            <div class="run-bar">
-                                <button type="submit" class="btn btn-primary">批量生成</button>
-                                <button type="button" id="dates-export-btn" class="btn btn-secondary">导出模板</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- 消息提示：紧跟执行区，生成中/结果反馈显示于此 -->
-                <div class="section-body message-slot" style="padding-top:0;">
-                    <div id="message" class="message"></div>
-                </div>
-
-                <!-- 生成结果：按钮正下方，超限内部滚动 (#49) -->
-                <div class="section-body results-area" style="padding-top:0;">
-                    <section id="results-section" class="results-section">
-                        <div class="results-head">
-                            <span class="group-label" style="margin:0;"><span class="step-no">03</span>生成结果 OUTPUT</span>
-                            <span class="mono-tag">FIT / TCX EXPORT</span>
-                            <button id="download-btn" class="btn btn-primary btn-sm" disabled>下载文件</button>
-                            {% if config.WATCH_ENABLED %}<a id="watch-load-link" class="btn btn-secondary btn-sm" hidden>载入手表</a>{% endif %}
-                        </div>
-                        <div class="results-scroll" tabindex="0" role="region" aria-label="生成结果表格">
-                            <table class="results-table">
-                                <thead>
-                                    <tr>
-                                        <th>日期</th>
-                                        <th>距离</th>
-                                        <th>配速</th>
-                                        <th>时长</th>
-                                        <th>卡路里</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="results-body">
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-                </div>
-            </main>
-        </div>
-
-        <!-- 状态条 -->
-        <div class="statusbar">
-            <span class="st-item"><span class="st-dot"></span>READY</span>
-            <span class="st-item">GCJ-02</span>
-            <span class="st-item">FIT / TCX</span>
-            <span class="st-item" style="margin-left:auto;">CAMPUS RUNNING DATA GENERATOR</span>
-        </div>
-    </div>
-
-    <!-- 导出模板模态框 -->
-    <div id="export-modal" class="modal">
-        <div class="modal-content">
-            <button type="button" class="modal-close">&times;</button>
-            <h3>导出模板</h3>
-            <form id="export-form">
-                <div class="form-group">
-                    <label for="export-template-name">模板名称</label>
-                    <input type="text" id="export-template-name" required>
-                </div>
-                <div class="btn-group">
-                    <button type="submit" class="btn btn-primary">导出</button>
-                    <button type="button" class="btn btn-secondary modal-cancel">取消</button>
-                </div>
+    <main class="main">
+      <section class="page" id="page-generate" aria-labelledby="generate-title" hidden>
+        <div class="viewbar"><h1 id="generate-title" tabindex="-1">生成运动记录</h1><p class="view-description">设置在左，轨迹与结果在右</p><div class="viewbar-right"><span class="caption">生成后检查结果，再下载或载入手表</span></div></div>
+        <div class="workspace generator-layout">
+          <aside class="pane generator-settings" aria-label="生成设置">
+            <div class="mode-tabs" aria-label="生成模式"><button class="mode-tab" data-mode="daily" aria-pressed="true">每日范围</button><button class="mode-tab" data-mode="total" aria-pressed="false">总公里数</button><button class="mode-tab" data-mode="single" aria-pressed="false">单次记录</button><button class="mode-tab" data-mode="dates" aria-pressed="false">指定日期</button></div>
+            <form id="generate-form">
+              <div class="scroll">
+                <div class="form-section"><div class="fields"><div class="span-2"><label class="field-label" for="track-choice">跑步轨迹</label><select class="field" id="track-choice"><option value="">正在读取轨迹…</option></select></div><div class="span-2"><label class="field-label" for="template-choice">参数模板</label><select class="field" id="template-choice"><option value="">自定义参数</option></select></div></div></div>
+                <div class="form-section"><h2 id="mode-heading">日期与里程</h2><div class="fields"><div id="start-date-field"><label class="field-label" for="start-date">开始日期</label><input class="field" type="date" id="start-date" value="2026-11-13" required></div><div id="end-date-field"><label class="field-label" for="end-date">结束日期</label><input class="field" type="date" id="end-date" value="2026-11-15" required></div><div class="span-2" id="calendar-field" hidden><div class="calendar-top"><button class="btn icon-only small" type="button" id="previous-month" aria-label="上个月"><svg class="icon" aria-hidden="true"><use href="#i-left"/></svg></button><input class="field" type="month" id="calendar-month" value="2026-11" aria-label="跳转年月" min="2000-01" max="2099-12"><button class="btn icon-only small" type="button" id="next-month" aria-label="下个月"><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg></button><button class="btn small quiet" type="button" id="current-month">本月</button></div><div class="calendar" id="calendar" aria-label="选择运动日期"></div><div class="calendar-summary"><span id="calendar-count" aria-live="polite">已选 3 天</span><button class="text-btn" type="button" id="clear-dates">清除所选</button></div><div class="selected-dates" id="selected-dates" aria-label="已选择的日期"></div></div><div class="span-2" id="distance-range-field"><label class="field-label" for="min-distance">每天公里数范围</label><div class="pair"><div class="unit-wrap"><input class="field" id="min-distance" type="number" min="0.1" max="100" step="0.1" value="2.0" required><span class="unit">km</span></div><span>至</span><div class="unit-wrap"><input class="field" id="max-distance" aria-label="每天最高公里数" type="number" min="0.1" max="100" step="0.1" value="5.0" required><span class="unit">km</span></div></div></div><div class="span-2" id="total-distance-field" hidden><label class="field-label" for="total-distance">目标总公里数</label><div class="unit-wrap"><input class="field" type="number" id="total-distance" min="0.1" max="1000" step="0.1" value="12" required><span class="unit">km</span></div></div><div class="span-2" id="single-distance-field" hidden><label class="field-label" for="single-distance">这次跑多远</label><div class="unit-wrap"><input class="field" type="number" id="single-distance" min="0.1" max="100" step="0.1" value="3.5" required><span class="unit">km</span></div></div></div></div>
+                <div class="form-section"><h2>配速与开始时间</h2><label class="field-label" for="min-pace">每公里用时范围（分钟）</label><div class="pair"><input class="field" id="min-pace" type="number" min="1" max="30" step="0.1" value="7.0" required><span>至</span><input class="field" id="max-pace" type="number" min="1" max="30" step="0.1" value="8.0" aria-label="每公里最长用时" required></div><p class="hint">7.5 分表示 7 分 30 秒，数值越小跑得越快</p><div class="fields" style="margin-top:12px"><div><label class="field-label" for="earliest-time">最早开始</label><input class="field" id="earliest-time" type="time" value="06:00" required></div><div><label class="field-label" for="latest-time">最晚开始</label><input class="field" id="latest-time" type="time" value="08:00" required></div></div></div>
+                <div class="form-section"><label class="field-label" for="output-format">输出方式</label><select class="field" id="output-format">{% if config.WATCH_ENABLED %}<option value="b5">B5 手表 · 生成后载入</option>{% endif %}<option value="fit">FIT 文件 · 下载后导入</option><option value="tcx">TCX 文件 · 通用运动格式</option></select><p class="hint" id="format-note">先检查生成结果，再由你点击载入手表</p></div>
+                <div class="form-section advanced" id="advanced-section" hidden><details><summary>更多设置</summary><div class="fields"><div><label class="field-label" for="rest-days">每周休息天数</label><input class="field" id="rest-days" type="number" min="0" max="6" value="1"></div><div><label class="field-label" for="weekend-factor">周末里程系数</label><input class="field" id="weekend-factor" type="number" min="0.1" max="5" step="0.1" value="1.5"></div><div><label class="field-label" for="min-daily">每日最低公里数</label><input class="field" id="min-daily" type="number" min="0.1" max="100" step="0.1" value="2"></div><div><label class="field-label" for="max-daily">每日最高公里数</label><input class="field" id="max-daily" type="number" min="0.1" max="100" step="0.1" value="8"></div><div class="span-2"><label class="field-label" for="output-directory">文件输出目录</label><input class="field" id="output-directory" value="output"></div><div class="span-2 generation-options"><label><input id="include-track" type="checkbox" checked> 包含轨迹</label><label><input id="apply-correction" type="checkbox" checked> 转换为 GPS 坐标</label><label><input id="pace-fluctuation" type="checkbox" checked> 配速波动</label><label><input id="enable-cadence" type="checkbox" checked> 生成步频</label><p class="hint" id="b5-required" hidden>B5 必须包含轨迹、GPS 坐标转换和步频</p></div></div></details></div>
+              </div>
+              <div class="pane-footer"><p class="form-error" id="generation-error" role="alert" hidden></p><div class="row between"><button class="btn quiet" type="button" id="save-template">导出参数模板</button><span class="caption" id="plan-count">3 天</span></div><button class="btn primary" type="submit" id="generate-button">生成并查看结果<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
             </form>
+          </aside>
+          <div class="pane generator-content">
+            <section class="overview" aria-label="轨迹预览"><div class="route-stage"><div id="preview-map" tabindex="0" role="link" aria-label="所选轨迹地图预览，滚轮缩放，单击或按回车进入轨迹编辑" title="滚轮缩放 · 拖动平移 · 单击编辑轨迹"></div><div id="preview-overlay" class="map-loading"><span id="preview-overlay-text">正在读取轨迹…</span></div></div><div class="route-overview-info"><div><span class="caption">所选轨迹</span><h2 id="preview-track-name">—</h2></div><dl class="definition"><dt>每圈长度</dt><dd class="num" id="preview-track-distance">—</dd><dt>节点数量</dt><dd class="num" id="preview-track-points">—</dd><dt>方向</dt><dd id="preview-track-direction">—</dd></dl><a class="text-btn" href="#tracks" id="edit-preview-track">编辑这条轨迹<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a><p class="hint">左侧修改生成参数，轨迹形状在编辑器里调整</p></div></section>
+            <section class="pane result-pane" id="generation-results"><div class="table-toolbar"><div class="result-heading"><h2>生成结果预览</h2><p id="result-summary">尚未生成 · 先设置左侧参数</p></div><button class="btn primary" id="result-next" disabled>载入手表<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div><div class="table-scroll" tabindex="0" role="region" aria-label="生成结果表格"><table id="result-table" hidden><thead><tr><th scope="col">日期</th><th scope="col" class="numeric">距离 / km</th><th scope="col" class="numeric">用时</th><th scope="col">配速 / km</th></tr></thead><tbody id="result-rows"></tbody></table><div class="empty" id="empty-results"><h3>结果会显示在这里</h3><p>在左侧配置日期和里程，点击“生成并查看结果”<br>生成后可检查每条记录，再下载或载入手表</p></div></div><div class="table-foot"><span>生成结果保存在本地；载入手表需要单独操作</span><span class="num" id="result-count">0 条</span></div></section>
+          </div>
         </div>
-    </div>
+      </section>
 
-    <!-- 顺序：Leaflet（本地 vendored）→ 适配器 → 预览模块 → 页面逻辑；
-         不加载 map_engine/amap 适配器（引用编辑器专属 DOM，主页会抛错） -->
-    <script src="/static/vendor/leaflet/leaflet.js"></script>
-    <script src="/static/js/map_adapter_leaflet.js"></script>
-    <script src="/static/js/track_preview.js"></script>
-    <script src="/static/js/app.js"></script>
-    {% if config.WATCH_ENABLED %}<script>window.watchToken = {{ config.WATCH_TOKEN | tojson }};</script>{% endif %}
+      <section class="page" id="page-tracks" aria-labelledby="tracks-title" hidden>
+        <div class="viewbar"><h1 id="tracks-title" tabindex="-1">轨迹编辑</h1><span class="dirty-label" id="editor-dirty">未修改</span><div class="viewbar-right"><button class="btn quiet" id="editor-shortcuts"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg>快捷键</button><button class="btn" id="use-track">用于生成记录<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
+        <div class="workspace editor-layout" id="editor-workspace">
+          <aside class="pane editor-library" aria-label="轨迹与快捷模板"><div class="panel-title"><h2>轨迹</h2><button class="btn quiet icon-only small" id="new-track" aria-label="新建空白轨迹"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button></div><div class="library-section"><h2>轨迹库</h2><div id="track-library"></div><button class="text-btn" id="new-track-inline">新建空白轨迹</button><p class="hint">切换轨迹保留本页修改；保存后写入轨迹库</p></div><div class="library-section"><h2>快捷图形</h2><div class="shape-picker"><button class="shape-button" data-shape="stadium" aria-pressed="false"><svg viewBox="0 0 30 20" aria-hidden="true"><rect x="2" y="3" width="26" height="14" rx="7"/></svg><span>操场</span></button><button class="shape-button" data-shape="rect" aria-pressed="false"><svg viewBox="0 0 30 20" aria-hidden="true"><rect x="3" y="3" width="24" height="14"/></svg><span>矩形</span></button><button class="shape-button" data-shape="circle" aria-pressed="false"><svg viewBox="0 0 30 20" aria-hidden="true"><circle cx="15" cy="10" r="8"/></svg><span>圆形</span></button></div><label class="field-label" for="shape-spacing" style="margin-top:12px">图形节点间距</label><div class="unit-wrap"><input class="field" id="shape-spacing" type="number" min="3" max="100" step="1" value="15"><span class="unit">m</span></div><p class="hint">先放置和调整图形，再添加到轨迹。图形避开已有路线后接入，原节点保留</p></div><div class="library-bottom"><button class="btn quiet" id="open-map-settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>地图服务设置</button><p class="hint">轨迹使用 GCJ-02 坐标，导出时自动转换</p></div></aside>
+          <div class="editor-center">
+            <div class="editor-toolbar" role="toolbar" aria-label="轨迹编辑工具"><button class="tool" data-tool="pan" aria-pressed="true" title="拖动地图与节点 · H"><svg class="icon" aria-hidden="true"><use href="#i-move"/></svg><span>拖动</span><kbd>H</kbd></button><button class="tool" data-tool="draw" aria-pressed="false" title="画笔：点击加点 · P"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg><span>画笔</span><kbd>P</kbd></button><button class="tool" data-tool="erase" aria-pressed="false" title="擦除：点击删除节点 · E"><svg class="icon" aria-hidden="true"><use href="#i-erase"/></svg><span>擦除</span><kbd>E</kbd></button><button class="tool" data-tool="select" aria-pressed="false" title="框选：拖出矩形选择节点 · V"><svg class="icon" aria-hidden="true"><use href="#i-select"/></svg><span>框选</span><kbd>V</kbd></button><span class="separator"></span><button class="tool tool-icon" id="editor-undo" aria-label="撤销" title="撤销 · Ctrl+Z" disabled><svg class="icon" aria-hidden="true"><use href="#i-undo"/></svg></button><button class="tool tool-icon" id="editor-redo" aria-label="重做" title="重做 · Ctrl+Shift+Z" disabled><svg class="icon" aria-hidden="true"><use href="#i-redo"/></svg></button><div class="tool-right"><button class="tool tool-icon" id="editor-fit" aria-label="适配全部轨迹" title="适配全部轨迹 · F"><svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg></button><button class="tool tool-icon" id="editor-focus" aria-label="切换画布专注模式" title="显示或隐藏两侧面板"><svg class="icon" aria-hidden="true"><use href="#i-panels"/></svg></button></div></div>
+            <div class="canvas-wrap map-stage"><div id="map-leaflet" class="map-host" tabindex="0" aria-label="轨迹编辑地图"></div><div id="map-amap" class="map-host" style="display:none"></div><div id="selection-layer" class="selection-layer"></div><div id="shape-background" class="shape-background"><svg></svg></div><div class="map-loading" id="map-loading" style="display:none"><span id="map-loading-text"></span></div><div class="map-controls"><form class="map-search search-box" id="map-search-form"><input class="field" id="search-input" aria-label="搜索地点" placeholder="搜索地点"><button class="btn icon-only" type="submit" aria-label="搜索地点"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></button><ul id="search-results" class="search-results" style="display:none"></ul></form><select class="field map-style" id="map-style" aria-label="底图样式"><option value="classic">经典地图</option><option value="fresh">新版地图</option><option value="satellite">卫星地图</option><option value="amap">官方高德</option></select></div><div class="canvas-tip" id="canvas-tip">拖动节点可调整位置，点击线段中点可插入节点</div><div class="zoom-controls"><button id="zoom-in" aria-label="放大画布">+</button><button id="zoom-out" aria-label="缩小画布">−</button></div></div>
+            <div class="editor-readout"><span id="editor-point-count" class="num">0 节点</span><span id="editor-loop-distance" class="num">0.0 m</span><span id="editor-selected-count">未选择节点</span><span class="quiet-label" style="margin-left:auto">GCJ-02 · 环线闭合</span></div>
+          </div>
+          <aside class="pane editor-properties" aria-label="轨迹属性与选区"><div class="panel-title"><h2>属性</h2><span class="quiet-label">当前轨迹</span></div><div class="scroll"><section class="property-section"><h2>轨迹信息</h2><label class="field-label" for="track-name">名称</label><input class="field" id="track-name" value="" maxlength="60"><label class="field-label" for="track-id" style="margin-top:12px">轨迹 ID</label><input class="field num" id="track-id" value="" pattern="[a-z0-9_-]+" maxlength="64"><label class="field-label" for="track-description" style="margin-top:12px">描述</label><textarea class="field" id="track-description" maxlength="300"></textarea><p class="hint">ID 用于轨迹文件命名，支持小写字母、数字、下划线和连字符</p></section><section class="property-section"><div class="selection-heading"><h2 id="selection-title">节点选区</h2><button class="text-btn" id="select-all">全选</button></div><p class="selection-empty" id="selection-empty">使用框选工具拖出矩形，选择后可移动、缩放、旋转或删除节点</p><div id="selection-properties" hidden><div class="fields"><div><label class="field-label" for="selection-width">宽度</label><div class="unit-wrap"><input class="field num" id="selection-width" type="number" min="0.5" max="5000" step="0.5"><span class="unit">m</span></div></div><div><label class="field-label" for="selection-height">高度</label><div class="unit-wrap"><input class="field num" id="selection-height" type="number" min="0.5" max="5000" step="0.5"><span class="unit">m</span></div></div><div class="span-2"><label class="field-label" for="selection-angle">旋转角度</label><div class="pair"><input class="field num" id="selection-angle" type="number" min="-360" max="360" step="1"><span>°</span><button class="btn small" id="rotate-left" aria-label="向左旋转 15 度">−15°</button><button class="btn small" id="rotate-right" aria-label="向右旋转 15 度">+15°</button></div></div></div><p class="hint">框内拖动移动；边柄缩放单轴，角柄缩放双轴，顶部柄旋转</p><div class="selection-actions" id="selected-actions"><button class="btn small danger" id="delete-selection">删除选中节点</button><button class="btn small quiet" id="deselect">取消选中</button></div><div id="pending-actions" hidden><p class="pending-note" id="pending-warning"></p><div class="selection-actions"><button class="btn primary small" id="add-shape">添加到轨迹</button><button class="btn small" id="cancel-shape">取消放置</button></div></div></div></section><section class="property-section"><div class="row between"><span class="caption">整条轨迹</span><button class="text-btn" id="clear-track" style="color:var(--red)">清空节点</button></div><p class="hint">清空、添加图形和节点变换都可以撤销</p></section></div><div class="pane-footer"><button class="btn primary" id="save-track">保存轨迹</button><p class="hint">保存到本地轨迹库，刷新后保留；用于生成运动记录</p></div></aside>
+        </div>
+      </section>
+
+      <section class="page" id="page-watch" aria-labelledby="watch-title" hidden>
+        <div class="viewbar"><h1 id="watch-title" tabindex="-1">手表控制</h1><span class="view-description">连接、记录与当前批次</span></div>
+        <div class="workspace watch-layout">
+          <aside class="pane device-pane"><div class="scroll"><div class="device-summary"><h2 class="device-title">Keep B5</h2><div class="device-mode" id="device-mode">安卓模拟器 · 虚拟广播</div><span class="pill waiting" id="connection-pill"><span class="dot"></span><span id="connection-text">正在读取状态…</span></span><p class="hint" id="connection-help">正在检查面板拥有的广播进程</p></div><div class="device-facts"><p class="mac-label">本轮可填写地址</p><div class="mac-value num" id="sample-mac">—</div><div class="device-address-actions"><span class="pill" id="address-medium">虚拟地址</span><button class="btn small" id="copy-address" disabled><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>复制地址</button></div><p class="hint" id="address-help">附近的实体手机无法扫描这个虚拟地址</p></div><div class="sync-steps"><ol class="steps"><li class="step done" id="step-load"><span class="step-index"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span><div><h3 id="step-load-title">记录已载入</h3><p id="step-loaded">0 条记录，源文件会保留</p></div></li><li class="step current" id="step-connect"><span class="step-index">2</span><div><h3 id="step-connect-title">在 Keep 里连接 B5</h3><p id="step-connect-copy">使用上方本轮可填写地址</p><button class="text-btn" data-dialog="connect-dialog">连接步骤<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div></li><li class="step" id="step-receipt"><span class="step-index">3</span><div><h3 id="step-receipt-title">等 Keep 接收文件</h3><p id="step-receipt-copy">正在读取状态</p></div></li></ol><p class="steps-footer">文件已接收后，仍需在 Keep 对应日期核对活动来源、有效性与统计</p></div></div><div class="pane-footer"><button class="btn" id="toggle-broadcast" disabled><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg><span>停止广播</span></button><button class="btn quiet" id="watch-settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>广播与兼容设置</button><p class="hint">停止会保留记录与接收标记</p></div></aside>
+          <div class="pane watch-content"><div class="alert" id="state-warning" role="alert" hidden><span>连接状态未知，保留当前记录。恢复本地服务后重新检查</span><button class="btn small" id="retry-status">重新检查</button></div><section class="stats" aria-label="当前批次统计"><div class="stat"><p class="stat-label">已载入里程</p><div class="stat-value num"><span id="total-km">—</span><small>km</small></div><p class="stat-foot">当前批次，不是账号总里程</p></div><div class="stat"><p class="stat-label">待 Keep 接收</p><div class="stat-value num"><span id="pending-count">—</span><small>条</small></div><p class="stat-foot">连接后由 Keep 读取</p></div><div class="stat"><p class="stat-label">Keep 已接收</p><div class="stat-value num"><span id="received-count">—</span><small>条</small></div><p class="stat-foot">文件接收不代表活动有效</p></div></section><section class="pane watch-records-pane"><div class="candidate" id="candidate" hidden><div><h2>准备载入 <span id="candidate-count">0</span> 条新记录</h2><p>载入后，Keep 连接时会读取本批文件</p><p class="hint" id="load-blocked"></p></div><button class="btn primary" id="load-candidate" disabled>载入并开始同步</button></div><div class="table-toolbar"><h2>本批运动记录</h2><a class="text-btn" href="#generate" style="margin-left:auto">去生成记录<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div><div class="table-toolbar" style="min-height:40px;padding-top:0;padding-bottom:0"><div class="table-tabs" aria-label="筛选记录"><button class="table-tab" data-filter="all" aria-pressed="true">全部<span class="tab-count" id="all-count">0</span></button><button class="table-tab" data-filter="pending" aria-pressed="false">待接收<span class="tab-count" id="tab-pending">0</span></button><button class="table-tab" data-filter="received" aria-pressed="false">已接收<span class="tab-count" id="tab-received">0</span></button></div><span class="caption" id="watch-updated">正在读取…</span></div><div class="table-scroll" id="watch-table-scroll" tabindex="0" role="region" aria-label="本批运动记录表格，可滚动"><table><thead><tr><th scope="col">运动时间</th><th scope="col" class="numeric">距离 / km</th><th scope="col" class="numeric">用时</th><th scope="col">文件状态</th></tr></thead><tbody id="watch-records"></tbody></table><div class="empty" id="empty-records" hidden><h3 id="empty-title">还没有载入记录</h3><p id="empty-copy">先生成 B5 手表记录，再载入这里</p><a class="btn" id="empty-action" href="#generate">生成记录</a></div></div><div class="table-foot"><span>已接收文件不会重复发送，源文件仍保留</span><span class="num" id="visible-record-count">0 条记录</span></div></section><p class="watch-note">实验功能 · 当前面板接入 Netsim；Windows 实体蓝牙、其他兼容环境的配置入口已预留，实际能力以设置中的适配范围为准</p></div>
+        </div>
+      </section>
+    </main>
+    <footer class="statusbar"><span class="row"><span class="dot"></span>本地工作台</span><span id="status-context">正在读取配置…</span><span class="right">轨迹与文件保存在本地</span></footer>
+  </div>
+
+  <dialog class="modal" id="connect-dialog" aria-labelledby="connect-title"><button class="modal-close" data-close-dialog aria-label="关闭连接说明"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button><h2 id="connect-title">在 Keep 中连接 B5</h2><p class="note" id="connect-scope">当前是虚拟广播：在同一已准备好的官方模拟器中操作 Keep，附近实体手机看不到这个地址</p><ol class="steps"><li class="step"><span class="step-index">1</span><div><h3>先确认广播与地址均可用</h3><p>广播已停止或地址未知时，不使用上一次的地址</p></div></li><li class="step"><span class="step-index">2</span><div><h3>在 Keep 设备页添加 B5</h3><p>按页面要求填写本轮地址。请只使用上方当前有效的地址</p><div class="dialog-mac"><span class="num" id="dialog-mac">—</span><button class="btn small" id="dialog-copy">复制</button></div></div></li><li class="step"><span class="step-index">3</span><div><h3>接收完成后核对 Keep 活动</h3><p>检查对应日期、设备来源、有效性和统计</p></div></li></ol><div class="modal-actions"><button class="btn primary" data-close-dialog>明白了</button></div></dialog>
+  <dialog class="modal" id="feedback-dialog" aria-labelledby="feedback-title"><button class="modal-close" data-close-dialog aria-label="关闭说明"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button><h2 id="feedback-title">操作说明</h2><p class="note" id="feedback-copy"></p><div class="modal-actions"><button class="btn primary" data-close-dialog>返回工作台</button></div></dialog>
+  <dialog class="modal" id="clear-dialog" aria-labelledby="clear-title"><h2 id="clear-title">清空当前轨迹的节点？</h2><p class="note">保留轨迹名称与描述。清空后可以撤销，其他轨迹不受影响</p><div class="modal-actions"><button class="btn" data-close-dialog>取消</button><button class="btn danger" id="confirm-clear">清空节点</button></div></dialog>
+  <dialog class="modal" id="shortcuts-dialog" aria-labelledby="shortcuts-title"><button class="modal-close" data-close-dialog aria-label="关闭快捷键说明"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button><h2 id="shortcuts-title">轨迹编辑快捷键</h2><dl class="shortcuts"><dt>拖动 / 画笔 / 擦除 / 框选</dt><dd><kbd>H</kbd> <kbd>P</kbd> <kbd>E</kbd> <kbd>V</kbd></dd><dt>撤销 / 重做</dt><dd><kbd>Ctrl Z</kbd> / <kbd>Ctrl Shift Z</kbd></dd><dt>全选节点 / 删除所选</dt><dd><kbd>Ctrl A</kbd> / <kbd>Delete</kbd></dd><dt>移动选区（Shift 加速）</dt><dd><kbd>↑ ↓ ← →</kbd></dd><dt>适配全部轨迹</dt><dd><kbd>F</kbd></dd><dt>取消放置、拖动或选区</dt><dd><kbd>Esc</kbd></dd><dt>确认添加图形</dt><dd><kbd>Enter</kbd></dd></dl><p class="note">快捷键仅在轨迹编辑页生效，输入文字时不拦截常用编辑键。滚轮缩放，中键可临时平移</p></dialog>
+  <dialog class="modal settings-modal" id="settings-dialog" aria-labelledby="settings-title"><div class="settings-heading"><h2 id="settings-title">工作台设置</h2><button class="btn quiet icon-only" data-close-dialog aria-label="关闭设置"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div><div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button class="settings-tab" {% if not config.WATCH_ENABLED %}hidden{% endif %} data-setting-tab="broadcast" aria-pressed="true">连接与广播</button><button class="settings-tab" {% if not config.WATCH_ENABLED %}hidden{% endif %} data-setting-tab="compatibility" aria-pressed="false">兼容与适配</button><button class="settings-tab" data-setting-tab="maps" aria-pressed="false">地图服务</button></nav><div class="settings-body">
+    <section id="setting-broadcast"><h3>广播使用的蓝牙环境</h3><label class="field-label" for="transport-choice">连接路线</label><select class="field" id="transport-choice"><option value="netsim">官方 Android Emulator / Netsim</option><option value="windows">Windows 实体蓝牙 · 面板接入待完成</option><option value="other">其他传输 / 兼容层 · 预留接入</option></select><div id="netsim-options"><div class="fields"><div class="span-2"><label class="field-label" for="emulator-target">目标模拟器</label><select class="field" id="emulator-target" disabled><option>使用面板启动时指定的模拟器环境</option></select></div><div class="span-2"><label class="field-label" for="netsim-source">Netsim 连接信息</label><select class="field" id="netsim-source" disabled><option>每次启动读取当前 netsim.ini</option></select></div></div><div class="callout">虚拟广播只在对应 Netsim 环境内生效，不使用电脑实体蓝牙。多个模拟器的隔离需由接入方确认，窗口名和不同 MAC 不能证明隔离成功</div></div><div id="windows-options" hidden><div class="fields"><div class="span-2"><label class="field-label" for="bluetooth-adapter">广播蓝牙适配器</label><select class="field" id="bluetooth-adapter" disabled><option>尚未检测 · 接入后列出可广播的控制器</option></select></div><div class="span-2"><label class="field-label">广播能力</label><p class="caption">需同时支持 BLE Peripheral 与 GATT Server；普通蓝牙连接能力不足以证明可广播</p></div></div><details><summary>地址观察工具配置</summary><div class="fields"><div class="span-2"><label class="field-label" for="btvs-path">BTVS 程序位置</label><input class="field" id="btvs-path" disabled placeholder="接入后自动发现或选择程序"></div><div class="span-2"><label class="field-label" for="tshark-path">TShark 程序位置</label><input class="field" id="tshark-path" disabled placeholder="接入后自动发现或选择程序"></div></div></details><div class="callout warning">Windows 路线目前使用独立一键入口，尚未接入手表面板。当前只验收单文件；蓝牙临时更名可能短暂断开其他连接</div></div><div id="other-options" hidden><div class="fields"><div class="span-2"><label class="field-label" for="compat-provider">传输适配器 / 兼容层</label><select class="field" id="compat-provider" disabled><option>尚无完成接入验收的实现</option></select></div></div><div class="callout">预留目标选择、前置检查、启动、地址、连接及错误反馈的位置。具体配置由接入实现提供；不以 ADB 连接或模拟器能运行 Keep 代替蓝牙能力</div></div><details><summary>设备身份与本轮地址</summary><p class="hint">设备身份用于已有绑定与业务协议，沿用原状态文件；本轮可填写地址由当前广播环境提供，未知或停止时清空。实体广播地址不能用永久蓝牙地址或设备身份代替</p><dl class="definition" style="margin-top:12px"><dt>设备业务身份</dt><dd class="num" id="device-identity">—</dd><dt>本轮可填写地址</dt><dd id="settings-binding-address">未知 / 已失效</dd></dl></details><p class="settings-status">当前面板仅接入 Netsim；目标由启动配置确定。其他路线尚不能启用，不更改系统蓝牙或绑定</p></section>
+    <section id="setting-compatibility" hidden><h3>兼容层与环境检查</h3><p>配置预留围绕“目标环境是否具备本轮连接条件”，接入后逐项显示实际检查结果</p><table class="compat-table"><thead><tr><th>检查项</th><th>当前证据 / 接入边界</th></tr></thead><tbody><tr><td>官方模拟器</td><td>Android 15 / API 35 基线已测；需要准备独立运行环境</td></tr><tr><td>Keep 运行兼容</td><td>Android 9.1.120 的已测环境做过 MSA 库可逆隔离；升级后须重新核对</td></tr><tr><td>Windows 实体广播</td><td>独立入口已验证 Android 单条活动，面板未接入；适配器须支持外设广播</td></tr><tr><td>iPhone / 其他模拟器</td><td>iOS Keep 未通过发现、绑定与同步验收；BlueStacks、夜神未形成可用同步路线</td></tr><tr><td>其他兼容层</td><td>由后续传输实现声明前置条件、目标与检查结果，目前不标记为可用</td></tr></tbody></table><div class="callout warning">兼容处理可能改变运行环境。此处不提供自动隔离、重装或解除绑定；正式接入时应先说明影响并提供恢复入口</div><button class="btn" id="environment-check" style="margin-top:16px">查看环境检查范围</button><p class="settings-status">这里的版本和范围来自仓库适配文档，不代表当前电脑已检测通过</p></section>
+    <section id="setting-maps" hidden><h3>地图服务</h3><label class="field-label" for="map-provider">底图</label><select class="field" id="map-provider"><option value="classic">经典地图 · Leaflet</option><option value="fresh">新版地图 · Leaflet</option><option value="satellite">卫星地图 · Leaflet</option><option value="amap">官方高德 · 需配置 Key</option></select><div class="fields"><div class="span-2"><label class="field-label" for="map-key">高德 JS API Key</label><input class="field" id="map-key" type="password" autocomplete="off" placeholder="填写高德地图控制台提供的值"></div><div class="span-2"><label class="field-label" for="map-security-key">高德安全密钥</label><input class="field" id="map-security-key" type="password" autocomplete="off" placeholder="填写高德地图控制台提供的值"></div></div><div class="callout">高德 Key 保存到本地配置文件。经典、新版、卫星底图无需 Key；地点搜索和官方高德需要 Key</div></section>
+  </div></div><div class="settings-footer"><button class="text-btn" id="clear-map-keys">清除地图密钥</button><span class="caption"><span id="settings-note" role="status">地图配置保存在本地；未接入路线不可启用</span></span><button class="btn" data-close-dialog>取消</button><button class="btn primary" id="apply-settings">保存设置</button></div></dialog>
+  <input type="file" id="template-upload" accept=".json,application/json" hidden>
+  <dialog class="modal" id="template-dialog" aria-labelledby="template-title"><h2 id="template-title">导出参数模板</h2><form id="template-form"><label class="field-label" for="template-name">模板名称</label><input class="field" id="template-name" required maxlength="60"><div class="modal-actions"><button class="btn" type="button" data-close-dialog>取消</button><button class="btn primary" type="submit">导出模板</button></div></form></dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script>window.workbenchConfig = {page: {{ initial_page | default('generate') | tojson }}, watch: {{ config.WATCH_ENABLED | default(false) | tojson }}, token: {{ config.WATCH_TOKEN | default('') | tojson }}, candidate: {{ candidate | default(none) | tojson }}};</script>
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script src="/static/js/workbench.js"></script>
+  <script src="/static/js/shape_geometry.js"></script>
+  <script src="/static/js/selection_geometry.js"></script>
+  <script src="/static/js/map_adapter_leaflet.js"></script>
+  <script src="/static/js/map_adapter_amap.js"></script>
+  <script src="/static/js/map_engine.js"></script>
+  <script src="/static/js/search_box.js"></script>
+  <script src="/static/js/selection_layer.js"></script>
+  <script src="/static/js/track_preview.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/track_editor.js"></script>
+  {% if config.WATCH_ENABLED %}<script src="/static/js/watch.js"></script>{% endif %}
 </body>
 </html>

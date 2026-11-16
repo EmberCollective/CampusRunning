@@ -30,11 +30,13 @@
 | HTTP | 用途 |
 |---|---|
 | `GET /watch` | 面板；`?job=...` 仅显示生成结果的载入预览 |
-| `GET /api/watch/status` | running/ready/connected、mac/keep_mac、records、total_km、pending/received、error；禁止缓存 |
+| `GET /api/watch/status` | running/ready/connected、mac/keep_mac、binding_address、transport、records、total_km、pending/received、error；禁止缓存 |
 | `POST /api/watch/start` / `stop` | 启停面板拥有的广播进程，不接管其他进程 |
 | `POST /api/watch/load` | JSON `{ "job_id": "..." }`；仅载入本服务生成且校验通过的完整 B5 目录，存在旧待同步记录时拒绝替换 |
 
 面板操作和 B5 生成请求要求页面会话的 `X-Watch-Token`；服务绑定 localhost 并校验 Host。页面令牌不是 Keep 凭据。清单来自加载时的不可变字节快照，之后仅按内容哈希校验并刷新收讫标记；外部新增文件不会出现在已加载清单。`connected` 来自本次进程的真实连接/断开事件，并受进程存活状态约束，不等同于 Keep 账号绑定或活动有效。摘要时间以 UTC+08:00 展示，不暴露用户配置或坐标。
+
+当前 `transport` 为 `netsim`，`binding_address` 为 `{ "value": "AA:BB:CC:DD:EE:FF" | null, "medium": "virtual" }`。仅面板拥有的进程仍运行且广播已确认就绪时返回本轮虚拟地址，否则 `value` 为 `null`。前端读取失败也立即停用旧地址；不使用兼容保留的 `mac/keep_mac` 身份字段代替可填写地址。实体蓝牙尚未接入此接口，不沿用 Netsim 的地址规则。
 
 模拟器 `--stop-file` 必须是已有目录中的新路径；文件出现后正常停止广播。面板退出先通知其子进程，超时只终止自己拥有的进程树。进程强杀或主机断电不能保证正常退出；已持久化的收讫标记保留。
 

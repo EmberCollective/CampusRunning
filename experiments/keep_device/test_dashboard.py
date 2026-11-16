@@ -69,6 +69,7 @@ def test_panel_uses_loaded_snapshot_receipts_and_live_process(tmp_path, source, 
     watch.ready = watch.connected = True
     before = watch.snapshot()
     assert before["connected"] and before["pending"] == 1
+    assert before["binding_address"] == {"value": watch.mac, "medium": "virtual"}
     assert before["total_km"] == .238  # Wire distance is rounded to whole meters.
     source.with_name("unloaded.sport44").write_bytes(b"not a workout")
     assert len(watch.snapshot()["records"]) == 1
@@ -77,6 +78,17 @@ def test_panel_uses_loaded_snapshot_receipts_and_live_process(tmp_path, source, 
     assert after["received"] == 1 and after["pending"] == 0
     watch.process.poll.return_value = 1
     assert not watch.snapshot()["connected"] and not watch.snapshot()["running"]
+    assert watch.snapshot()["binding_address"]["value"] is None
+
+
+def test_binding_address_requires_confirmed_advertisement(watch):
+    watch.process = Mock()
+    watch.process.poll.return_value = None
+    assert watch.snapshot()["binding_address"]["value"] is None
+    watch.ready = True
+    assert watch.snapshot()["binding_address"]["value"] == watch.mac
+    watch.ready = False
+    assert watch.snapshot()["binding_address"]["value"] is None
 
 
 def test_start_rejects_corrupt_files_before_launch(tmp_path, source, monkeypatch):

@@ -2,6 +2,7 @@
 
 import datetime
 import random
+import struct
 from dataclasses import replace
 from pathlib import Path
 
@@ -46,6 +47,33 @@ def test_native_generation_has_consistent_summary(native, distance, seed):
     assert config.min_pace == config.max_pace == 7.5
     assert Path(result.filepath).suffix == ".sport44"
     WorkoutFiles(Path(result.filepath))
+
+
+@pytest.mark.parametrize("local_time, expected_utc", [
+    ("20:00", "2026-11-16T12:00:00+00:00"),
+    ("21:00", "2026-11-16T13:00:00+00:00"),
+    ("00:05", "2026-11-15T16:05:00+00:00"),
+])
+def test_native_local_time_is_utc_on_wire_and_local_in_inventory(native, local_time, expected_utc):
+    exporter, engine, config = native
+    config.start_time_min = config.start_time_max = local_time
+    result = engine.generate_single(datetime.date(2026, 11, 16), 1.0, config)
+    path = Path(result.filepath)
+    encoded = path.read_bytes()
+    description_length = struct.unpack_from("<h", encoded, len(encoded) - 14)[0]
+    _, duration, start, end = struct.unpack_from("<4i", encoded, len(encoded) - 14 - description_length)
+    # The shared generator randomizes seconds even for a single selected minute.
+    seconds = exporter.data.start_time.second
+    expected = datetime.datetime.fromisoformat(expected_utc).replace(second=seconds)
+    assert start == int(expected.timestamp())
+    assert end - start == duration == result.duration_seconds
+    # Check point timestamps as well as the summary; shifting only one corrupts the activity.
+    for index, point in enumerate(exporter.data.trackpoints):
+        elapsed = (datetime.datetime.fromisoformat(point.time) - exporter.data.start_time).total_seconds()
+        assert struct.unpack_from("<i", encoded, 3 + index * 65 + 40)[0] == start + elapsed
+    record, = WorkoutFiles(path).inventory()
+    assert record["date"] == f"2026-11-16T{local_time}:{seconds:02d}+08:00"
+    assert datetime.datetime.fromisoformat(record["date"]).astimezone(datetime.timezone.utc) == expected
 
 
 def test_invalid_data_and_existing_output_are_preserved(native, tmp_path, monkeypatch):

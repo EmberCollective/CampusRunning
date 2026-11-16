@@ -1,5 +1,7 @@
 # Keep B5 设备同步实验
 
+返回[文档目录](../README.md)。开始前阅读[适配范围与环境要求](../reference/compatibility.md)：本文命令均从仓库根目录运行；模拟器与实体蓝牙的入口、依赖和可见范围不同。
+
 官方 API35 模拟器现也完成一次 B5 活动同步及重启保留对照，但需要可逆隔离 MSA 安装库；运行环境已有干预，长期稳定未通过。模拟器步骤与恢复边界见[其他连接方式](#其他连接方式)。
 
 Android 真机官方 Keep 9.1.120 已通过 Windows 蓝牙原型导入一条 1 km / 411 秒活动，来源显示 **“Keep 手环 B5”**，无无效标记并计入统计；重开 App 后记录和统计保留，未新增重复活动。当前是独立研究原型；可选手表面板复用旧 Web 页面，默认主应用不加载实验依赖。iOS 兼容和 Windows 稳定重连尚未通过。
@@ -9,9 +11,9 @@ Android 真机官方 Keep 9.1.120 已通过 Windows 蓝牙原型导入一条 1 k
 当前使用目标是**启动电脑端脚本，在官方 Keep 输入本轮 MAC，完成一轮连接和数据传输**。手机不需要 nRF Connect、USB 调试或系统蓝牙配对；下文“绑定”指 Keep 内的设备绑定。电脑仍需独立实验环境、BTVS 和 TShark。不承诺地址固定、跨重启自动重连或长期保持连接。
 
 - **照步骤运行：**本文按 Windows 真机路线说明准备、生成、连接、同步和退出。
-- **查模块、接口和格式：**[CONTRACT.md](CONTRACT.md)。
-- **接入其他蓝牙后端：**[传输接口设计](TRANSPORT.md)；类型已定义，现有后端尚未迁移。
-- **查证据、方案取舍和三组对照：**[issue #63 调研报告](../../docs/research/keep-third-party-source-63.md)。
+- **查模块、接口和格式：**[接口及协议契约](../reference/protocol-contract.md)。
+- **接入其他蓝牙后端：**[传输接口设计](../design/transport-interface.md)；类型已定义，现有后端尚未迁移。
+- **查证据、方案取舍和三组对照：**[issue #63 调研报告](../research/third-party-source-63.md)。
 
 ```mermaid
 flowchart LR
@@ -105,7 +107,7 @@ print(f"{workout_path.stat().st_size} bytes")
 '@ | & $windowsPython -
 ```
 
-样例输出新 `.sport44` 路径和文件大小；点数与大小随轨迹和采样而变。生成失败时检查异常，不把空结果当成功；若触发分段边界拒绝，按[输入契约](CONTRACT.md#exportdata-输入单位)检查，不修改编码器绕过校验。后续候选应明确设置新的日期/开始时间，不通过删除接收标记重送已同步记录。
+样例输出新 `.sport44` 路径和文件大小；点数与大小随轨迹和采样而变。生成失败时检查异常，不把空结果当成功；若触发分段边界拒绝，按[输入契约](../reference/protocol-contract.md#exportdata-输入单位)检查，不修改编码器绕过校验。后续候选应明确设置新的日期/开始时间，不通过删除接收标记重送已同步记录。
 
 将刚打印的完整路径赋给 `$workoutPath`。不要自动选择目录里“最新文件”，以免把另一条活动交给手机。
 
@@ -170,7 +172,7 @@ $workoutPath = 'C:/path/to/private-lab/candidate/2026-11-14_1.0km.sport44'
 & $windowsPython -m experiments.keep_device.windows --model B5 --duration 600 --keep-name --state $statePath --workout $workoutPath
 ```
 
-`--keep-name` 会更名并重启选定的蓝牙适配器，短暂断开电脑其他蓝牙连接；退出时恢复名称和无线电状态。若已独立确认广播名具有 `KeepB5` 前缀，可省略该参数，默认入口保留电脑当前名称。清理过程见[运行与清理契约](CONTRACT.md#运行与清理边界)。
+`--keep-name` 会更名并重启选定的蓝牙适配器，短暂断开电脑其他蓝牙连接；退出时恢复名称和无线电状态。若已独立确认广播名具有 `KeepB5` 前缀，可省略该参数，默认入口保留电脑当前名称。清理过程见[运行与清理契约](../reference/protocol-contract.md#运行与清理边界)。
 
 等到日志出现 `ADVERTISING`，且观察窗口出现本轮 `AIR_MAC` 后再操作手机。`adapter_address` 是设备信息与 state 使用的电脑适配器身份；手机输入观察窗口中的 `KEEP_MAC`。`--state` 和 `--workout` 独立；提供文件不会自动把设备设为已绑定。
 
@@ -250,7 +252,7 @@ Android Keep 将添加时输入的 MAC 保存为重连目标，并按地址匹�
 
 2026-11-16，官方 API35 模拟器在隔离 MSA 原生库后，以原签 Keep 9.1.120 完成 B5 绑定、3306 字节 SPORT44 传输及收讫。活动显示“Keep 手环 B5”、1.00 km、6 分 51 秒，无无效标记；详情配速 6′51″/km、平均步频 162，单段数据一致。模拟器重启后原登录态和记录保留，Bumble 自动重连，已收讫文件目录为空，未观察到本轮重复记录。该过程修改了安装运行环境，且模拟器曾意外退出、原因未明；一次恢复成功不代表长期稳定或正式兼容修复。
 
-Bumble/Netsim 路线使用独立 Python 3.13 环境和 [requirements.txt](requirements.txt)。安装后启动支持 Netsim 的现有 Android Emulator：
+Bumble/Netsim 路线使用独立 Python 3.13 环境和 [requirements.txt](../../../experiments/keep_device/requirements.txt)。安装后启动支持 Netsim 的现有 Android Emulator：
 
 ```powershell
 $toolEnv = Join-Path $env:TEMP 'campusrunning-keep-tools'
@@ -263,7 +265,7 @@ $avdName = 'YourExistingAVD'
 & "$sdkRoot/emulator/emulator.exe" -avd $avdName -packet-streamer-endpoint default
 ```
 
-开启客体蓝牙，在模拟器内自行登录 Keep 并授予附近设备权限。在另一个终端重新设置 `$toolPython` 和 `$workoutPath` 的完整路径，再运行原型。PORT 从当前 `%LOCALAPPDATA%/Temp/netsim.ini` 的 `grpc.port` 取得；每次模拟器重启都重新读取，多实例时核对目标。地址必须是本实验生成的合法随机静态地址，首次生成后固定复用，不能照搬真实设备身份。使用独立于 Windows 入口的私人 state 和地址文件：
+开启客体蓝牙，在模拟器内自行登录 Keep 并授予附近设备权限。在另一个终端重新设置 `$toolPython` 和 `$workoutPath` 的完整路径，再运行原型。PORT 从当前 `%LOCALAPPDATA%/Temp/netsim.ini` 的 `grpc.port` 取得；每次模拟器重启都重新读取。当前按单实例验收，多实例选择与隔离未实现，不能只凭端口认定目标正确。地址必须是本实验生成的合法随机静态地址，首次生成后固定复用，不能照搬真实设备身份。使用独立于 Windows 入口的私人 state 和地址文件：
 
 ```powershell
 $netsimLab = 'C:/path/to/private-lab'
@@ -309,7 +311,7 @@ Keep 查询目录后逐条读取，不需要每条重新绑定。控制台先显
 | iOS | nRF Connect 设备信息往返通过；官方 Keep 直接绑定/同步未通过，同账号活动显示未验收 |
 | 数据覆盖 | 本次 1 km 候选有效；多公里、长时和边界输入仅离线测试 |
 | 服务端契约 | 统计和重开保留已观察；独立 HTTP 重读、一般去重/阈值未知 |
-| 其他固件功能 | 暂停、请求重组、ACK/PUSH、多手机、未知传感器字段尚未实现或验证，详见 CONTRACT |
+| 其他固件功能 | 暂停、请求重组、ACK/PUSH、多手机、未知传感器字段尚未实现或验证，详见[协议契约](../reference/protocol-contract.md) |
 | 产品交付 | 可选手表面板复用旧四模式，提供原生 B5 生成、显式载入和状态查看；默认应用不加载实验依赖，未打包发布 |
 
 本次主项目与实验模块组合回归为 **564 项通过、5 个子测试通过**。离线检查、真实绑定、文件收讫和有效活动入账分别验收，不能互相替代。现有 `pytest.ini` 的 `testpaths=tests` 不会自动发现本目录，现有 CI 的 `python -m pytest` 也不覆盖这些实验测试；修改后必须显式运行完整目录。在装有 Bumble、Flask、Garmin SDK 和 pytest 的实验环境运行：
@@ -320,6 +322,6 @@ Keep 查询目录后逐条读取，不需要每条重新绑定。控制台先显
 
 Windows 抓包使用微软 [BTVS](https://learn.microsoft.com/en-us/windows-hardware/drivers/bluetooth/testing-btp-tools-btvs) 与 Wireshark。独立诊断示例的 `-Remote off` 会尝试启动本机 Wireshark；启动器使用 `-Remote on` 避免额外启动图形客户端，再让本次 TShark 接入。两种参数都**不保证 TCP 仅监听本机接口**；本次观察到 BTVS 监听全部接口，而查询入口只连接 `127.0.0.1`。保持现有防火墙限制，不为查询开放远程访问，结束后关闭本次观察进程和 BTVS。MAC 查询不需要 Full Packet Logging 或 SSP Debug；早前完整活动核验曾开启 Full Packet Logging 并在结束后清理覆盖设置，没有旧基线时只报告恢复默认，不能宣称精确还原原值。
 
-固定地址的现成项目与环境成本见[独立调研](../../docs/research/keep-b5-mac-stability.md)；当前优先保留 Windows/Bless，显示本轮实际地址。
+固定地址的现成项目与环境成本见[独立调研](../research/mac-stability.md)；当前优先保留 Windows/Bless，显示本轮实际地址。
 
 Bumble 可在启动前设置 `BUMBLE_SNOOPER=pcapsnoop:file:C:/path/to/private-lab/new-capture.pcap`；父目录须存在，文件名须新建以避免覆盖。使用现成解码工具检查，文件非空不等于业务成功。日志、截图、堆快照和原始抓包仅留本机；不把真实轨迹、身份或凭据写进仓库。

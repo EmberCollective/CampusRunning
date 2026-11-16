@@ -2,7 +2,8 @@
 
 Only standard-library types belong here. Target discovery and backend-specific
 configuration are supplied when constructing an implementation, not by the B5
-protocol or the watch panel. See TRANSPORT.md for lifecycle and delivery rules.
+protocol or the watch panel. See docs/keep-b5/design/transport-interface.md for
+lifecycle and delivery rules.
 """
 
 from dataclasses import dataclass

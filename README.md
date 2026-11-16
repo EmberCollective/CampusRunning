@@ -151,7 +151,7 @@ python main.py daily --template easy_run --track campus_default --zip \
 - [模板创建指南](config/templates/TEMPLATE_GUIDE.md)
 - [高德 Key 申请教程](docs/amap_key_guide.md)
 - [Keep 导入教程](guied.md)
-- Keep 设备适配实验：[连接与运行](experiments/keep_device/README.md) · [接口与协议契约](experiments/keep_device/CONTRACT.md) · [调研与验收范围](docs/research/keep-third-party-source-63.md)。Android B5 单条有效活动已验证，iOS 和稳定重连尚未通过。
+- Keep 设备适配实验（私有版）：[分类文档](docs/keep-b5/README.md) · [适配范围与环境要求](docs/keep-b5/reference/compatibility.md) · [连接与运行](docs/keep-b5/guides/connection-and-running.md)。面板仅接官方 API 35 模拟器；实体 Android 手机使用独立 Windows 蓝牙入口。iOS 和稳定重连尚未通过。
 - [更新日志](CHANGELOG.md)
 - 维护者手册：[构建与打包](docs/maintainer/build.md) · [发版流程](docs/maintainer/release.md) · [工具速查](docs/maintainer/tools.md)
 

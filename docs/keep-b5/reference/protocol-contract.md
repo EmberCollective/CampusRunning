@@ -1,25 +1,25 @@
 # Keep 设备实验接口与数据契约
 
-本文描述当前代码的输入、输出和边界；操作步骤见 [README](README.md)，逆向方法、版本、三组活动对照及原始证据说明见[调研报告](../../docs/research/keep-third-party-source-63.md)。它不是 Keep 官方协议或完整固件规范。真机接受范围限定 Android Keep 9.1.120 的本次 B5、1 km 候选。
+本文描述当前代码的输入、输出和边界；操作步骤见[连接与运行](../guides/connection-and-running.md)，环境及已测范围见[兼容性说明](compatibility.md)，逆向方法、版本、三组活动对照及原始证据说明见[调研报告](../research/third-party-source-63.md)。它不是 Keep 官方协议或完整固件规范。真机接受范围限定 Android Keep 9.1.120 的本次 B5、1 km 候选。
 
 ## 模块与 Python 接口
 
-可替换传输接口的设计见 [TRANSPORT.md](TRANSPORT.md)，纯标准库类型位于 [transport.py](transport.py)。现有后端尚未迁移，面板仍使用 Netsim；不能将接口定义视为实体广播或多实例支持已经完成。
+可替换传输接口的设计见[传输接口契约](../design/transport-interface.md)，纯标准库类型位于 [transport.py](../../../experiments/keep_device/transport.py)。现有后端尚未迁移，面板仍使用 Netsim；不能将接口定义视为实体广播或多实例支持已经完成。
 
 | 模块 | 入口 | 输入与输出 / 职责 |
 |---|---|---|
-| [history.py](history.py) | `encode_workout(data: ExportData) -> bytes` | 将既有导出数据编码为单条 RUN=2 SPORT44；不生成轨迹、不转换坐标、不访问账号或蓝牙 |
-| [exporter.py](exporter.py) | `B5Exporter(BaseExporter)` | 构造注入旧生成引擎；校验轨迹末点距离/首末时长与摘要一致，编码后 CRC 校验，原子发布 `.sport44` 且拒覆盖 |
-| [dashboard.py](dashboard.py) | `python -m experiments.keep_device.dashboard` | 仅本机的可选旧 Web 扩展，注入 B5 导出器，管理一个自有 Netsim 子进程和固定文件清单 |
-| [files.py](files.py) | `WorkoutFiles(path)` 或 `WorkoutFiles(None, paths=[...])`；`accepts(payload)`；`reply(payload)` | 启动时读取固定快照；请求/回复为 `SID + CID + protobuf`，按 UUID 路由读取并维护每文件接收标记 |
-| [state.py](state.py) | `BindingState(path, mac)`；`accepts(payload)`；`reply(payload)` | 保存设备绑定和配置；读写私人 JSON，状态成功落盘后回复 |
-| [btcp.py](btcp.py) | `DeviceInfoSession(mac, state=None, model="B3", workout=None)` | 按连接维护设备信息和 B3 发包序号；`reply_packets(request, limit)` 返回通知字节列表 |
-| [simple.py](simple.py) | `decode_request(packet)`；`encode_response(payload, request_id, limit)` | B5 校验与分片；解码返回请求 ID 和标准业务载荷，编码返回各通知包 |
-| [protocol.py](protocol.py) | `advertisement(name)`；`b3_service(...)` | Bumble 广播和 GATT 服务；历史命名 `b3_service` 同时支持 B3/B5 |
-| [emulator.py](emulator.py) | `python -m experiments.keep_device.emulator` | 将共享业务接到 Bumble transport，例如 Android Netsim |
-| [windows.py](windows.py) | `python -m experiments.keep_device.windows` | Bless/WinRT 真实蓝牙；有界运行、单订阅客户端、串行通知和退出清理 |
-| [windows_mac.py](windows_mac.py) | `python -m experiments.keep_device.windows_mac --tshark PATH` | 从本机 BTVS 的 TShark 解码字段观察实际广播 MAC；不修改蓝牙、绑定或运动文件 |
-| [launcher.py](launcher.py) / [start-b5.ps1](start-b5.ps1) | 管理员启动入口，接收 BTVS/TShark、state、可选 SPORT44 和时长 | 按顺序启动地址观察与 B5，在同一窗口显示地址、订阅、业务回复及文件发送进度，并管理本次进程退出 |
+| [history.py](../../../experiments/keep_device/history.py) | `encode_workout(data: ExportData) -> bytes` | 将既有导出数据编码为单条 RUN=2 SPORT44；不生成轨迹、不转换坐标、不访问账号或蓝牙 |
+| [exporter.py](../../../experiments/keep_device/exporter.py) | `B5Exporter(BaseExporter)` | 构造注入旧生成引擎；校验轨迹末点距离/首末时长与摘要一致，编码后 CRC 校验，原子发布 `.sport44` 且拒覆盖 |
+| [dashboard.py](../../../experiments/keep_device/dashboard.py) | `python -m experiments.keep_device.dashboard` | 仅本机的可选旧 Web 扩展，注入 B5 导出器，管理一个自有 Netsim 子进程和固定文件清单 |
+| [files.py](../../../experiments/keep_device/files.py) | `WorkoutFiles(path)` 或 `WorkoutFiles(None, paths=[...])`；`accepts(payload)`；`reply(payload)` | 启动时读取固定快照；请求/回复为 `SID + CID + protobuf`，按 UUID 路由读取并维护每文件接收标记 |
+| [state.py](../../../experiments/keep_device/state.py) | `BindingState(path, mac)`；`accepts(payload)`；`reply(payload)` | 保存设备绑定和配置；读写私人 JSON，状态成功落盘后回复 |
+| [btcp.py](../../../experiments/keep_device/btcp.py) | `DeviceInfoSession(mac, state=None, model="B3", workout=None)` | 按连接维护设备信息和 B3 发包序号；`reply_packets(request, limit)` 返回通知字节列表 |
+| [simple.py](../../../experiments/keep_device/simple.py) | `decode_request(packet)`；`encode_response(payload, request_id, limit)` | B5 校验与分片；解码返回请求 ID 和标准业务载荷，编码返回各通知包 |
+| [protocol.py](../../../experiments/keep_device/protocol.py) | `advertisement(name)`；`b3_service(...)` | Bumble 广播和 GATT 服务；历史命名 `b3_service` 同时支持 B3/B5 |
+| [emulator.py](../../../experiments/keep_device/emulator.py) | `python -m experiments.keep_device.emulator` | 将共享业务接到 Bumble transport，例如 Android Netsim |
+| [windows.py](../../../experiments/keep_device/windows.py) | `python -m experiments.keep_device.windows` | Bless/WinRT 真实蓝牙；有界运行、单订阅客户端、串行通知和退出清理 |
+| [windows_mac.py](../../../experiments/keep_device/windows_mac.py) | `python -m experiments.keep_device.windows_mac --tshark PATH` | 从本机 BTVS 的 TShark 解码字段观察实际广播 MAC；不修改蓝牙、绑定或运动文件 |
+| [launcher.py](../../../experiments/keep_device/launcher.py) / [start-b5.ps1](../../../experiments/keep_device/start-b5.ps1) | 管理员启动入口，接收 BTVS/TShark、state、可选 SPORT44 和时长 | 按顺序启动地址观察与 B5，在同一窗口显示地址、订阅、业务回复及文件发送进度，并管理本次进程退出 |
 
 `accepts()` 只做路由/形状检查，不代表 protobuf、字段或业务已通过验证。非法输入通常抛 `ValueError`；`UnsupportedRequest` 是其子类；文件和状态读写失败可抛 `OSError`。传输层据此拒绝业务回复，不将异常文本或业务载荷写入诊断日志。
 
@@ -42,7 +42,7 @@ Windows 启动入口面向一轮短期连接与同步，手机只使用官方 Ke
 
 ### ExportData 输入单位
 
-模型定义复用 [src/core/models.py](../../src/core/models.py)。编码器不会读取 FIT、TCX 或 JSON，也不会重新规划轨迹。
+模型定义复用 [src/core/models.py](../../../src/core/models.py)。编码器不会读取 FIT、TCX 或 JSON，也不会重新规划轨迹。
 
 | 输入 | 要求 | 当前线值 |
 |---|---|---|
@@ -81,7 +81,7 @@ Bumble 的 `--write-characteristic 2` 只用于反向对照，当前已验证方
 
 Windows `adapter_address` 用于 DeviceInfo 和 state 文件，空中临时地址由系统管理；手机手动绑定输入的是本次扫描地址，两者不可混用。Bumble 使用本实验生成的随机静态地址；带 `--state` 时必须显式 `--address`，后续复用同一地址。
 
-`windows_mac` 必须在广播启动前连接 BTVS 默认 TCP 端口 24352，通过 TShark 解析 HCI；只在相同广播句柄的配置、190a 服务、随机地址、可连接/可扫描传统广播属性及启用命令均有成功响应后，输出 `AIR_MAC` 和去冒号的 `KEEP_MAC`。失败响应不应用；停止、移除或控制器重置后失效，多组匹配时报告歧义。当前限定单控制器和上述 Windows HCI 模式，不以适配器地址补缺，不保证地址稳定。它不写原始抓包；观察结束后不保证旧输出仍然有效，手机绑定/同步仍须独立验收。BTVS 捕获流须空闲，不能与自动连接的 Wireshark 同时使用；`-Remote off` 不代表只监听 loopback，网络和退出边界见 README。
+`windows_mac` 必须在广播启动前连接 BTVS 默认 TCP 端口 24352，通过 TShark 解析 HCI；只在相同广播句柄的配置、190a 服务、随机地址、可连接/可扫描传统广播属性及启用命令均有成功响应后，输出 `AIR_MAC` 和去冒号的 `KEEP_MAC`。失败响应不应用；停止、移除或控制器重置后失效，多组匹配时报告歧义。当前限定单控制器和上述 Windows HCI 模式，不以适配器地址补缺，不保证地址稳定。它不写原始抓包；观察结束后不保证旧输出仍然有效，手机绑定/同步仍须独立验收。BTVS 捕获流须空闲，不能与自动连接的 Wireshark 同时使用；`-Remote off` 不代表只监听 loopback，网络和退出边界见连接与运行说明。
 
 ### B3 BTCP
 
@@ -129,11 +129,11 @@ DeviceInfo 使用自身 MAC 去冒号的大写文本、`LAB` 前缀序列号、�
 
 state JSON 保存 `schema_version=1`、MAC、bound 和 config。时间/用户配置保存标量，其余支持项保存 protobuf 十六进制。父目录必须已存在；文件缺失时创建，损坏、未知结构或 MAC 不匹配时拒绝。临时文件 flush/fsync 后原子替换成功才更新内存并回复；一份 state 只能由一个进程使用。
 
-Keep 在设备回复成功后才提交服务器绑定，未确认服务器失败时自动回滚设备。断线不清除 bound；解绑保留 config 和运动文件。日常恢复使用同一启动脚本的 `-ResetBinding`（启动器 `--reset-binding`）：仅在用户已于 Keep 解绑后，显式重置本地 bound，保留 config、运动文件与接收标记。默认启动不重置；该参数不能解除账号云端绑定。底层 `state --reset-binding` 保留为诊断接口，日常操作不要求单独调用，顺序见 README。
+Keep 在设备回复成功后才提交服务器绑定，未确认服务器失败时自动回滚设备。断线不清除 bound；解绑保留 config 和运动文件。日常恢复使用同一启动脚本的 `-ResetBinding`（启动器 `--reset-binding`）：仅在用户已于 Keep 解绑后，显式重置本地 bound，保留 config、运动文件与接收标记。默认启动不重置；该参数不能解除账号云端绑定。底层 `state --reset-binding` 保留为诊断接口，日常操作不要求单独调用，顺序见连接与运行说明。
 
 ## 文件 RPC 与收讫
 
-请求/回复使用 Google protobuf，字段号见 [files.py](files.py)。请求含 SID/CID 最多 64 字节；未知字段拒绝。
+请求/回复使用 Google protobuf，字段号见 [files.py](../../../experiments/keep_device/files.py)。请求含 SID/CID 最多 64 字节；未知字段拒绝。
 
 | 命令 | 请求 | 回复与状态 |
 |---|---|---|
@@ -225,7 +225,7 @@ SPORT44 删除请求在原型中表示收讫：先原子写入同目录 `<文件
 
 `emulator.py` 直接使用 Bumble `android-netsim` transport，与 Windows 启动器的状态和运行依赖隔离。重启后读取本轮 `netsim.ini` 的 `grpc.port`，显式复用同一实验静态随机地址、state 和指定 SPORT44；保留接收标记，不能把目录为空视为传输故障。该入口输出连接、业务及文件日志，没有 Windows 启动器的汇总进度显示。Netsim 验收不能代替实体蓝牙或 iOS 验收。
 
-2026-11-16 API35 对照在将安装目录的 MSA 库可逆改名后完成，APK 与签名未改、登录数据保留，但安装运行环境有干预；步骤及恢复边界见 [README](README.md#api35-的-msa-启动故障与可逆隔离)。`0e/13` 为辅助运动联动状态请求，当前仍拒绝，不以猜测应答消除等待；本轮设置随后自行完成。
+2026-11-16 API35 对照在将安装目录的 MSA 库可逆改名后完成，APK 与签名未改、登录数据保留，但安装运行环境有干预；步骤及恢复边界见 [连接与运行](../guides/connection-and-running.md#api35-的-msa-启动故障与可逆隔离)。`0e/13` 为辅助运动联动状态请求，当前仍拒绝，不以猜测应答消除等待；本轮设置随后自行完成。
 
 `launcher.py` 先校验仓库外 state/运动文件与工具路径，确认 BTVS 端口未被占用，再启动本次 BTVS 和 TShark；只有捕获进程存活且 TCP 已接入，才启动 B5。它不接管其他抓包进程，不自动重置绑定或接收标记，不写原始抓包。地址观察中断或未取得有效 MAC 会报错并停止原型，不能把旧地址或适配器地址作为成功结果。
 

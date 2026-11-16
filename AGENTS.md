@@ -7,7 +7,7 @@
 | 公开版 | `EmberCollective/CampusRunning`，PUBLIC；本地 `origin` 的旧个人地址也重定向到该公开仓库，`upstream` 同样指向它 | 通用轨迹生成、四种规划模式、FIT/TCX 导出及公开 Web/桌面功能 |
 | 私有版 | `YuShenLiu06/CampusRunning-private`，PRIVATE、独立仓库；本地远程名 `private`，云端主分支 `main` | 保留公开版基础，另含 Keep B5 设备模拟、协议适配、原生 SPORT44 生成、批量同步、手表管理和传输接口设计 |
 
-- **Keep 设备功能不开源。** `experiments/keep_device/`、相关逆向调研/契约，以及主生成器、Web 和协作说明中为此增加的接入代码，都属于私有版范围。不能只按目录过滤后便认定其余修改可公开。
+- **Keep 设备功能不开源。** `experiments/keep_device/`、`docs/keep-b5/` 中的使用说明、逆向调研与契约，以及主生成器、Web 和协作说明中为此增加的接入代码，都属于私有版范围。不能只按目录过滤后便认定其余修改可公开。
 - 当前私有开发线只能推送到已核实为 PRIVATE 的 `private` 远程。日常显式使用 `git push private HEAD:main`；推送前检查远程 URL、目标仓库可见性与提交范围，不凭远程名称或本地分支名判断隐私。目标不明或可见性变化时停止推送。
 - 不向公开仓库推送私有提交/分支/标签，不将这些内容放进公开 PR、Issue、Release、附件或截图，也不把私有仓库改为公开。公开版改动应从公开基线单独准备，只挑选确认可公开的通用修复，不能整线合并或镜像私有主线。
 - 私有仓库不意味着可以提交运行资料：账号、密钥、APK/DEX、抓包、日志、设备状态、运动轨迹及生成文件仍存仓库外。私有版本部署与发布必须以私有目标为准，不沿用公开版发布目标。
@@ -24,15 +24,16 @@
 
 ## Keep 设备适配实验
 
-- 可替换蓝牙接口定义在 `experiments/keep_device/transport.py`，设计契约见同目录 `TRANSPORT.md`；当前尚未迁移运行入口。模拟器/硬件选择由接入方负责，公共层保持 B5 协议与数据职责；业务身份 MAC 不等于本轮广播 MAC，未知地址不得猜测或用永久地址代替。
+- 文档集中在 [docs/keep-b5/](docs/keep-b5/README.md)，按使用指南、参考、设计、研究分类。[适配范围与环境要求](docs/keep-b5/reference/compatibility.md)记录具体版本和验收边界；当前面板仅接官方 Android Emulator API 35 / Netsim，实体 Android 手机走独立 Windows/Bless 入口，iOS 与多模拟器隔离未通过验收。
+- 可替换蓝牙接口定义在 `experiments/keep_device/transport.py`，设计契约见[传输接口](docs/keep-b5/design/transport-interface.md)；当前尚未迁移运行入口。模拟器/硬件选择由接入方负责，公共层保持 B5 协议与数据职责；业务身份 MAC 不等于本轮广播 MAC，未知地址不得猜测或用永久地址代替。
 
 - 模块位于 `experiments/keep_device/`，默认主应用 CLI/Web 不加载实验依赖。可选 `dashboard.py` 复用旧 Web 四模式，通过构造注入 `B5Exporter` 原生输出并提供 `/watch`；不要将实验依赖加入主应用依赖，不复制四模式生成逻辑。
 - `B5Exporter` 校验摘要与轨迹一致，原子发布且拒覆盖；共享生成器按实际几何补足目标距离与整公里采样。不得通过缩放距离字段或跳过编码校验来生成 B5。面板生成不自动同步，用户点击载入后才切换广播；固定清单、按文件独立收讫，面板只能管理自己启动的进程。
-- 修改前阅读[连接与运行说明](experiments/keep_device/README.md)、[接口及协议契约](experiments/keep_device/CONTRACT.md)；证据与兼容性背景见 [issue #63 调研](docs/research/keep-third-party-source-63.md)。
+- 修改前阅读[连接与运行说明](docs/keep-b5/guides/connection-and-running.md)、[接口及协议契约](docs/keep-b5/reference/protocol-contract.md)；证据与兼容性背景见 [issue #63 调研](docs/keep-b5/research/third-party-source-63.md)。
 - `history.py` 将已有、已转换为 WGS-84 的 `ExportData` 编码为 B5 SPORT44；`files.py` 管理按 UUID 路由的文件队列和独立收讫标记；`state.py` 管理绑定与配置；`windows.py` / `emulator.py` 分别复用 Bless / Bumble 提供蓝牙传输。不要再次转换坐标或另写蓝牙栈。
 - 模拟器 `emulator.py --workout-dir` 支持固定的 1–64 条 SPORT44（合计最多 64 MiB），与 `--workout` 互斥；Windows 一键入口仍是单文件。2026-11-16 已实测 44 条完整领取并看到本批设备来源记录，但未逐条核验全部有效性或测试批量断线恢复，不删除收讫标记强制重发。
 - `start-b5.ps1` / `launcher.py` 是 Windows 一键入口，复用 `windows_mac.py` 和电脑端 BTVS/TShark 显示本轮广播 MAC、连接应答及发送进度；通过 `windows.py --stop-file` 正常退出。手机日常只需官方 Keep，不要求 nRF 或系统配对；地址变化后走受控重绑，不承诺固定地址或长期连接。
-- `emulator.py` 是独立 Bumble/Netsim 入口，不需要 BTVS/TShark 或实体蓝牙；复用同一实验静态地址、state 和接收标记，每轮读取新的 Netsim 端口。API35 在可逆隔离 MSA 安装库后已通过 B5 绑定、完整传输、设备来源、无无效标记及重启保留；这是修改安装运行环境后的单次恢复证据，不是长期稳定或 iOS 验收，操作与恢复见实验 README。
+- `emulator.py` 是独立 Bumble/Netsim 入口，不需要 BTVS/TShark 或实体蓝牙；复用同一实验静态地址、state 和接收标记，每轮读取新的 Netsim 端口。API35 在可逆隔离 MSA 安装库后已通过 B5 绑定、完整传输、设备来源、无无效标记及重启保留；这是修改安装运行环境后的单次恢复证据，不是长期稳定或 iOS 验收，操作与恢复见连接与运行说明。
 - B5 未加载运动文件时仍须回应已支持的空目录 RPC，不能因省略 `--workout` 阻断初始化；不自动清空绑定或接收标记来重试。显式 `-ResetBinding` / `--reset-binding` 仅在用户已于 Keep 解绑后重置本地 bound，保留配置与接收标记。
 - 接收标记仅代表设备文件已领取，不代表活动有效；涉及协议或导入的修改须区分离线测试、真实连接、完整传输、活动来源与有效性验收。测试入口为 `python -m pytest experiments/keep_device -q`，需使用独立实验环境。
 - Android Keep 9.1.120 已完成单条有效活动验收和模拟器 44 条文件领取；iOS Keep、稳定重连及批量全部活动有效性未通过验收。不得把原型描述为已集成的正式导入功能。

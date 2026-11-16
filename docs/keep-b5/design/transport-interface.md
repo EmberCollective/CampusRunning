@@ -1,6 +1,8 @@
 # 可替换蓝牙传输接口
 
-这是下一步接入的接口契约，类型定义见 [transport.py](transport.py)。现有 Netsim 和 Windows 入口仍可运行，但尚未改为实现此接口；当前手表面板仍直连 Netsim。本文不表示实体广播或多模拟器隔离已经完成。
+这是下一步接入的接口契约，类型定义见 [transport.py](../../../experiments/keep_device/transport.py)。现有 Netsim 和 Windows 入口仍可运行，但尚未改为实现此接口；当前手表面板仍直连 Netsim。本文不表示实体广播或多模拟器隔离已经完成。
+
+现有入口的模拟器版本、实体蓝牙要求和验收范围见[适配范围与环境要求](../reference/compatibility.md)。
 
 ## 边界
 

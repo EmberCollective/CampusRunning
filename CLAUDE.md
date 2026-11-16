@@ -31,11 +31,11 @@ python app.py
 
 ## Keep 设备适配模块
 
-入口与完整流程见 [experiments/keep_device/README.md](experiments/keep_device/README.md)，Python 接口、蓝牙命令、文件布局及单位见 [CONTRACT.md](experiments/keep_device/CONTRACT.md)，研究证据见 [issue #63 调研](docs/research/keep-third-party-source-63.md)。
+分类入口见 [Keep B5 文档](docs/keep-b5/README.md)，具体模拟器、硬件及依赖要求见[适配范围](docs/keep-b5/reference/compatibility.md)。完整流程见[连接与运行](docs/keep-b5/guides/connection-and-running.md)，Python 接口、蓝牙命令、文件布局及单位见[协议契约](docs/keep-b5/reference/protocol-contract.md)，研究证据见 [issue #63 调研](docs/keep-b5/research/third-party-source-63.md)。
 
 | 模块 | 职责 |
 |------|------|
-| `transport.py` / `TRANSPORT.md` | 可替换蓝牙接口及生命周期契约；当前仅定义，现有运行入口尚未迁移 |
+| `transport.py` / [传输接口契约](docs/keep-b5/design/transport-interface.md) | 可替换蓝牙接口及生命周期契约；当前仅定义，现有运行入口尚未迁移 |
 | `history.py` | `encode_workout(ExportData) -> bytes`，编码 SPORT44；输入坐标已是 WGS-84 |
 | `exporter.py` | 原生 `B5Exporter`，构造注入旧引擎，严格摘要校验、原子发布与拒覆盖 |
 | `dashboard.py` / `templates/watch.html` | 复用旧 Web 四模式，提供可选手表管理面板、固定清单/里程、MAC 和真实连接状态；仅本机运行 |
@@ -59,7 +59,7 @@ python app.py
 
 2026-11-16 一键入口已在 nRF 停止的条件下通过官方 Android Keep 绑定、3306 字节完整传输/收讫、有效“Keep 手环 B5”来源活动及统计增加。在线解绑同步本地 bound=false，退出完成名称配置恢复且无本轮进程残留。本轮未复测重开 App 持久性；后续测试改用 iPhone，不能把共享 B5 数据协议视为其发现、绑定和同步已通过验收。
 
-模拟器使用独立 `emulator.py` / Bumble / Netsim 入口，不需要 Windows 的 BTVS/TShark 或实体蓝牙。固定复用实验静态地址、state 和接收标记，每轮读取 Netsim 当前端口。2026-11-16 API35 在可逆隔离 MSA 安装库后完成 B5 绑定、传输/收讫、设备来源及无无效标记验收，重启后记录保留并自动重连；APK 与签名未改，但安装运行环境有干预。长期稳定及 iOS 未通过，隔离和恢复步骤见实验 README。
+模拟器使用独立 `emulator.py` / Bumble / Netsim 入口，不需要 Windows 的 BTVS/TShark 或实体蓝牙。固定复用实验静态地址、state 和接收标记，每轮读取 Netsim 当前端口。2026-11-16 API35 在可逆隔离 MSA 安装库后完成 B5 绑定、传输/收讫、设备来源及无无效标记验收，重启后记录保留并自动重连；APK 与签名未改，但安装运行环境有干预。长期稳定及 iOS 未通过，隔离和恢复步骤见连接与运行说明。
 
 ## Commit 规范
 

@@ -101,7 +101,7 @@ flowchart LR
 
 `windows.py` 和 `emulator.py` 是两个传输入口。依赖安装在仓库外独立环境；设备状态和运动文件也保存在私人目录。`files.py` 收到领取确认后原子写接收标记并隐藏队列，保留源文件；这一步先于云端有效性验收。
 
-当前 Android B5 单条活动已完成真实验收，Windows 自动重连与 iOS Keep 未通过。模块接口和线协议详见[契约](../experiments/keep_device/CONTRACT.md)，连接、退出、故障恢复和未测项见[运行说明](../experiments/keep_device/README.md)，证据见[调研报告](research/keep-third-party-source-63.md)。
+当前 Android B5 单条活动已完成真实验收，Windows 自动重连与 iOS Keep 未通过。模块接口和线协议详见[契约](keep-b5/reference/protocol-contract.md)，连接、退出、故障恢复和未测项见[运行说明](keep-b5/guides/connection-and-running.md)，证据见[调研报告](keep-b5/research/third-party-source-63.md)。
 
 ## 关键设计决策
 

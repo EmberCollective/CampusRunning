@@ -2,6 +2,8 @@
 
 调研日期：2026-11-16。范围为现有 Windows/Bless 原型及可复用的蓝牙外设项目；目标是手机仅使用官方 Keep，尽量不改电脑运行环境。
 
+返回[文档目录](../README.md)；本文为方案研究，当前已接入环境及硬件要求见[适配范围](../reference/compatibility.md)，操作见[连接与运行](../guides/connection-and-running.md)。
+
 ## 结论
 
 **本次未找到保留 Windows 原生蓝牙驱动、只改 Bless 参数就能固定实际广播 MAC 的公开方案。** 当前较小的变更仍是保留已跑通的 Windows 传输，获取本次实际广播地址；它可以满足用户已调整后的“有当前 MAC 即可”要求。

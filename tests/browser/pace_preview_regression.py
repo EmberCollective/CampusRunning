@@ -107,6 +107,7 @@ def main():
             page.locator('#single-distance').fill('3.2')
             page.locator('#min-pace').fill('7.5')
             page.locator('#max-pace').fill('7.5')
+            page.locator('#output-format').select_option('tcx')
             page.locator('#advanced-section summary').click()
             generated = Path(mkdtemp(prefix='exports-', dir=output))/'generated'
             page.locator('#output-directory').fill(str(generated))

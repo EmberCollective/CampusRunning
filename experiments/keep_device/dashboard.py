@@ -37,12 +37,14 @@ class Watch:
         if self.windows_state == self.netsim_state:
             raise ValueError("Windows 与 Netsim 必须使用独立设备状态。")
         self.lab.mkdir(parents=True, exist_ok=True)
-        self.netsim_ini = Path(netsim_ini) if netsim_ini else None
         self.config_path = self.lab / "connection.json"
         self.config = json.loads(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
-        if not isinstance(self.config, dict) or set(self.config) - {"transport", "python", "btvs", "tshark"} or any(not isinstance(v, str) for v in self.config.values()):
+        if not isinstance(self.config, dict) or set(self.config) - {"transport", "python", "btvs", "tshark", "netsim_ini"} or any(not isinstance(v, str) for v in self.config.values()):
             raise ValueError("连接配置格式无效，不会自动覆盖。")
-        self.config.setdefault("transport", "netsim" if netsim_ini else "windows")
+        if netsim_ini is not None:
+            self.config["netsim_ini"] = str(Path(netsim_ini).resolve())
+        self.config.setdefault("netsim_ini", "")
+        self.config.setdefault("transport", "netsim" if self.config["netsim_ini"] else "windows")
         for key, value in (("python", windows_python), ("btvs", btvs), ("tshark", tshark)):
             if value is not None:
                 self.config[key] = str(value)
@@ -75,6 +77,10 @@ class Watch:
     def state(self):
         return self.windows_state if self.transport == "windows" else self.netsim_state
 
+    @property
+    def netsim_ini(self):
+        return Path(self.config["netsim_ini"]) if self.config["netsim_ini"] else None
+
     def _identity(self, transport=None):
         transport = transport or self.transport
         state = self.windows_state if transport == "windows" else self.netsim_state
@@ -100,12 +106,13 @@ class Watch:
                         netsim_configured=self.netsim_ini is not None)
 
     def _validated_config(self, data):
-        if not isinstance(data, dict) or set(data) - {"transport", "python", "btvs", "tshark"} or any(not isinstance(v, str) for v in data.values()):
+        if not isinstance(data, dict) or set(data) - {"transport", "python", "btvs", "tshark", "netsim_ini"} or any(not isinstance(v, str) for v in data.values()):
             raise ValueError("连接配置格式无效。")
         config = dict(self.config, **data)
         if config["transport"] == "netsim":
-            if self.netsim_ini is None:
-                raise ValueError("此面板未配置 Netsim；请使用带 --netsim-ini 的入口。")
+            if not 0 < len(config["netsim_ini"]) <= 4096:
+                raise ValueError("请填写模拟器生成的 netsim.ini 完整路径。")
+            config["netsim_ini"] = str(Path(config["netsim_ini"]).resolve())
         elif config["transport"] == "windows":
             if sys.platform != "win32":
                 raise ValueError("实体蓝牙路线仅支持 Windows。")
@@ -138,7 +145,8 @@ class Watch:
         with self.lock:
             config = self._validated_config(data if data is not None else {})
         if config["transport"] == "netsim":
-            return dict(ready=self.netsim_ini.is_file(), checks={"netsim_ini": self.netsim_ini.is_file()})
+            exists = Path(config["netsim_ini"]).is_file()
+            return dict(ready=exists, checks={"netsim_ini": exists})
         result = subprocess.run([config["python"], "-m", "experiments.keep_device.launcher", "--check",
                                  "--state", str(self.windows_state), "--btvs", config["btvs"], "--tshark", config["tshark"]],
                                 cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30,

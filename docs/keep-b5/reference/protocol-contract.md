@@ -34,8 +34,8 @@
 | `POST /api/watch/start` / `stop` | 启停面板拥有的广播进程，不接管其他进程 |
 | `POST /api/watch/reset-binding` | JSON `{ "keep_unbound": true, "transport": "netsim" }`（实体路线为 `windows`）；必须明确确认 Keep 已解绑、路线与当前配置一致，且广播已停止、没有待完成操作或退出清理。仅通过 `BindingState` 原子清除当前路线的 `bound`，保留 MAC、config、运动文件、选择清单和收讫标记；缺失或损坏的状态文件拒绝操作，不新建、不覆盖，不自动启动广播 |
 | `POST /api/watch/load` | JSON `{ "job_id": "..." }`；仅载入本服务生成且校验通过的完整 B5 目录，存在旧待同步记录时拒绝替换 |
-| `GET /api/watch/config` / `POST /api/watch/config` | 读取/保存 `transport`、`python`、`btvs`、`tshark`；只保存到私人 `lab/connection.json`，不自动启动；广播或操作未退出时拒绝修改 |
-| `POST /api/watch/check` | 同样四字段可检查未保存的配置；Windows 调用独立 Python 的 `launcher --check`，只读检查版本、管理员权限、默认控制器能力和无线电状态；Netsim 只检查 ini 文件存在 |
+| `GET /api/watch/config` / `POST /api/watch/config` | 读取/保存 `transport`、`netsim_ini`、`python`、`btvs`、`tshark`；只保存到私人 `lab/connection.json`，不自动启动；广播或操作未退出时拒绝修改。旧配置缺少 `netsim_ini` 时按未配置处理，可从页面补齐 |
+| `POST /api/watch/check` | 同样五字段可检查未保存的配置，不修改已保存值；Windows 调用独立 Python 的 `launcher --check`，只读检查版本、管理员权限、默认控制器能力和无线电状态；Netsim 只检查所填 ini 文件存在 |
 
 面板操作和 B5 生成请求要求页面会话的 `X-Watch-Token`；服务绑定 localhost 并校验 Host。页面令牌不是 Keep 凭据。清单来自加载时的不可变字节快照，之后仅按内容哈希校验并刷新收讫标记；外部新增文件不会出现在已加载清单。`connected` 来自本次进程的真实连接/断开事件，并受进程存活状态约束，不等同于 Keep 账号绑定或活动有效。摘要时间以 UTC+08:00 展示，不暴露用户配置或坐标。
 

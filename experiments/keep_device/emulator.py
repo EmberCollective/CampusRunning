@@ -11,7 +11,7 @@ from bumble.transport import open_transport
 from bumble.transport.common import TransportInitError
 
 from .protocol import advertisement, b3_service
-from .state import BindingState
+from .state import BindingState, device_state_lock
 from .btcp import DEVICE_NAMES
 from .files import WorkoutFiles
 
@@ -114,9 +114,10 @@ def main() -> None:
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("experiments.keep_device.files").setLevel(logging.INFO)
     try:
-        asyncio.run(run(args.transport, args.name or DEVICE_NAMES[args.model], args.write_characteristic,
-                        args.address, args.state, args.model, args.workout,
-                        workout_dir=args.workout_dir, stop_file=args.stop_file))
+        with device_state_lock(args.state):
+            asyncio.run(run(args.transport, args.name or DEVICE_NAMES[args.model], args.write_characteristic,
+                            args.address, args.state, args.model, args.workout,
+                            workout_dir=args.workout_dir, stop_file=args.stop_file))
     except KeyboardInterrupt:
         report("STOPPED")
     except (ValueError, OSError, TransportInitError) as error:

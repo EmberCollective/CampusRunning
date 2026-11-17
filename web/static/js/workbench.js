@@ -81,6 +81,11 @@ async function openSettings(tab = 'maps') {
         $('map-provider').value = MapEngine.mode;
         connectionConfig = connection;
         $('transport-choice').value = connection?.transport || 'netsim';
+        $('netsim-source').value = connection?.netsim_ini || '';
+        $('netsim-state-path').value = connection?.netsim_state || '';
+        $('windows-state-path').value = connection?.windows_state || '';
+        $('connection-config-file').textContent = connection?.config_file || '当前面板未提供保存位置，请重新启动服务';
+        $('connection-data-dir').textContent = connection?.data_dir || '—';
         $('windows-python').value = connection?.python || '';
         $('btvs-path').value = connection?.btvs || '';
         $('tshark-path').value = connection?.tshark || '';
@@ -126,7 +131,8 @@ async function saveMapSettings(clear = false) {
     }
 }
 function connectionValues() {
-    return { transport: $('transport-choice').value, python: $('windows-python').value.trim(),
+    return { transport: $('transport-choice').value, netsim_ini: $('netsim-source').value.trim(),
+        netsim_state: $('netsim-state-path').value.trim(), windows_state: $('windows-state-path').value.trim(), python: $('windows-python').value.trim(),
         btvs: $('btvs-path').value.trim(), tshark: $('tshark-path').value.trim() };
 }
 async function saveConnectionSettings() {
@@ -145,12 +151,12 @@ function updateTransportFields(resetNote = true) {
     const value = $('transport-choice').value;
     for (const name of ['netsim', 'windows', 'other']) $(name + '-options').hidden = name !== value;
     const active = connectionConfig?.running || connectionConfig?.operation;
-    const unavailable = value === 'other' || (value === 'netsim' && connectionConfig?.netsim_configured === false);
+    const unavailable = value === 'other';
     $('apply-settings').disabled = !settingsReady || settingsBusy || (settingsTab === 'broadcast' && (active || unavailable));
     $('environment-check').disabled = !settingsReady || settingsBusy || unavailable;
-    for (const id of ['transport-choice', 'windows-python', 'btvs-path', 'tshark-path']) $(id).disabled = !settingsReady || settingsBusy || !!active;
+    for (const id of ['transport-choice', 'netsim-source', 'netsim-state-path', 'windows-state-path', 'windows-python', 'btvs-path', 'tshark-path']) $(id).disabled = !settingsReady || settingsBusy || !!active;
     if (resetNote) $('settings-note').textContent = settingsTab === 'maps' ? '地图配置保存在本地' : settingsTab === 'compatibility' ? '手机联调与活动有效性需单独验收' :
-        active ? '先停止广播并等待清理完成，再修改连接配置' : unavailable ? '该路线尚未配置，不能启用' : '保存仅更新配置，不启动广播';
+        active ? '先停止广播并等待清理完成，再修改连接配置' : unavailable ? '该路线尚未接入，不能启用' : '保存仅更新配置，不启动广播';
 }
 document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
 document.querySelectorAll('[data-dialog]').forEach(button => button.addEventListener('click', () => $(button.dataset.dialog).showModal()));
@@ -160,7 +166,7 @@ $('open-map-settings').onclick = () => openSettings('maps');
 $('watch-settings').onclick = () => openSettings('broadcast');
 $('apply-settings').onclick = () => settingsTab === 'broadcast' ? saveConnectionSettings() : saveMapSettings();
 $('transport-choice').onchange = () => { $('environment-result').textContent = '尚未检查本次配置'; updateTransportFields(); };
-for (const id of ['windows-python', 'btvs-path', 'tshark-path']) $(id).oninput = () => { $('environment-result').textContent = '配置已修改，请重新检查'; };
+for (const id of ['netsim-source', 'netsim-state-path', 'windows-state-path', 'windows-python', 'btvs-path', 'tshark-path']) $(id).oninput = () => { $('environment-result').textContent = '配置已修改，请重新检查'; };
 $('clear-map-keys').onclick = () => {
     if (confirm('清除本地保存的高德地图密钥？地点搜索和官方高德将不可用。')) saveMapSettings(true);
 };
@@ -173,8 +179,9 @@ $('environment-check').onclick = async () => {
     try {
         const result = await postJSON('/api/watch/check', connectionValues(), 35000);
         const failed = Object.entries(result.checks).filter(([, ok]) => !ok).map(([key]) => labels[key] || key);
-        $('environment-result').textContent = result.ready ? '前置检查通过：' + Object.keys(result.checks).map(key => labels[key] || key).join('、') + '。尚未验证手机连接' :
-            '未通过：' + failed.join('、') + '。修正后重新检查；权限不足时请从管理员终端启动面板';
+        const netsim = $('transport-choice').value === 'netsim';
+        $('environment-result').textContent = result.ready ? '前置检查通过：' + Object.keys(result.checks).map(key => labels[key] || key).join('、') + (netsim ? '。仅确认文件存在，尚未验证模拟器连接' : '。尚未验证手机连接') :
+            '未通过：' + failed.join('、') + (netsim ? '。请启动模拟器，核对配置文件位置后重试' : '。修正后重新检查；权限不足时请从管理员终端启动面板');
     } catch (error) { $('environment-result').textContent = '检查未完成：' + error.message; }
     finally { settingsBusy = false; updateTransportFields(); }
 };

@@ -6,6 +6,44 @@ const WatchPanel = (() => {
     </div>`);
     let snapshot = null, candidate = workbenchConfig.candidate, busy = false, refreshing = false;
     let unknown = true, filter = 'all', requestEpoch = 0;
+    let logText = '', logsRefreshing = false, logsUnknown = false;
+    async function refreshLogs() {
+        if (logsRefreshing) return;
+        logsRefreshing = true;
+        try {
+            const data = await requestJSON('/api/watch/logs', { timeout:6000,
+                headers:{'X-Watch-Token':workbenchConfig.token} });
+            const output = $('watch-log-output');
+            const follow = output.scrollHeight - output.scrollTop - output.clientHeight < 32;
+            if (data.text !== logText) {
+                logText = data.text; output.textContent = logText;
+                if (follow) output.scrollTop = output.scrollHeight;
+            }
+            logsUnknown = false;
+            $('watch-log-status').textContent = `最近 ${data.files} 轮 · 自动更新`;
+        } catch {
+            logsUnknown = true;
+            $('watch-log-status').textContent = '读取失败，保留上次日志';
+        } finally { logsRefreshing = false; $('copy-watch-log').disabled = !logText; }
+    }
+    $('copy-watch-log').onclick = async () => {
+        const text = (logsUnknown ? '日志读取失败，以下为上次读取结果\n\n' : '') + logText;
+        try { await navigator.clipboard.writeText(text); notify('连接日志已复制'); }
+        catch {
+            $('watch-log-output').hidden = false;
+            $('toggle-watch-log').setAttribute('aria-expanded', 'true');
+            $('toggle-watch-log').textContent = '收起';
+            const range = document.createRange(); range.selectNodeContents($('watch-log-output'));
+            const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+            notify('已选中日志，请按 Ctrl+C 复制');
+        }
+    };
+    $('toggle-watch-log').onclick = () => {
+        const collapsed = $('toggle-watch-log').getAttribute('aria-expanded') === 'true';
+        $('watch-log-output').hidden = collapsed;
+        $('toggle-watch-log').setAttribute('aria-expanded', String(!collapsed));
+        $('toggle-watch-log').textContent = collapsed ? '展开' : '收起';
+    };
     function address() {
         if (busy || unknown || !snapshot?.running || !snapshot.ready || snapshot.stopping) return null;
         const value = snapshot.binding_address?.value;
@@ -98,6 +136,7 @@ const WatchPanel = (() => {
     async function refresh() {
         if (refreshing || busy) return;
         refreshing = true; const epoch = requestEpoch;
+        const logs = refreshLogs();
         try {
             const data = await requestJSON('/api/watch/status', { timeout: 6000 });
             if (epoch !== requestEpoch) return;
@@ -111,6 +150,7 @@ const WatchPanel = (() => {
             if (epoch !== requestEpoch) return;
             unknown = true; $('watch-updated').textContent = '上次读取失败';
         } finally { refreshing = false; render(); }
+        await logs;
     }
     async function act(action, body = {}) {
         if (busy || unknown || !snapshot || snapshot.operation || snapshot.stopping) return;

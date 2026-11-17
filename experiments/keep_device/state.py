@@ -1,6 +1,7 @@
 """Single-process B3/B5 state and bounded queries; cloud binding remains unknown."""
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 import re
@@ -11,6 +12,31 @@ from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
 from google.protobuf.message import DecodeError
 
 from .btcp import UnsupportedRequest
+
+
+@contextmanager
+def device_state_lock(path):
+    """Hold a process lock without modifying the device's JSON state."""
+    if path is None:
+        yield
+        return
+    lock_path = Path(str(Path(path).resolve()) + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as lock:
+        if not lock_path.stat().st_size:
+            lock.write(b"\0")
+            lock.flush()
+        lock.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise ValueError("此设备状态正由另一个广播进程使用，请先停止旧入口。") from None
+        yield
 
 
 def _configuration_classes():

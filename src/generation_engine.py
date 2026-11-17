@@ -213,6 +213,8 @@ class GenerationEngine:
             smooth_factor=config.smooth_factor,
             enable_pace_fluctuation=config.enable_pace_fluctuation,
             enable_cadence=config.enable_cadence,
+            pace_algorithm=config.pace_algorithm,
+            pace_intensity=config.pace_intensity,
         )
 
         for plan in plans:

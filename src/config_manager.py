@@ -285,6 +285,8 @@ class ConfigManager:
             "min_daily_km": defaults.get("min_daily_km", 2.0),
             "max_daily_km": defaults.get("max_daily_km", 8.0),
             "enable_cadence": defaults.get("enable_cadence", True),
+            "pace_algorithm": defaults.get("pace_algorithm", "natural"),
+            "pace_intensity": defaults.get("pace_intensity", 0.15),
             "output_format": defaults.get("output_format", "fit"),
         }
 

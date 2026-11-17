@@ -14,12 +14,21 @@ let browser;
     const errors = [], checks = [], actions = [];
     page.on('pageerror', error => errors.push(error.message));
     const pass = name => { checks.push(name); console.log('PASS', name); };
-    let config = { transport:'netsim', python:'C:/lab/python.exe', btvs:'C:/lab/btvs.exe', tshark:'C:/lab/tshark.exe', running:false, operation:null, netsim_configured:true };
+    let config = { transport:'netsim', netsim_ini:'', netsim_state:'C:/lab/netsim-state.json', windows_state:'C:/lab/windows-state.json',
+        config_file:'C:/lab/connection.json', data_dir:'C:/lab', python:'C:/lab/python.exe', btvs:'C:/lab/btvs.exe', tshark:'C:/lab/tshark.exe', running:false, operation:null, netsim_configured:false };
     let state = { transport:'netsim', running:false, ready:false, connected:false, stopping:false, operation:null,
         mac:'C2:7A:4D:91:0B:68', binding_address:{ value:null, medium:'virtual' }, records:[], pending:0, received:0, total_km:0, error:null };
     let probeReady = false, probeError = false;
+    let logText = 'CONNECTED; fixture session\nDISCONNECTED reason=19', logFailure = false;
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'clipboard', {value:{writeText:async text => {window.copiedLog = text;}}});
+    });
     await page.route('**/api/watch/**', async route => {
         const action = new URL(route.request().url()).pathname.split('/').at(-1);
+        if (action === 'logs') {
+            assert(route.request().headers()['x-watch-token']);
+            return route.fulfill(logFailure ? {status:500,json:{error:'fixture unavailable'}} : {json:{text:logText,files:1}});
+        }
         if (route.request().method() === 'GET') return route.fulfill({json:action === 'config' ? config : state});
         actions.push(action);
         if (action === 'reset-binding') {
@@ -30,10 +39,16 @@ let browser;
         }
         if (action === 'config') {
             config = {...config, ...route.request().postDataJSON()};
-            state.transport = config.transport; state.binding_address.medium = 'physical';
+            config.netsim_configured = !!config.netsim_ini;
+            state.transport = config.transport; state.binding_address.medium = config.transport === 'windows' ? 'physical' : 'virtual';
             return route.fulfill({json:config});
         }
-        if (action === 'check') return route.fulfill(probeError ? {status:400,json:{error:'找不到工具，请检查程序位置'}} : {json:{ready:probeReady,checks:{python:true,bless:true,administrator:probeReady,peripheral:true,radio_on:true}}});
+        if (action === 'check') {
+            const draft = route.request().postDataJSON();
+            if (draft.transport === 'netsim') return route.fulfill(!draft.netsim_ini ? {status:400,json:{error:'请填写模拟器生成的 netsim.ini 完整路径。'}} :
+                {json:{ready:draft.netsim_ini === 'C:/lab/netsim.ini',checks:{netsim_ini:draft.netsim_ini === 'C:/lab/netsim.ini'}}});
+            return route.fulfill(probeError ? {status:400,json:{error:'找不到工具，请检查程序位置'}} : {json:{ready:probeReady,checks:{python:true,bless:true,administrator:probeReady,peripheral:true,radio_on:true}}});
+        }
         state.operation = action; state.running = action !== 'load';
         if (action === 'stop') { state.stopping = true; state.ready = state.connected = false; }
         return route.fulfill({json:state});
@@ -45,10 +60,20 @@ let browser;
     try {
         await page.goto(base + '/#watch');
         await page.waitForFunction(() => !document.querySelector('#toggle-broadcast').disabled);
+        await page.waitForFunction(() => document.querySelector('#watch-log-output').textContent.includes('DISCONNECTED'));
+        await page.locator('#copy-watch-log').click();
+        assert.equal(await page.evaluate(() => window.copiedLog), logText);
+        await page.locator('#toggle-watch-log').click();
+        assert(await page.locator('#watch-log-output').isHidden());
+        await page.locator('#toggle-watch-log').click();
+        pass('connection logs show real diagnostics, copy exact text and collapse without losing history');
         await page.locator('#open-settings').click();
         await page.waitForFunction(() => !document.querySelector('#apply-settings').disabled);
+        assert.equal(await page.locator('#connection-config-file').innerText(), config.config_file);
+        assert.equal(await page.locator('#netsim-state-path').inputValue(), config.netsim_state);
         await page.locator('#transport-choice').selectOption('windows');
         assert(await page.locator('#windows-python').isEnabled());
+        await page.locator('#windows-state-path').fill('C:/lab/selected-windows.json');
         await page.locator('#windows-options details summary').click();
         assert.equal(await page.locator('#btvs-path').inputValue(), config.btvs);
         await page.locator('#environment-check').click();
@@ -68,6 +93,7 @@ let browser;
         await page.waitForFunction(() => !document.querySelector('#settings-dialog').open);
         assert(!actions.includes('start'));
         assert.equal(config.python, 'C:/lab/updated-python.exe');
+        assert.equal(config.windows_state, 'C:/lab/selected-windows.json');
         await page.waitForFunction(() => document.querySelector('#connection-help').textContent.includes('临时更名'));
         assert(await page.locator('#copy-address').isDisabled());
         pass('saving Windows configuration persists paths without starting Bluetooth');
@@ -124,7 +150,7 @@ let browser;
         await refresh(() => document.querySelector('#candidate').hidden);
         assert.equal(await page.locator('#watch-records tr').count(),1);
         pass('async loading retains its candidate until the selected job is confirmed');
-        for (const [width,height] of [[1440,960],[1024,768],[390,844]]) {
+        for (const [width,height] of [[1440,960],[1024,768],[1280,600],[390,844]]) {
             await page.setViewportSize({width,height});
             await page.locator('#open-settings').click();
             await page.waitForFunction(() => !document.querySelector('#apply-settings').disabled);
@@ -144,6 +170,81 @@ let browser;
             await page.screenshot({path:path.join(output,`windows-watch-${width}.png`),fullPage:true});
         }
         pass('desktop, compact desktop and mobile keep configuration in an internal scroll area');
+        config.netsim_configured = false;
+        await page.setViewportSize({width:1440,height:960});
+        await page.locator('#open-settings').click();
+        await page.waitForFunction(() => !document.querySelector('#apply-settings').disabled);
+        await page.locator('#transport-choice').selectOption('netsim');
+        assert(await page.locator('#netsim-source').isEnabled());
+        assert(await page.locator('#apply-settings').isEnabled());
+        await page.locator('#environment-check').click();
+        await page.waitForFunction(() => document.querySelector('#environment-result').textContent.includes('请填写'));
+        await page.locator('#netsim-source').fill('C:/lab/missing.ini');
+        await page.locator('#environment-check').click();
+        await page.waitForFunction(() => document.querySelector('#environment-result').textContent.includes('未通过'));
+        assert.doesNotMatch(await page.locator('#environment-result').innerText(), /管理员/);
+        await page.locator('#netsim-source').fill('C:/lab/netsim.ini');
+        await page.locator('#environment-check').click();
+        await page.waitForFunction(() => document.querySelector('#environment-result').textContent.includes('仅确认文件存在'));
+        assert.equal(config.netsim_ini, '');
+        const broadcasts = actions.filter(a => a === 'start' || a === 'load').length;
+        await page.locator('#apply-settings').click();
+        await page.waitForFunction(() => !document.querySelector('#settings-dialog').open);
+        assert.equal(config.transport, 'netsim');
+        assert.equal(config.netsim_ini, 'C:/lab/netsim.ini');
+        assert.equal(actions.filter(a => a === 'start' || a === 'load').length, broadcasts);
+        for (const [width,height] of [[1440,960],[1024,768],[390,844]]) {
+            await page.setViewportSize({width,height});
+            await page.locator('#open-settings').click();
+            await page.waitForFunction(() => !document.querySelector('#apply-settings').disabled);
+            assert.equal(await page.locator('#netsim-source').inputValue(), 'C:/lab/netsim.ini');
+            assert.equal(await page.locator('#windows-python').inputValue(), config.python);
+            const bounds = await page.locator('#settings-dialog').evaluate(dialog => {
+                const r = dialog.getBoundingClientRect(), body = dialog.querySelector('.settings-body');
+                return {left:r.left,right:r.right,bottom:r.bottom,overflow:body.scrollWidth > body.clientWidth};
+            });
+            assert(bounds.left >= 0 && bounds.right <= width && bounds.bottom <= height && !bounds.overflow);
+            await page.screenshot({path:path.join(output,`netsim-settings-${width}.png`)});
+            await page.keyboard.press('Escape');
+        }
+        pass('missing Netsim settings can be checked, saved and reopened without starting a broadcast at all viewport sizes');
+        config.running = true; config.operation = 'stop';
+        await page.locator('#open-settings').click();
+        await page.waitForFunction(() => document.querySelector('#transport-choice').disabled);
+        assert(await page.locator('#netsim-source').isDisabled());
+        assert(await page.locator('#apply-settings').isDisabled());
+        await page.keyboard.press('Escape');
+        pass('Netsim configuration stays locked while broadcast cleanup is active');
+        logText = Array.from({length:500}, (_,i) => `CONNECTED; event=${i} ` + 'details '.repeat(20)).join('\n');
+        await refresh(() => document.querySelector('#watch-log-output').textContent.includes('event=499'));
+        const logOutput = page.locator('#watch-log-output');
+        assert(await logOutput.evaluate(e => e.scrollHeight > e.clientHeight));
+        await logOutput.evaluate(e => {e.scrollTop=0;});
+        logText += '\nCONNECTED; <img src=x onerror=alert(1)> latest event';
+        await refresh(() => document.querySelector('#watch-log-output').textContent.includes('latest event'));
+        assert.equal(await logOutput.evaluate(e => e.scrollTop),0);
+        assert.equal(await logOutput.locator('img').count(),0);
+        logFailure = true;
+        await refresh(() => document.querySelector('#watch-log-status').textContent.includes('读取失败'));
+        await page.locator('#copy-watch-log').click();
+        assert.match(await page.evaluate(() => window.copiedLog), /^日志读取失败/);
+        await page.evaluate(() => {navigator.clipboard.writeText=async () => {throw Error('denied');};});
+        await page.locator('#toggle-watch-log').click();
+        await page.locator('#copy-watch-log').click();
+        assert.equal(await page.locator('#toggle-watch-log').innerText(), '收起');
+        assert.match(await page.evaluate(() => window.getSelection().toString()), /event=499/);
+        pass('long logs scroll internally, keep the reading position, render plain text and remain copyable after read or clipboard failures');
+        for (const [width,height] of [[1440,960],[1024,768],[1280,600],[390,844]]) {
+            await page.setViewportSize({width,height});
+            const bounds = await page.locator('.watch-log-panel').evaluate(panel => {
+                const r=panel.getBoundingClientRect(), button=panel.querySelector('#copy-watch-log').getBoundingClientRect();
+                return {left:r.left,right:r.right,bottom:r.bottom,buttonBottom:button.bottom,overflow:panel.scrollWidth > panel.clientWidth};
+            });
+            assert(bounds.left >= 0 && bounds.right <= width && !bounds.overflow);
+            if (width > 760) assert(bounds.bottom <= height && bounds.buttonBottom <= height, JSON.stringify({width,height,...bounds}));
+            await page.screenshot({path:path.join(output,`connection-log-${width}.png`),fullPage:true});
+        }
+        pass('the bottom log panel and copy action stay reachable on desktop, short windows and mobile');
         assert.deepEqual(errors, []);
         fs.writeFileSync(path.join(output,'checks.json'),JSON.stringify({checks,errors},null,2));
     } finally { await browser.close(); }

@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -38,9 +39,10 @@ def app(watch):
                "min_daily_km": 4.05, "max_daily_km": 4.05, "rest_days_per_week": 0, "weekend_factor": 1}, 2),
     ("dates", {"dates": ["2026-11-10", "2026-11-11"], "min_km": 4.12, "max_km": 4.12}, 2),
 ])
-def test_old_four_modes_generate_native_b5(app, watch, mode, details, count):
+@pytest.mark.parametrize("pace_algorithm", ["natural", "steady", "progressive"])
+def test_old_four_modes_generate_native_b5(app, watch, mode, details, count, pace_algorithm):
     request = dict(track_id="campus_default", output_format="b5", min_pace=7.5, max_pace=7.5,
-                   start_time_min="07:00", start_time_max="07:00", **details)
+                   start_time_min="07:00", start_time_max="07:00", pace_algorithm=pace_algorithm, pace_intensity=.15, **details)
     client = app.test_client()
     response = client.post("/api/generate/" + mode, json=request,
                            headers={"X-Watch-Token": app.config["WATCH_TOKEN"]})
@@ -56,6 +58,15 @@ def test_old_four_modes_generate_native_b5(app, watch, mode, details, count):
     page = client.get("/watch?job=" + response.json["job_id"])
     assert page.status_code == 200 and b"candidate" in page.data
     assert watch.process is None  # Generating or viewing never uploads.
+
+
+def test_pace_preview_does_not_write_watch_state_or_create_a_job(app, watch):
+    before = {p:p.read_bytes() for p in watch.lab.parent.rglob('*') if p.is_file()}
+    response = app.test_client().post('/api/pace/preview', json={'pace_algorithm':'steady', 'distance_km':3.24})
+    assert response.status_code == 200
+    assert response.json['pace_algorithm'] == 'steady'
+    assert not routes._generation_jobs and watch.process is None
+    assert {p:p.read_bytes() for p in watch.lab.parent.rglob('*') if p.is_file()} == before
 
 
 def test_watch_actions_require_token_and_validate_input(app):
@@ -182,7 +193,7 @@ def test_reset_binding_does_not_create_or_replace_invalid_state(watch, content):
 
 @pytest.fixture
 def physical(tmp_path, monkeypatch):
-    monkeypatch.setattr(dashboard.sys, "platform", "win32")
+    monkeypatch.setattr(dashboard, "sys", SimpleNamespace(platform="win32", executable=sys.executable))
     return Watch(tmp_path / "physical", tmp_path / "netsim-state.json", transport="windows",
                  windows_python=sys.executable, btvs=sys.executable, tshark=sys.executable)
 

@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -192,7 +193,7 @@ def test_reset_binding_does_not_create_or_replace_invalid_state(watch, content):
 
 @pytest.fixture
 def physical(tmp_path, monkeypatch):
-    monkeypatch.setattr(dashboard.sys, "platform", "win32")
+    monkeypatch.setattr(dashboard, "sys", SimpleNamespace(platform="win32", executable=sys.executable))
     return Watch(tmp_path / "physical", tmp_path / "netsim-state.json", transport="windows",
                  windows_python=sys.executable, btvs=sys.executable, tshark=sys.executable)
 

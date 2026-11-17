@@ -2,6 +2,7 @@
 
 import json
 import sys
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -14,7 +15,7 @@ from experiments.keep_device.test_files import source
 
 @pytest.fixture
 def panel(tmp_path, monkeypatch):
-    monkeypatch.setattr(dashboard.sys, "platform", "win32")
+    monkeypatch.setattr(dashboard, "sys", SimpleNamespace(platform="win32", executable=sys.executable))
     watch = Watch(tmp_path / "panel", tmp_path / "netsim-state.json", transport="windows",
                   windows_python=sys.executable, btvs=sys.executable, tshark=sys.executable)
     watch.configure({})

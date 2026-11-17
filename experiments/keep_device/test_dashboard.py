@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import io
+import json
 import subprocess
 import sys
 import threading
@@ -111,6 +112,72 @@ def test_single_form_pace_is_used(app):
     with app.test_request_context():
         config = routes._parse_generate_request({"pace": 6.25})
         assert config.min_pace == config.max_pace == 6.25
+
+
+def test_reset_binding_requires_token_confirmation_and_matching_transport(app, watch):
+    client = app.test_client()
+    before = watch.state.read_bytes()
+    body = {"keep_unbound": True, "transport": "netsim"}
+    assert client.post("/api/watch/reset-binding", json=body).status_code == 403
+    for invalid in ({}, [], {**body, "keep_unbound": 1}, {**body, "keep_unbound": "true"},
+                    {**body, "transport": "windows"}):
+        response = client.post("/api/watch/reset-binding", json=invalid,
+                               headers={"X-Watch-Token": app.config["WATCH_TOKEN"]})
+        assert response.status_code == 400
+        assert watch.state.read_bytes() == before
+
+
+@pytest.mark.parametrize("guard", ["running", "operation", "stopping"])
+def test_reset_binding_rejects_active_work(watch, guard):
+    before = watch.state.read_bytes()
+    if guard == "running":
+        watch.process = Mock()
+        watch.process.poll.return_value = None
+    else:
+        setattr(watch, guard, "start" if guard == "operation" else True)
+    with pytest.raises(ValueError, match="停止广播"):
+        watch.reset_binding({"keep_unbound": True, "transport": "netsim"})
+    assert watch.state.read_bytes() == before
+
+
+@pytest.mark.parametrize("transport", ["netsim", "windows"])
+def test_reset_binding_preserves_identity_configuration_and_workouts(watch, source, transport):
+    for state in (watch.netsim_state, watch.windows_state):
+        binding = dashboard.BindingState(state, watch.mac)
+        binding.reply(b"\x01\x05")
+        binding.reply(b"\x01\x04\x08\x01")
+    watch.config["transport"] = transport
+    watch.directory = source.parent
+    watch.queue = watch._queue()
+    watch.queue.reply(bytes.fromhex("06 03 08 2c"))
+    watch.selection.write_text(json.dumps({"directory": str(source.parent)}), encoding="utf-8")
+    untouched = {p: p.read_bytes() for p in source.parent.iterdir() if p.is_file() and p != watch.state}
+    untouched[watch.selection] = watch.selection.read_bytes()
+    before = json.loads(watch.state.read_text(encoding="utf-8"))
+    app = create_app(watch)
+    response = app.test_client().post("/api/watch/reset-binding",
+        json={"keep_unbound": True, "transport": transport},
+        headers={"X-Watch-Token": app.config["WATCH_TOKEN"]})
+    assert response.status_code == 200
+    assert json.loads(watch.state.read_text(encoding="utf-8")) == {**before, "bound": False}
+    assert all(p.read_bytes() == content for p, content in untouched.items())
+    assert response.json["received"] == 1 and response.json["pending"] == 0
+    assert watch.process is None
+
+
+@pytest.mark.parametrize("content", [None, "[]", "broken", '{"mac":"invalid"}',
+                                      '{"mac":"C2:00:00:00:00:01","bound":true}'])
+def test_reset_binding_does_not_create_or_replace_invalid_state(watch, content):
+    if content is None:
+        watch.state.unlink()
+    else:
+        watch.state.write_text(content, encoding="utf-8")
+    with pytest.raises(ValueError):
+        watch.reset_binding({"keep_unbound": True, "transport": "netsim"})
+    if content is None:
+        assert not watch.state.exists()
+    else:
+        assert watch.state.read_text(encoding="utf-8") == content
 
 
 @pytest.fixture

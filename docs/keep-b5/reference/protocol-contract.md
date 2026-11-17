@@ -32,6 +32,7 @@
 | `GET /watch` | 面板；`?job=...` 仅显示生成结果的载入预览 |
 | `GET /api/watch/status` | running/ready/connected、mac/keep_mac、binding_address、transport、records、total_km、pending/received、error；禁止缓存 |
 | `POST /api/watch/start` / `stop` | 启停面板拥有的广播进程，不接管其他进程 |
+| `POST /api/watch/reset-binding` | JSON `{ "keep_unbound": true, "transport": "netsim" }`（实体路线为 `windows`）；必须明确确认 Keep 已解绑、路线与当前配置一致，且广播已停止、没有待完成操作或退出清理。仅通过 `BindingState` 原子清除当前路线的 `bound`，保留 MAC、config、运动文件、选择清单和收讫标记；缺失或损坏的状态文件拒绝操作，不新建、不覆盖，不自动启动广播 |
 | `POST /api/watch/load` | JSON `{ "job_id": "..." }`；仅载入本服务生成且校验通过的完整 B5 目录，存在旧待同步记录时拒绝替换 |
 | `GET /api/watch/config` / `POST /api/watch/config` | 读取/保存 `transport`、`python`、`btvs`、`tshark`；只保存到私人 `lab/connection.json`，不自动启动；广播或操作未退出时拒绝修改 |
 | `POST /api/watch/check` | 同样四字段可检查未保存的配置；Windows 调用独立 Python 的 `launcher --check`，只读检查版本、管理员权限、默认控制器能力和无线电状态；Netsim 只检查 ini 文件存在 |

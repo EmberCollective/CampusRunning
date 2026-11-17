@@ -79,6 +79,9 @@ const WatchPanel = (() => {
         $('connect-scope').textContent = physical ? '当前是 Windows 实体广播：在附近手机的官方 Keep 中操作；如果地址变化，先在 Keep 解绑后按新地址重新添加。iOS 尚未通过验收' :
             '当前是虚拟广播：在同一已准备好的官方模拟器中操作 Keep，附近实体手机看不到这个地址';
         $('toggle-broadcast').disabled = working || unknown;
+        $('reset-binding').disabled = $('confirm-reset-binding').disabled = working || unknown || !!running;
+        $('reset-binding-help').textContent = unknown ? '等待读取状态后再操作' : working || running ?
+            '先停止广播并等待退出清理完成，再删除本地绑定记录' : '仅在 Keep 已解绑或已没有 B5 时使用；保留运动数据与接收标记';
         $('toggle-broadcast').querySelector('span').textContent = working ? stopping ? '等待退出清理…' : '正在处理…' : running ? '停止广播' : '启动广播';
         $('toggle-broadcast').querySelector('use').setAttribute('href', running ? '#i-stop' : '#i-play');
         $('state-warning').hidden = !unknown && !snapshot?.error;
@@ -112,11 +115,13 @@ const WatchPanel = (() => {
     async function act(action, body = {}) {
         if (busy || unknown || !snapshot || snapshot.operation || snapshot.stopping) return;
         if (action === 'load' && (snapshot.pending > 0 || snapshot.error)) return;
+        if (action === 'reset-binding' && snapshot.running) return;
         busy = true; requestEpoch++; render();
         try {
             snapshot = await postJSON('/api/watch/' + action, body, 25000); unknown = false;
             notify(snapshot.operation ? action === 'stop' ? '停止请求已发送，等待名称恢复和退出清理' : '请求已受理，等待操作完成' :
-                action === 'stop' ? '广播已停止，记录与接收标记保留' : '已请求启动，等待确认广播与地址');
+                action === 'stop' ? '广播已停止，记录与接收标记保留' : action === 'reset-binding' ?
+                    '本地绑定记录已删除；请启动广播，再到 Keep 添加 B5。运动数据与接收标记保留' : '已请求启动，等待确认广播与地址');
         } catch (error) {
             unknown = true;
             notify('操作结果待确认：' + error.message + '。重新检查状态后再操作');
@@ -132,6 +137,16 @@ const WatchPanel = (() => {
         document.querySelectorAll('[data-filter]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); renderRecords();
     });
     $('toggle-broadcast').onclick = () => act(snapshot.running ? 'stop' : 'start');
+    let resetTransport = null;
+    $('reset-binding').onclick = () => {
+        resetTransport = snapshot.transport;
+        $('reset-binding-route').textContent = resetTransport === 'windows' ? 'Windows 实体蓝牙' : '安卓模拟器';
+        $('reset-binding-dialog').showModal();
+    };
+    $('confirm-reset-binding').onclick = () => {
+        $('reset-binding-dialog').close();
+        act('reset-binding', { keep_unbound: true, transport: resetTransport });
+    };
     $('copy-address').onclick = $('dialog-copy').onclick = copy;
     $('retry-status').onclick = refresh;
     $('load-candidate').onclick = () => { if (candidate) act('load', { job_id: candidate.id }); };

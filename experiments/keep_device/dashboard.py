@@ -148,6 +148,20 @@ class Watch:
             raise ValueError("Windows 环境检查未完成；请检查 Python 3.11、Bless 及工具依赖。" + result.stderr[-400:])
         return json.loads(result.stdout)
 
+    def reset_binding(self, data):
+        with self.lock:
+            if (not isinstance(data, dict) or data.get("keep_unbound") is not True
+                    or data.get("transport") != self.transport):
+                raise ValueError("请确认 Keep 已解绑，并重新确认当前连接路线。")
+            if self.running() or self.operation or self.stopping:
+                raise ValueError("请先停止广播，等待退出清理完成后再删除本地绑定记录。")
+            if not self.state.is_file():
+                raise ValueError("当前路线没有本地绑定记录，无需删除。")
+            stored = json.loads(self.state.read_text(encoding="utf-8"))
+            if not isinstance(stored, dict):
+                raise ValueError("设备状态文件无效，不会自动覆盖。")
+            BindingState(self.state, stored.get("mac")).reply(b"\x01\x06")
+
     def control(self, action, directory=None, job_id=None):
         if action not in ("start", "stop", "load"):
             raise ValueError("未知操作。")
@@ -435,6 +449,8 @@ def create_app(watch):
                 return response
             if action in ("start", "stop"):
                 watch.control(action)
+            elif action == "reset-binding":
+                watch.reset_binding(request.get_json(silent=True))
             elif action == "load":
                 data = request.get_json(silent=True) or {}
                 if not isinstance(data, dict) or not isinstance(data.get("job_id"), str):

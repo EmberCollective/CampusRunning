@@ -43,6 +43,7 @@ function markStale() {
     $('result-summary').textContent = '参数已修改，重新生成后再下载或载入';
 }
 function renderAdvanced() {
+    renderPaceOptions();
     const b5 = $('output-format').value === 'b5';
     for (const id of ['rest-days', 'weekend-factor', 'min-daily', 'max-daily']) {
         $(id).parentElement.hidden = mode !== 'total';
@@ -96,7 +97,8 @@ function collect() {
         start_time_min: $('earliest-time').value, start_time_max: $('latest-time').value,
         output_format: $('output-format').value, output_dir: $('output-directory').value || 'output',
         include_track: $('include-track').checked, apply_correction: $('apply-correction').checked,
-        enable_pace_fluctuation: $('pace-fluctuation').checked, enable_cadence: $('enable-cadence').checked };
+        enable_pace_fluctuation: $('pace-fluctuation').checked, enable_cadence: $('enable-cadence').checked,
+        pace_algorithm: $('pace-algorithm').value, pace_intensity: value('pace-intensity') };
     if (mode === 'dates') Object.assign(data, { dates: [...selectedDates].sort(), min_km: value('min-distance'), max_km: value('max-distance') });
     else if (mode === 'single') Object.assign(data, { date: $('start-date').value, distance: value('single-distance') });
     else {
@@ -207,6 +209,10 @@ function applyTemplate(template) {
     const next = ['daily', 'total', 'single', 'dates'].find(key => template[key + '_config'] && Object.keys(template[key + '_config']).length);
     if (next) setMode(next);
     const config = template[mode + '_config'] || template.generation_config || {};
+    if (config.pace_algorithm && ![...$('pace-algorithm').options].some(o => o.value === config.pace_algorithm))
+        throw new Error('模板中的配速算法尚未注册，请先在本机注册该算法');
+    $('pace-algorithm').value = config.pace_algorithm || 'natural';
+    $('pace-intensity').value = config.pace_intensity ?? .15;
     const fields = { min_pace: 'min-pace', max_pace: 'max-pace', start_time_min: 'earliest-time', start_time_max: 'latest-time',
         start_date: 'start-date', end_date: 'end-date', date: 'start-date', distance: 'single-distance',
         min_km: 'min-distance', max_km: 'max-distance', total_km: 'total-distance', min_daily_km: 'min-daily',
@@ -246,12 +252,19 @@ async function init() {
         if (stored && typeof stored === 'object' && !Array.isArray(stored))
             localTemplates = Object.fromEntries(Object.entries(stored).filter(([, value]) => value && typeof value.id === 'string' && typeof value.name === 'string'));
     } catch { localTemplates = {}; }
-    const loaded = await Promise.allSettled([refreshTracks(), requestJSON('/api/templates'), requestJSON('/api/defaults')]);
+    const loaded = await Promise.allSettled([refreshTracks(), requestJSON('/api/templates'), requestJSON('/api/defaults'), requestJSON('/api/pace/algorithms')]);
+    if (loaded[3].status === 'fulfilled') {
+        $('pace-algorithm').replaceChildren(...loaded[3].value.map(a => {
+            const option = new Option(a.name, a.id); option.dataset.description = a.description; return option;
+        }));
+    } else notify('配速算法列表读取失败，当前可使用自然慢跑；刷新页面后重试');
     if (loaded[0].status === 'rejected') generationError('无法读取轨迹库，请恢复服务后刷新页面');
     if (loaded[1].status === 'fulfilled') templates = loaded[1].value;
     else notify('预设模板读取失败，本地模板仍可使用');
     if (loaded[2].status === 'fulfilled') {
         const d = loaded[2].value;
+        if ([...$('pace-algorithm').options].some(o => o.value === d.pace_algorithm)) $('pace-algorithm').value = d.pace_algorithm;
+        $('pace-intensity').value = d.pace_intensity ?? .15;
         if (d.default_pace_range) [$('min-pace').value, $('max-pace').value] = d.default_pace_range;
         if (d.default_start_time_range) [$('earliest-time').value, $('latest-time').value] = d.default_start_time_range;
         if (tracks.some(t => t.id === d.default_track_id)) $('track-choice').value = d.default_track_id;
@@ -265,6 +278,21 @@ document.querySelectorAll('[data-mode]').forEach(button => button.onclick = () =
 $('generate-form').addEventListener('submit', generate);
 $('generate-form').addEventListener('input', () => { markStale(); updatePlanCount(); });
 $('generate-form').addEventListener('change', markStale);
+function renderPaceOptions() {
+    for (const id of ['pace-algorithm', 'pace-intensity']) $(id).disabled = !$('pace-fluctuation').checked;
+    $('pace-description').textContent = $('pace-fluctuation').checked
+        ? $('pace-algorithm').selectedOptions[0]?.dataset.description || '缓慢进入状态，途中连续起伏。'
+        : '配速波动已关闭，将按距离分配时间以保持匀速。';
+}
+$('pace-fluctuation').addEventListener('change', renderPaceOptions);
+$('pace-algorithm').addEventListener('change', renderPaceOptions);
+$('preview-pace').onclick = () => {
+    const data = collect();
+    if (!$('min-pace').reportValidity() || !$('max-pace').reportValidity() || !$('pace-intensity').reportValidity()) return;
+    if (data.min_pace > data.max_pace) { generationError('最快配速的用时不能大于最慢配速'); return; }
+    const distance = mode === 'single' ? data.distance : mode === 'total' ? (data.min_daily_km+data.max_daily_km)/2 : (data.min_km+data.max_km)/2;
+    PacePreview.open(data, distance);
+};
 $('output-format').addEventListener('change', renderAdvanced);
 $('track-choice').addEventListener('change', updatePreview);
 $('result-next').onclick = nextResult;

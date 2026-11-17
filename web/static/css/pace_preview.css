@@ -1,0 +1,10 @@
+#pace-dialog{width:min(820px,calc(100vw - 24px));max-width:none;max-height:calc(100dvh - 24px);overflow:auto}
+#pace-preview-form{margin:18px 0 12px}
+#pace-preview-form>.row{margin-top:10px;gap:12px;flex-wrap:wrap}
+#pace-preview-summary{margin:12px 0;color:var(--secondary)}
+#pace-preview-charts h3{margin-top:12px}
+#pace-preview-charts svg{width:100%;height:210px;overflow:hidden}
+.pace-grid{stroke:var(--line);stroke-dasharray:3 4}
+.pace-axis{fill:var(--secondary);font:11px var(--sans)}
+.pace-line{stroke:var(--blue);fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.pace-bar{fill:var(--blue);opacity:.7}

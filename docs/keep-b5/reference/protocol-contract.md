@@ -31,13 +31,16 @@
 |---|---|
 | `GET /watch` | 面板；`?job=...` 仅显示生成结果的载入预览 |
 | `GET /api/watch/status` | running/ready/connected、mac/keep_mac、binding_address、transport、records、total_km、pending/received、error；禁止缓存 |
+| `GET /api/watch/logs` | 要求 `X-Watch-Token`，返回 `{ "text": "...", "files": 0 }` 并禁止缓存；本次面板操作最多 100 条，以及本面板私人目录最近 3 个非符号链接 `.log` 的诊断白名单；每个文件最多末尾 64 KiB / 300 行、每行 1500 字，不提供任意路径读取或原始流量 |
 | `POST /api/watch/start` / `stop` | 启停面板拥有的广播进程，不接管其他进程 |
 | `POST /api/watch/reset-binding` | JSON `{ "keep_unbound": true, "transport": "netsim" }`（实体路线为 `windows`）；必须明确确认 Keep 已解绑、路线与当前配置一致，且广播已停止、没有待完成操作或退出清理。仅通过 `BindingState` 原子清除当前路线的 `bound`，保留 MAC、config、运动文件、选择清单和收讫标记；缺失或损坏的状态文件拒绝操作，不新建、不覆盖，不自动启动广播 |
 | `POST /api/watch/load` | JSON `{ "job_id": "..." }`；仅载入本服务生成且校验通过的完整 B5 目录，存在旧待同步记录时拒绝替换 |
-| `GET /api/watch/config` / `POST /api/watch/config` | 读取/保存 `transport`、`netsim_ini`、`python`、`btvs`、`tshark`；只保存到私人 `lab/connection.json`，不自动启动；广播或操作未退出时拒绝修改。旧配置缺少 `netsim_ini` 时按未配置处理，可从页面补齐 |
-| `POST /api/watch/check` | 同样五字段可检查未保存的配置，不修改已保存值；Windows 调用独立 Python 的 `launcher --check`，只读检查版本、管理员权限、默认控制器能力和无线电状态；Netsim 只检查所填 ini 文件存在 |
+| `GET /api/watch/config` / `POST /api/watch/config` | 读取/保存 `transport`、`netsim_ini`、`netsim_state`、`windows_state`、`python`、`btvs`、`tshark`；GET 另返回只读 `config_file`、`data_dir` 保存位置。配置写入私人 `lab/connection.json`，不自动启动；广播或操作未退出时拒绝修改。旧配置缺少 `netsim_ini` 时按未配置处理，状态路径按首次启动参数补齐，可从页面修改 |
+| `POST /api/watch/check` | 同样七字段可检查未保存的配置，不修改已保存值；Windows 调用独立 Python 的 `launcher --check`，只读检查版本、管理员权限、默认控制器能力和无线电状态；Netsim 只检查所填 ini 文件存在 |
 
 面板操作和 B5 生成请求要求页面会话的 `X-Watch-Token`；服务绑定 localhost 并校验 Host。页面令牌不是 Keep 凭据。清单来自加载时的不可变字节快照，之后仅按内容哈希校验并刷新收讫标记；外部新增文件不会出现在已加载清单。`connected` 来自本次进程的真实连接/断开事件，并受进程存活状态约束，不等同于 Keep 账号绑定或活动有效。摘要时间以 UTC+08:00 展示，不暴露用户配置或坐标。
+
+已保存的 `netsim_state` / `windows_state` 优先于首次 CLI 状态默认值；路径须在仓库外、彼此不同，不能指向目录或覆盖面板配置、临时配置、清单。切换既有状态不覆盖其内容，新 Netsim 状态经 `BindingState` 创建。Netsim CLI 通过状态旁的 `.lock` 文件持有操作系统进程锁，直到运行结束；面板本地绑定重置使用同一锁，释放不改动状态 JSON。该保护不覆盖旧版本入口、Windows 入口或复制到不同路径的同身份状态，不能代替单模拟器只运行一个广播入口的约束。
 
 `transport` 为 `netsim` 或 `windows`；`binding_address` 为 `{ "value": "AA:BB:CC:DD:EE:FF" | null, "medium": "virtual" | "physical" }`。仅面板拥有的进程仍运行、广播已确认且未进入停止清理时提供地址；Windows 还必须有本轮 BTVS/TShark 的有效 HCI 地址证据。停止、观察失效、退出和前端读取失败时停用旧地址，不用设备身份或永久控制器地址替代。
 

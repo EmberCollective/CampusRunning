@@ -2,7 +2,8 @@
 
 import argparse
 import atexit
-from datetime import date
+from collections import deque
+from datetime import date, datetime
 import json
 import os
 from pathlib import Path
@@ -20,7 +21,7 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 from web import routes
 from .exporter import B5Exporter
 from .files import WorkoutFiles
-from .state import BindingState
+from .state import BindingState, device_state_lock
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -30,17 +31,19 @@ class Watch:
 
     def __init__(self, lab, state, netsim_ini=None, workout_dir=None, *, transport=None,
                  windows_python=None, btvs=None, tshark=None, windows_state=None):
-        self.lab, self.netsim_state = Path(lab).resolve(), Path(state).resolve()
-        self.windows_state = Path(windows_state).resolve() if windows_state else self.netsim_state.with_stem(self.netsim_state.stem + "-windows")
-        if any(p.is_relative_to(ROOT) for p in (self.lab, self.netsim_state, self.windows_state)):
+        self.lab = Path(lab).resolve()
+        initial_state = Path(state).resolve()
+        initial_windows_state = Path(windows_state).resolve() if windows_state else initial_state.with_stem(initial_state.stem + "-windows")
+        if self.lab.is_relative_to(ROOT):
             raise ValueError("手表数据和状态必须保存在仓库外。")
-        if self.windows_state == self.netsim_state:
-            raise ValueError("Windows 与 Netsim 必须使用独立设备状态。")
         self.lab.mkdir(parents=True, exist_ok=True)
         self.config_path = self.lab / "connection.json"
         self.config = json.loads(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
-        if not isinstance(self.config, dict) or set(self.config) - {"transport", "python", "btvs", "tshark", "netsim_ini"} or any(not isinstance(v, str) for v in self.config.values()):
+        if not isinstance(self.config, dict) or set(self.config) - {"transport", "python", "btvs", "tshark", "netsim_ini", "netsim_state", "windows_state"} or any(not isinstance(v, str) for v in self.config.values()):
             raise ValueError("连接配置格式无效，不会自动覆盖。")
+        self.config.setdefault("netsim_state", str(initial_state))
+        self.config.setdefault("windows_state", str(initial_windows_state))
+        self._validate_state_paths(self.config)
         if netsim_ini is not None:
             self.config["netsim_ini"] = str(Path(netsim_ini).resolve())
         self.config.setdefault("netsim_ini", "")
@@ -60,6 +63,7 @@ class Watch:
             self.directory = Path(json.loads(self.selection.read_text(encoding="utf-8"))["directory"]).resolve()
         self.mac = self._identity()
         self.lock = threading.RLock()
+        self.events = deque(maxlen=100)
         self.process = None
         self.ready = self.connected = False
         self.error = None
@@ -78,12 +82,34 @@ class Watch:
         return self.windows_state if self.transport == "windows" else self.netsim_state
 
     @property
+    def netsim_state(self):
+        return Path(self.config["netsim_state"])
+
+    @property
+    def windows_state(self):
+        return Path(self.config["windows_state"])
+
+    @property
     def netsim_ini(self):
         return Path(self.config["netsim_ini"]) if self.config["netsim_ini"] else None
 
-    def _identity(self, transport=None):
+    def _validate_state_paths(self, config):
+        for key in ("netsim_state", "windows_state"):
+            value = config[key]
+            if not isinstance(value, str) or not 0 < len(value) <= 4096:
+                raise ValueError("请填写有效的设备状态文件完整路径。")
+            path = Path(value).resolve()
+            if path.is_relative_to(ROOT) or path in (self.config_path, self.config_path.with_suffix(".tmp"), self.lab / "selection.json"):
+                raise ValueError("设备状态必须保存在仓库外，且不能覆盖面板配置或文件清单。")
+            if path.exists() and not path.is_file():
+                raise ValueError("设备状态路径必须指向 JSON 文件，不能是文件夹。")
+            config[key] = str(path)
+        if Path(config["netsim_state"]) == Path(config["windows_state"]):
+            raise ValueError("Windows 与 Netsim 必须使用独立设备状态。")
+
+    def _identity(self, transport=None, config=None):
         transport = transport or self.transport
-        state = self.windows_state if transport == "windows" else self.netsim_state
+        state = Path((config or self.config)[transport + "_state"])
         mac = None
         if state.exists():
             data = json.loads(state.read_text(encoding="utf-8"))
@@ -97,18 +123,21 @@ class Watch:
             from bumble.hci import Address
             from .emulator import static_address
             mac = str(static_address(mac)) if mac else str(Address.generate_static_address())
+            state.parent.mkdir(parents=True, exist_ok=True)
             BindingState(state, mac)
         return mac
 
     def configuration(self):
         with self.lock:
             return dict(self.config, running=self.running(), operation=self.operation,
-                        netsim_configured=self.netsim_ini is not None)
+                        netsim_configured=self.netsim_ini is not None,
+                        config_file=str(self.config_path), data_dir=str(self.lab))
 
     def _validated_config(self, data):
-        if not isinstance(data, dict) or set(data) - {"transport", "python", "btvs", "tshark", "netsim_ini"} or any(not isinstance(v, str) for v in data.values()):
+        if not isinstance(data, dict) or set(data) - {"transport", "python", "btvs", "tshark", "netsim_ini", "netsim_state", "windows_state"} or any(not isinstance(v, str) for v in data.values()):
             raise ValueError("连接配置格式无效。")
         config = dict(self.config, **data)
+        self._validate_state_paths(config)
         if config["transport"] == "netsim":
             if not 0 < len(config["netsim_ini"]) <= 4096:
                 raise ValueError("请填写模拟器生成的 netsim.ini 完整路径。")
@@ -130,7 +159,7 @@ class Watch:
             if self.running() or self.operation:
                 raise ValueError("请先停止广播，等待退出清理完成后再修改连接配置。")
             config = self._validated_config(data)
-            mac = self._identity(config["transport"])
+            mac = self._identity(config["transport"], config)
             temporary = self.config_path.with_suffix(".tmp")
             temporary.write_text(json.dumps(config), encoding="utf-8")
             temporary.replace(self.config_path)
@@ -140,6 +169,7 @@ class Watch:
             self.air_mac = None
             self.ready = self.connected = False
             self.error = None
+            self._note("连接配置已保存，路线=" + self.transport + "；未启动广播")
 
     def check(self, data=None):
         with self.lock:
@@ -165,10 +195,51 @@ class Watch:
                 raise ValueError("请先停止广播，等待退出清理完成后再删除本地绑定记录。")
             if not self.state.is_file():
                 raise ValueError("当前路线没有本地绑定记录，无需删除。")
-            stored = json.loads(self.state.read_text(encoding="utf-8"))
-            if not isinstance(stored, dict):
-                raise ValueError("设备状态文件无效，不会自动覆盖。")
-            BindingState(self.state, stored.get("mac")).reply(b"\x01\x06")
+            with device_state_lock(self.state):
+                stored = json.loads(self.state.read_text(encoding="utf-8"))
+                if not isinstance(stored, dict):
+                    raise ValueError("设备状态文件无效，不会自动覆盖。")
+                BindingState(self.state, stored.get("mac")).reply(b"\x01\x06")
+            self._note("本地绑定标记已清除，路线=" + self.transport + "；保留设备身份、配置与文件接收标记")
+
+    def _note(self, message):
+        with self.lock:
+            self.events.append(datetime.now().astimezone().isoformat(timespec="seconds") + " " + message)
+
+    def logs(self):
+        # Only our diagnostic summaries are shown; Bumble debug traffic may contain user data.
+        allowed = ("BATCH_READY", "ADVERTISING", "CONNECTED;", "DISCONNECTED", "STOPPED", "SUBSCRIPTION",
+                   "DEVICE_INFO_SENT", "DEVICE_REPLY_SENT", "FILE_REPLY_SENT", "UNSUBSCRIBED_WRITE",
+                   "UNSUPPORTED_WRITE", "DEVICE_STATE_FAILED", "WRITE_REJECTED", "DEVICE_INFO_FAILED",
+                   "INFO:experiments.keep_device.files:file_transfer", "INFO:experiments.keep_device.files:workout_batch",
+                   "Unable to start", "当前广播 MAC", "广播地址已变化", "蓝牙客户端", "设备信息已应答",
+                   "已回应绑定请求", "运动文件已发送", "手机已确认领取", "运动目录为空", "手机开始读取",
+                   "设备请求未完成", "B5 已启动", "B5 广播已停止", "电脑蓝牙名称配置已恢复", "正在停止",
+                   "本地仍为已绑定", "本地绑定标记已重置", "地址观察已就绪", "本轮广播持续")
+        with self.lock:
+            text = ["当前路线：" + self.transport, "连接配置：" + str(self.config_path),
+                    "设备状态：" + str(self.state), "", "面板操作（本次启动）：", *self.events]
+        files = sorted((p for p in self.lab.glob("*.log") if p.is_file() and not p.is_symlink()),
+                       key=lambda p: p.stat().st_mtime)[-3:]
+        for path in files:
+            text += ["", "── 广播日志 " + path.name + " ──"]
+            try:
+                with path.open("rb") as stream:
+                    stream.seek(max(0, path.stat().st_size - 65536))
+                    lines = stream.read(65536).decode("utf-8", errors="replace").splitlines()[-300:]
+                visible = []
+                for line in lines:
+                    line = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", line)
+                    message = re.sub(r"^\d{4}-\d{2}-\d{2}T\S+ ", "", line)
+                    if message.startswith(allowed):
+                        line = re.sub(r"(?i)\b(token|password|authorization|account)=\S+", r"\1=[已隐藏]", line)
+                        visible.append(line[:1500])
+                text += visible or ["暂无连接事件，等待广播输出"]
+            except OSError as exc:
+                text.append("日志读取失败：" + type(exc).__name__)
+        if not files:
+            text += ["", "暂无广播日志；手动启动广播后自动更新"]
+        return dict(text="\n".join(text), files=len(files))
 
     def control(self, action, directory=None, job_id=None):
         if action not in ("start", "stop", "load"):
@@ -180,6 +251,7 @@ class Watch:
                 raise ValueError("请等待 Windows 退出清理完成后再启动或载入。")
             self.operation = action
             self.error = None
+            self._note("收到操作：" + action + "，路线=" + self.transport)
             background = self.transport == "windows"
         def execute():
             try:
@@ -190,6 +262,7 @@ class Watch:
             except (OSError, ValueError, RuntimeError, KeyError, subprocess.SubprocessError) as exc:
                 with self.lock:
                     self.error = str(exc)
+                    self._note("操作失败：" + type(exc).__name__ + "：" + str(exc))
                 if not background:
                     raise
             finally:
@@ -313,7 +386,7 @@ class Watch:
         try:
             with log_path.open("x", encoding="utf-8") as log:
                 for line in process.stdout:
-                    log.write(line)
+                    log.write(datetime.now().astimezone().isoformat(timespec="seconds") + " " + line)
                     log.flush()
                     if self.process is not process:
                         continue
@@ -445,6 +518,14 @@ def create_app(watch):
         response.headers["Cache-Control"] = "no-store"
         return response
 
+    @app.get("/api/watch/logs")
+    def logs():
+        if not secrets.compare_digest(request.headers.get("X-Watch-Token", ""), app.config["WATCH_TOKEN"]):
+            return jsonify(error="页面已过期，请刷新后重试。"), 403
+        response = jsonify(watch.logs())
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.post("/api/watch/<action>")
     def control(action):
         try:
@@ -477,6 +558,7 @@ def create_app(watch):
                 return jsonify(error="未知操作。"), 404
             return jsonify(watch.snapshot())
         except (OSError, ValueError, RuntimeError, KeyError, subprocess.SubprocessError) as exc:
+            watch._note(action + " 未完成：" + type(exc).__name__ + "：" + str(exc))
             return jsonify(error=str(exc)), 400
 
     return app

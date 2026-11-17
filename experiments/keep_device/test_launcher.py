@@ -152,10 +152,13 @@ def test_capture_failure_never_starts_b5_and_cleans_only_owned_processes(monkeyp
     assert not (tmp_path / "state.json").exists()
 
 
-@pytest.mark.parametrize("has_mac", [True, False])
-def test_launcher_passes_stop_file_and_requires_verified_mac_before_success(monkeypatch, tmp_path, has_mac):
+@pytest.mark.parametrize("has_mac,batch", [(True, False), (False, False), (True, True)])
+def test_launcher_passes_stop_file_and_requires_verified_mac_before_success(monkeypatch, tmp_path, has_mac, batch):
     args = Namespace(state=str(tmp_path / "state.json"), workout=None,
                      btvs="btvs.exe", tshark="tshark.exe", duration=10, reset_binding=False)
+    if batch:
+        args.workout_dir = str(tmp_path / "batch")
+        monkeypatch.setattr(launcher, "_workouts", Mock())
     monkeypatch.setattr(launcher.socket, "socket", Mock(return_value=Mock(
         __enter__=Mock(return_value=Mock()), __exit__=Mock(return_value=False))))
     monkeypatch.setattr(launcher.socket, "SO_EXCLUSIVEADDRUSE", -5, raising=False)
@@ -168,6 +171,8 @@ def test_launcher_passes_stop_file_and_requires_verified_mac_before_success(monk
         process = Mock(pid=123)
         process.poll.return_value = None
         if name == "prototype":
+            if batch:
+                assert arguments[arguments.index("--workout-dir") + 1] == args.workout_dir
             stop = launcher.Path(arguments[arguments.index("--stop-file") + 1])
             process.poll.return_value = process.returncode = 0
             if has_mac:
@@ -204,6 +209,40 @@ def test_launcher_passes_stop_file_and_requires_verified_mac_before_success(monk
     assert any("名称配置已恢复" in line for line in output)
     assert not list(tmp_path.iterdir())
     assert signal.getsignal(signal.SIGINT) == previous_interrupt
+
+
+def test_structured_events_report_address_subscription_and_shutdown():
+    events = []
+    status = launcher.Status(event=events.append, emit=lambda message: None)
+    recorder = Mock()
+    recorder.feed.side_effect = status.capture
+    configure(recorder)
+    command(recorder, 0x2039, enabled="0x01")
+    assert events[-1] == dict(type="address", value="41:23:45:67:89:AB")
+    command(recorder, 0x2039, enabled="0x00")
+    assert events[-1] == dict(type="address", value=None)
+    status.prototype("ADVERTISING adapter_address=11:22:33:44:55:66 service=190a")
+    assert events[-1] == dict(type="advertising", identity="11:22:33:44:55:66")
+    status.prototype("SUBSCRIPTION clients=2; session reset")
+    assert events[-1] == dict(type="link", connected=False, ambiguous=True)
+    status.prototype("STOPPED")
+    assert events[-1] == dict(type="stopped")
+
+
+def test_panel_stop_before_start_creates_no_bluetooth_process(monkeypatch, tmp_path):
+    stop = tmp_path / "stop"
+    stop.touch()
+    args = Namespace(state=str(tmp_path / "state.json"), workout=None, btvs="btvs.exe", tshark="tshark.exe",
+                     duration=10, reset_binding=False, stop_file=str(stop))
+    monkeypatch.setattr(launcher.socket, "socket", Mock(return_value=Mock(
+        __enter__=Mock(return_value=Mock()), __exit__=Mock(return_value=False))))
+    monkeypatch.setattr(launcher.socket, "SO_EXCLUSIVEADDRUSE", -5, raising=False)
+    spawn = Mock()
+    monkeypatch.setattr(launcher, "_spawn", spawn)
+    events = []
+    launcher.run(args, lambda message: None, events.append)
+    spawn.assert_not_called()
+    assert events == [dict(type="stopping")]
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows PowerShell entry point")

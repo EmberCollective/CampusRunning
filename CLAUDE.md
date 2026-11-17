@@ -51,7 +51,7 @@ python app.py
 
 可选面板依赖见 `requirements-dashboard.txt`。`GenerationEngine(config_manager, exporters=None, strict=False)` 保留默认流程；面板注入 B5 并严格失败。主应用不导入实验包，四模式不另写一套。面板中生成、预览不上传，显式“载入并开始同步”才切换本面板拥有的广播；不得把连接或收讫当作活动有效性。
 
-批量入口仅在模拟器 `emulator.py --workout-dir`：启动时固定 1–64 条 SPORT44、总计最多 64 MiB，与单文件参数互斥；Windows 一键入口保持单文件。2026-11-16 已确认 Android Keep 领取 44/44 条，且运动列表显示本批 B5 来源记录；未逐条验收全部活动有效性或批量中断恢复。每文件保留独立收讫标记，重启不重发已领取记录。
+模拟器 `emulator.py` 与 Windows `launcher.py` / `windows.py` 的 `--workout-dir` 在启动时固定 1–64 条 SPORT44、总计最多 64 MiB，与单文件参数互斥；PowerShell 包装入口保持单文件。面板可保存两条路线的连接配置，Windows 使用独立 Python 3.11 和设备状态，通过只读检查后才能启动；面板接入的手机联调和 Windows 批量传输尚未验收。2026-11-16 模拟器已确认 Android Keep 领取 44/44 条，且运动列表显示本批 B5 来源记录；未逐条验收全部活动有效性或批量中断恢复。每文件保留独立收讫标记，重启不重发已领取记录。
 
 已在 Android Keep 9.1.120 验证 B5 绑定、完整文件传输、设备来源及有效活动入账。Windows 自动重连仍不稳定，iOS Keep 尚未通过；文件领取成功不能代替活动有效性验收。所有账号配置、生成记录与研究原始材料留在仓库外。
 

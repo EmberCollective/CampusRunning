@@ -66,6 +66,32 @@ $statePath = Join-Path $env:KEEP_LAB_DIR 'device-b5.json'
 
 `KEEP_LAB_DIR` 只用于下方示例。state 包含 Keep 下发的身体配置；运动文件、接收标记和抓包也留在该私人目录，不提交仓库。同一 state 和运动文件只能由一个原型进程使用。
 
+## Windows 面板入口（2026-11-17）
+
+面板支持 Windows 实体蓝牙配置与只读本机检查；本轮按用户要求未启动广播，手机发现、绑定、同步及活动有效性留待联调。独立 Windows 单条入口的既有验收不能替代面板验收。
+
+Windows 蓝牙仍使用上方的独立 Python 3.11 环境。面板运行在独立 dashboard 环境（见 `requirements-dashboard.txt`），通过 `--windows-python` 调用蓝牙环境，不把 Bless 安装到主应用。
+
+在管理员终端运行以下命令。`$panelPython` 指向已安装面板依赖的独立 Python，BTVS/TShark 改为本机完整路径；所有数据路径均放仓库外。
+
+```powershell
+& $panelPython -m experiments.keep_device.dashboard `
+    --lab 'C:/path/to/private-panel' `
+    --state 'C:/path/to/netsim-state.json' `
+    --windows-state 'C:/path/to/existing-windows-b5-state.json' `
+    --transport windows --windows-python $windowsPython `
+    --btvs 'C:/path/to/btvs.exe' --tshark 'C:/path/to/tshark.exe' `
+    --no-start --port 5000
+```
+
+`--no-start` 只打开页面，不操作蓝牙。省略 `--windows-state` 时使用 `--state` 文件名加 `-windows` 的独立状态；不要将 Netsim 的业务身份文件用于 Windows，也不要两个入口共用同一 Windows 状态。已有 Windows 绑定需显式复用原 Windows 状态。若要保留可切回的 Netsim 路线，同时提供原 `--netsim-ini`；切换前必须停止当前广播并完成清理。
+
+打开 `/watch` → **广播与兼容设置 → 连接与广播**，核对 Python、BTVS、TShark 路径，点击 **检查本机环境**。该检查只读默认控制器能力、蓝牙状态、版本和权限；不会启动 BTVS、广播、更名或重启适配器。通过只代表前置条件满足，不能证明手机可发现或文件已接收。工具路径不在 PATH 时必须填写完整路径；检查失败保留输入，修正后可重试。
+
+保存只写私人 `lab/connection.json`，不会自动广播。需要联调时，再回手表控制页显式启动，或生成 B5 后载入并开始同步。Windows 的 Python 入口支持与模拟器相同的固定 1–64 条 / 64 MiB 批次及独立接收标记；Windows 批量实际传输尚未验收。面板不会清空绑定或收讫标记来重试。
+
+启动会临时更名并重启蓝牙，可能短暂断开其他连接；默认每轮最长 1 小时。地址只显示本轮 HCI 观察到的有效实体地址，未知时不可复制。订阅仅显示为“蓝牙客户端已连接”，仍需在官方 Keep 核对身份和绑定。停止是后台操作，等待名称恢复和启动器退出后才显示已停止；清理可能约 90 秒，超时会提示失败，勿在此期间关闭面板或强杀进程。
+
 ## 2. 从生成流程取得 SPORT44
 
 蓝牙入口只读取已有 SPORT44，不会自动生成，也不能直接接收 FIT、TCX 或 JSON。输入复用项目的 `ExportData`，坐标已是 WGS-84，包含原有速度和步频；编码器不再转换或平滑轨迹。

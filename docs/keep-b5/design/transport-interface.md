@@ -1,6 +1,6 @@
 # 可替换蓝牙传输接口
 
-这是下一步接入的接口契约，类型定义见 [transport.py](../../../experiments/keep_device/transport.py)。现有 Netsim 和 Windows 入口仍可运行，但尚未改为实现此接口；当前手表面板仍直连 Netsim。本文不表示实体广播或多模拟器隔离已经完成。
+这是后续统一传输实现的接口契约，类型定义见 [transport.py](../../../experiments/keep_device/transport.py)。现有 Netsim 和 Windows 入口尚未改为实现此接口；手表面板直接复用两个入口管理自有进程，Windows 启动器通过结构化事件报告状态。面板本机检查已通过，手机联调与多模拟器隔离尚未完成。
 
 现有入口的模拟器版本、实体蓝牙要求和验收范围见[适配范围与环境要求](../reference/compatibility.md)。
 
@@ -82,4 +82,4 @@ class B5Transport(Protocol):
 4. 原始写入进入同一套 `DeviceInfoSession`，按序回复，队列满或来源歧义时明确拒绝。
 5. 用同一文件队列完成读取/收讫，重启保留标记；连接成功与活动有效分别报告。
 
-后续迁移先让公共运行层接收 `B5Transport`，再将现有两个传输实现包装为适配器；面板消费结构化事件，替换当前日志字符串解析。文件生成和协议编码保持复用。当前仅提交接口及契约，不改变运行中的广播。
+后续迁移先让公共运行层接收 `B5Transport`，再将现有两个传输实现包装为适配器。当前 Windows 面板消费启动器的 `WATCH_EVENT` 事件，Netsim 面板仍解析既有日志；这不是任意后端注册能力。文件生成和协议编码保持复用。

@@ -313,11 +313,22 @@ def _temporary_keep_name(adapter, after_restore=None, name="Keep B3 Lab"):
                 after_restore()
 
 
-def _run_with_keep_name(duration: float, state_path: str | None = None, model: str = "B3", workout_path: str | None = None, stop_file: str | None = None) -> None:
-    if workout_path is not None:
+def _workouts(workout_path=None, workout_dir=None):
+    if workout_path is not None and workout_dir is not None:
+        raise ValueError("--workout and --workout-dir are mutually exclusive")
+    if workout_dir is None:
+        return WorkoutFiles(workout_path)
+    directory = Path(workout_dir)
+    if not directory.is_dir():
+        raise ValueError("Workout directory does not exist")
+    return WorkoutFiles(None, paths=sorted(directory.glob("*.sport44")))
+
+
+def _run_with_keep_name(duration: float, state_path: str | None = None, model: str = "B3", workout_path: str | None = None, stop_file: str | None = None, workout_dir: str | None = None) -> None:
+    if workout_path is not None or workout_dir is not None:
         if model != "B5":
             raise ValueError("--workout requires --model B5")
-        WorkoutFiles(workout_path)  # Reject invalid input before renaming/restarting the adapter.
+        _workouts(workout_path, workout_dir)  # Validate before restarting the adapter.
     from bless.backends.winrt.ble import BLEAdapter
 
     duration = _duration(duration)
@@ -328,6 +339,8 @@ def _run_with_keep_name(duration: float, state_path: str | None = None, model: s
         command.extend(["--model", model])
     if workout_path is not None:
         command.extend(["--workout", workout_path])
+    if workout_dir is not None:
+        command.extend(["--workout-dir", workout_dir])
     if stop_file is not None:
         command.extend(["--stop-file", stop_file])
     child = None
@@ -371,11 +384,11 @@ async def _wait_for_stop(duration: float, stop_file: str | None) -> None:
         await asyncio.sleep(min(0.2, remaining))
 
 
-async def run(duration: float = 300, state_path: str | None = None, model: str = "B3", workout_path: str | None = None, stop_file: str | None = None) -> None:
+async def run(duration: float = 300, state_path: str | None = None, model: str = "B3", workout_path: str | None = None, stop_file: str | None = None, workout_dir: str | None = None) -> None:
     """Run for duration seconds after advertising starts; always stop on exit."""
-    if workout_path is not None and model != "B5":
+    if (workout_path is not None or workout_dir is not None) and model != "B5":
         raise ValueError("--workout requires --model B5")
-    workout = WorkoutFiles(workout_path) if model == "B5" else None
+    workout = _workouts(workout_path, workout_dir) if model == "B5" else None
     from bless import BlessServer, GATTAttributePermissions, GATTCharacteristicProperties
     from bleak_winrt.windows.devices.bluetooth import BluetoothAdapter
 
@@ -439,10 +452,12 @@ def main():
     parser.add_argument("--keep-name", action="store_true", help="temporarily use the selected model's name with PnP restarts (administrator); restore original name on exit")
     parser.add_argument("--state", help="Private JSON state file enabling device binding")
     parser.add_argument("--model", choices=tuple(DEVICE_NAMES), default="B3", help="B3 legacy BTCP or B5 SIMPLE framing")
-    parser.add_argument("--workout", help="Explicit SPORT44 file to serve; requires --model B5")
+    workouts = parser.add_mutually_exclusive_group()
+    workouts.add_argument("--workout", help="Explicit SPORT44 file to serve; requires --model B5")
+    workouts.add_argument("--workout-dir", help="Fixed directory of 1–64 SPORT44 files; requires --model B5")
     parser.add_argument("--stop-file", help="Private launcher signal: stop normally when this path appears")
     args = parser.parse_args()
-    if args.workout is not None and args.model != "B5":
+    if (args.workout is not None or args.workout_dir is not None) and args.model != "B5":
         parser.error("--workout requires --model B5")
     if sys.platform != "win32":
         parser.exit(1, "This entry point requires Windows and requirements-windows.txt.\n")
@@ -452,6 +467,8 @@ def main():
     logging.getLogger("experiments.keep_device.files").setLevel(logging.INFO)
     try:
         control = {"stop_file": args.stop_file} if args.stop_file is not None else {}
+        if args.workout_dir is not None:
+            control["workout_dir"] = args.workout_dir
         if args.keep_name:
             _run_with_keep_name(args.duration, args.state, args.model, args.workout, **control)
         else:

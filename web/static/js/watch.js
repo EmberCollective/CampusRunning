@@ -7,7 +7,7 @@ const WatchPanel = (() => {
     let snapshot = null, candidate = workbenchConfig.candidate, busy = false, refreshing = false;
     let unknown = true, filter = 'all', requestEpoch = 0;
     function address() {
-        if (unknown || !snapshot?.running || !snapshot.ready) return null;
+        if (busy || unknown || !snapshot?.running || !snapshot.ready || snapshot.stopping) return null;
         const value = snapshot.binding_address?.value;
         return typeof value === 'string' && /^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(value) ? value : null;
     }
@@ -43,9 +43,10 @@ const WatchPanel = (() => {
         $('empty-title').textContent = unknown && !snapshot ? '暂时无法读取记录' : records.length ? '这个分类没有记录' : '还没有载入记录';
         $('empty-copy').textContent = unknown && !snapshot ? '恢复本地服务后点击“重新检查”' : records.length ? '切换到“全部”查看本批记录' : '先生成 B5 手表记录，再载入这里';
         $('candidate').hidden = !candidate; $('candidate-count').textContent = candidate?.count || 0;
-        const blocked = busy || unknown || pending > 0 || !!snapshot?.error;
+        const working = busy || snapshot?.operation || snapshot?.stopping;
+        const blocked = working || unknown || pending > 0 || !!snapshot?.error;
         $('load-candidate').disabled = blocked; $('load-blocked').hidden = !blocked;
-        $('load-blocked').textContent = busy ? '正在处理本次操作，请稍候' : unknown ? '连接状态未知，重新检查后再载入' : pending ? '当前还有待接收记录，完成后再载入下一批' : snapshot?.error || '';
+        $('load-blocked').textContent = working ? '正在处理本次操作，请稍候' : unknown ? '连接状态未知，重新检查后再载入' : pending ? '当前还有待接收记录，完成后再载入下一批' : snapshot?.error || '';
         $('step-load').className = 'step' + (records.length ? ' done' : ' current');
         $('step-load').querySelector('.step-index').textContent = records.length ? '✓' : '1';
         $('step-load-title').textContent = records.length ? '记录已载入' : '先生成并载入记录';
@@ -54,29 +55,37 @@ const WatchPanel = (() => {
     }
     function render() {
         const running = !unknown && snapshot?.running, connected = running && snapshot.connected;
+        const physical = snapshot?.transport === 'windows', stopping = snapshot?.stopping || snapshot?.operation === 'stop';
+        const working = busy || snapshot?.operation || stopping;
         const ready = running && snapshot.ready, validAddress = address();
-        const title = unknown ? '连接状态未知' : !running ? '广播已停止' : connected ? '已连接 Keep' : ready ? '等待 Keep 连接' : '正在启动广播…';
+        const title = unknown ? '连接状态未知' : stopping ? '正在停止并清理…' : snapshot?.operation === 'load' ? '正在载入记录…' : snapshot?.operation === 'start' ? '正在检查启动条件…' :
+            !running ? '广播已停止' : connected ? '蓝牙客户端已连接' : !validAddress ? '正在确认广播与地址…' : ready ? '等待 Keep 连接' : '正在启动广播…';
+        document.querySelector('.device-mode').textContent = physical ? 'Windows · 实体蓝牙广播' : '安卓模拟器 · 虚拟广播';
         $('connection-text').textContent = title;
         $('nav-status').textContent = title;
         $('connection-help').textContent = unknown ? '无法读取本地服务。保留上次记录，重新检查前不显示为已连接' :
-            snapshot.error || (!running ? '记录和接收标记保留。启动广播后再到 Keep 中检查连接' :
-                connected ? '蓝牙连接已建立，是否接收以列表为准' : ready ? '请在同一已准备好的官方模拟器里连接 B5' : '等待虚拟蓝牙环境确认广播启动');
+            snapshot.error || (stopping ? '等待广播退出和名称恢复，完成前请勿关闭面板' : !running ?
+                physical ? '启动将临时更名并重启电脑蓝牙，其他蓝牙连接可能短暂断开' : '记录和接收标记保留。启动广播后再到 Keep 中检查连接' :
+                connected ? '蓝牙客户端已订阅；请在 Keep 核对连接，文件接收以列表为准' : !validAddress ? '等待本轮有效地址，确认前不能复制或复用旧值' :
+                physical ? '请在附近手机的官方 Keep 中连接 B5；本轮广播最长 1 小时' : '请在同一已准备好的官方模拟器里连接 B5');
         $('connection-pill').className = 'pill' + (connected ? ' positive' : ready ? ' waiting' : '');
         $('sample-mac').textContent = validAddress?.replaceAll(':', '') || '—';
         $('dialog-mac').textContent = $('sample-mac').textContent;
-        $('settings-binding-address').textContent = validAddress ? validAddress + ' · 虚拟' : '未知 / 已失效';
+        $('settings-binding-address').textContent = validAddress ? validAddress + (physical ? ' · 实体' : ' · 虚拟') : '未知 / 已失效';
         $('device-identity').textContent = snapshot?.mac || '—';
         $('copy-address').disabled = $('dialog-copy').disabled = !validAddress;
-        $('address-medium').textContent = validAddress ? '虚拟地址' : '地址不可用';
-        $('address-help').textContent = validAddress ? '附近实体手机看不到这个虚拟地址' : '不使用设备业务身份或电脑永久地址代替';
-        $('toggle-broadcast').disabled = busy || unknown;
-        $('toggle-broadcast').querySelector('span').textContent = busy ? '正在处理…' : running ? '停止广播' : '启动广播';
+        $('address-medium').textContent = validAddress ? physical ? '实体广播地址' : '虚拟地址' : '地址不可用';
+        $('address-help').textContent = validAddress ? physical ? '来自本轮 HCI 观察，重启后可能变化' : '附近实体手机看不到这个虚拟地址' : '不使用设备业务身份或电脑永久地址代替';
+        $('connect-scope').textContent = physical ? '当前是 Windows 实体广播：在附近手机的官方 Keep 中操作；如果地址变化，先在 Keep 解绑后按新地址重新添加。iOS 尚未通过验收' :
+            '当前是虚拟广播：在同一已准备好的官方模拟器中操作 Keep，附近实体手机看不到这个地址';
+        $('toggle-broadcast').disabled = working || unknown;
+        $('toggle-broadcast').querySelector('span').textContent = working ? stopping ? '等待退出清理…' : '正在处理…' : running ? '停止广播' : '启动广播';
         $('toggle-broadcast').querySelector('use').setAttribute('href', running ? '#i-stop' : '#i-play');
         $('state-warning').hidden = !unknown && !snapshot?.error;
         $('state-warning').querySelector('span').textContent = unknown ? '连接状态未知，保留上次记录。恢复本地服务后重新检查' : snapshot?.error || '';
         $('retry-status').disabled = busy || refreshing;
         $('step-connect').className = 'step' + (connected ? ' done' : ready ? ' current' : '');
-        $('step-connect-title').textContent = unknown ? '先恢复状态读取' : !running ? '先启动广播' : !validAddress ? '等待确认本轮地址' : connected ? 'Keep 已连接' : '在 Keep 里连接 B5';
+        $('step-connect-title').textContent = unknown ? '先恢复状态读取' : stopping ? '等待退出清理' : !running ? '先启动广播' : !validAddress ? '等待确认本轮地址' : connected ? '核对 Keep 连接' : '在 Keep 里连接 B5';
         $('step-connect-copy').textContent = connected ? '连接与文件接收分开核对' : '使用当前有效地址，避免复用过期地址';
         const complete = snapshot?.records.length > 0 && snapshot.pending === 0;
         $('step-receipt').className = 'step' + (complete ? ' done' : connected ? ' current' : '');
@@ -90,6 +99,10 @@ const WatchPanel = (() => {
             const data = await requestJSON('/api/watch/status', { timeout: 6000 });
             if (epoch !== requestEpoch) return;
             snapshot = data; unknown = false;
+            if (candidate && snapshot.loaded_job === candidate.id && !snapshot.operation) {
+                candidate = null;
+                notify(snapshot.error ? '记录已载入，广播启动失败；请查看连接提示' : '本批记录已载入；等待 Keep 连接并读取文件');
+            }
             $('watch-updated').textContent = '状态已更新';
         } catch {
             if (epoch !== requestEpoch) return;
@@ -97,13 +110,13 @@ const WatchPanel = (() => {
         } finally { refreshing = false; render(); }
     }
     async function act(action, body = {}) {
-        if (busy || unknown || !snapshot) return;
+        if (busy || unknown || !snapshot || snapshot.operation || snapshot.stopping) return;
         if (action === 'load' && (snapshot.pending > 0 || snapshot.error)) return;
         busy = true; requestEpoch++; render();
         try {
             snapshot = await postJSON('/api/watch/' + action, body, 25000); unknown = false;
-            if (action === 'load') { candidate = null; notify('本批记录已载入；等待 Keep 连接并读取文件'); }
-            else notify(action === 'stop' ? '广播已停止，记录与接收标记保留' : '已请求启动，等待确认广播与地址');
+            notify(snapshot.operation ? action === 'stop' ? '停止请求已发送，等待名称恢复和退出清理' : '请求已受理，等待操作完成' :
+                action === 'stop' ? '广播已停止，记录与接收标记保留' : '已请求启动，等待确认广播与地址');
         } catch (error) {
             unknown = true;
             notify('操作结果待确认：' + error.message + '。重新检查状态后再操作');
@@ -111,7 +124,7 @@ const WatchPanel = (() => {
     }
     async function copy() {
         const value = address(); if (!value) return;
-        try { await navigator.clipboard.writeText(value.replaceAll(':', '')); notify('本轮虚拟地址已复制'); }
+        try { await navigator.clipboard.writeText(value.replaceAll(':', '')); notify('本轮有效地址已复制'); }
         catch { showInfo('请手动复制地址', `浏览器未允许自动复制。本轮可填写地址：${value.replaceAll(':', '')}`); }
     }
     document.querySelectorAll('[data-filter]').forEach(button => button.onclick = () => {
@@ -123,6 +136,7 @@ const WatchPanel = (() => {
     $('retry-status').onclick = refresh;
     $('load-candidate').onclick = () => { if (candidate) act('load', { job_id: candidate.id }); };
     document.addEventListener('workbench:page', event => { if (event.detail === 'watch') refresh(); });
+    document.addEventListener('workbench:connection', refresh);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
     setInterval(() => { if (!document.hidden && currentPage() === 'watch') refresh(); }, 2000);
     render();

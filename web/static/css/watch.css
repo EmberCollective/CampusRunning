@@ -1,0 +1,4 @@
+.environment-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
+#environment-result{overflow-wrap:anywhere}
+.settings-body{min-height:0}
+@media(min-width:761px){.settings-layout{grid-template-rows:minmax(0,1fr)}}

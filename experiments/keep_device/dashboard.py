@@ -6,18 +6,18 @@ from datetime import date
 import json
 import os
 from pathlib import Path
+import re
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
 from uuid import uuid4
 
-from bumble.hci import Address
 from flask import jsonify, render_template, request
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 from web import routes
-from .emulator import static_address
 from .exporter import B5Exporter
 from .files import WorkoutFiles
 from .state import BindingState
@@ -26,26 +26,157 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Watch:
-    """Own one Netsim process and retain its selected files and receipts."""
+    """Own one transport process and retain selected files and receipts."""
 
-    def __init__(self, lab, state, netsim_ini, workout_dir=None):
-        self.lab, self.state = Path(lab).resolve(), Path(state).resolve()
-        if self.lab.is_relative_to(ROOT) or self.state.is_relative_to(ROOT):
+    def __init__(self, lab, state, netsim_ini=None, workout_dir=None, *, transport=None,
+                 windows_python=None, btvs=None, tshark=None, windows_state=None):
+        self.lab, self.netsim_state = Path(lab).resolve(), Path(state).resolve()
+        self.windows_state = Path(windows_state).resolve() if windows_state else self.netsim_state.with_stem(self.netsim_state.stem + "-windows")
+        if any(p.is_relative_to(ROOT) for p in (self.lab, self.netsim_state, self.windows_state)):
             raise ValueError("手表数据和状态必须保存在仓库外。")
+        if self.windows_state == self.netsim_state:
+            raise ValueError("Windows 与 Netsim 必须使用独立设备状态。")
         self.lab.mkdir(parents=True, exist_ok=True)
-        self.netsim_ini = Path(netsim_ini)
+        self.netsim_ini = Path(netsim_ini) if netsim_ini else None
+        self.config_path = self.lab / "connection.json"
+        self.config = json.loads(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
+        if not isinstance(self.config, dict) or set(self.config) - {"transport", "python", "btvs", "tshark"} or any(not isinstance(v, str) for v in self.config.values()):
+            raise ValueError("连接配置格式无效，不会自动覆盖。")
+        self.config.setdefault("transport", "netsim" if netsim_ini else "windows")
+        for key, value in (("python", windows_python), ("btvs", btvs), ("tshark", tshark)):
+            if value is not None:
+                self.config[key] = str(value)
+            self.config.setdefault(key, shutil.which(key if key != "python" else "python3.11") or "")
+        if transport is not None:
+            self.config["transport"] = transport
+        if self.config["transport"] not in ("netsim", "windows"):
+            raise ValueError("不支持的连接路线。")
         self.selection = self.lab / "selection.json"
+        self.loaded_job = None
         self.directory = Path(workout_dir).resolve() if workout_dir else None
         if self.directory is None and self.selection.exists():
             self.directory = Path(json.loads(self.selection.read_text(encoding="utf-8"))["directory"]).resolve()
-        self.mac = str(static_address(json.loads(self.state.read_text(encoding="utf-8"))["mac"])) if self.state.exists() else str(Address.generate_static_address())
-        BindingState(self.state, self.mac)
+        self.mac = self._identity()
         self.lock = threading.RLock()
         self.process = None
         self.ready = self.connected = False
         self.error = None
+        self.air_mac = None
+        self.operation = None
+        self.stopping = False
         self.stop_path = None
         self.queue = self._queue()
+
+    @property
+    def transport(self):
+        return self.config["transport"]
+
+    @property
+    def state(self):
+        return self.windows_state if self.transport == "windows" else self.netsim_state
+
+    def _identity(self, transport=None):
+        transport = transport or self.transport
+        state = self.windows_state if transport == "windows" else self.netsim_state
+        mac = None
+        if state.exists():
+            data = json.loads(state.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or not isinstance(data.get("mac"), str):
+                raise ValueError("设备状态文件无效，不会自动覆盖。")
+            mac = data["mac"]
+        if transport == "windows":
+            if mac is not None:
+                BindingState(state, mac)
+        else:
+            from bumble.hci import Address
+            from .emulator import static_address
+            mac = str(static_address(mac)) if mac else str(Address.generate_static_address())
+            BindingState(state, mac)
+        return mac
+
+    def configuration(self):
+        with self.lock:
+            return dict(self.config, running=self.running(), operation=self.operation,
+                        netsim_configured=self.netsim_ini is not None)
+
+    def _validated_config(self, data):
+        if not isinstance(data, dict) or set(data) - {"transport", "python", "btvs", "tshark"} or any(not isinstance(v, str) for v in data.values()):
+            raise ValueError("连接配置格式无效。")
+        config = dict(self.config, **data)
+        if config["transport"] == "netsim":
+            if self.netsim_ini is None:
+                raise ValueError("此面板未配置 Netsim；请使用带 --netsim-ini 的入口。")
+        elif config["transport"] == "windows":
+            if sys.platform != "win32":
+                raise ValueError("实体蓝牙路线仅支持 Windows。")
+            for key in ("python", "btvs", "tshark"):
+                value = config.get(key)
+                if not isinstance(value, str) or not 0 < len(value) <= 4096 or not shutil.which(value):
+                    raise ValueError(f"请填写有效的 {key} 程序位置。")
+                config[key] = str(Path(shutil.which(value)).resolve())
+        else:
+            raise ValueError("该连接路线尚未接入。")
+        return config
+
+    def configure(self, data):
+        with self.lock:
+            if self.running() or self.operation:
+                raise ValueError("请先停止广播，等待退出清理完成后再修改连接配置。")
+            config = self._validated_config(data)
+            mac = self._identity(config["transport"])
+            temporary = self.config_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(config), encoding="utf-8")
+            temporary.replace(self.config_path)
+            self.config = config
+            self.mac = mac
+            self.process = None
+            self.air_mac = None
+            self.ready = self.connected = False
+            self.error = None
+
+    def check(self, data=None):
+        with self.lock:
+            config = self._validated_config(data if data is not None else {})
+        if config["transport"] == "netsim":
+            return dict(ready=self.netsim_ini.is_file(), checks={"netsim_ini": self.netsim_ini.is_file()})
+        result = subprocess.run([config["python"], "-m", "experiments.keep_device.launcher", "--check",
+                                 "--state", str(self.windows_state), "--btvs", config["btvs"], "--tshark", config["tshark"]],
+                                cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30,
+                                env={**os.environ, "PYTHONUTF8": "1"},
+                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        if result.returncode:
+            raise ValueError("Windows 环境检查未完成；请检查 Python 3.11、Bless 及工具依赖。" + result.stderr[-400:])
+        return json.loads(result.stdout)
+
+    def control(self, action, directory=None, job_id=None):
+        if action not in ("start", "stop", "load"):
+            raise ValueError("未知操作。")
+        with self.lock:
+            if self.operation:
+                raise ValueError("上一项操作尚未完成，请等待当前状态更新。")
+            if self.stopping and self.running() and action != "stop":
+                raise ValueError("请等待 Windows 退出清理完成后再启动或载入。")
+            self.operation = action
+            self.error = None
+            background = self.transport == "windows"
+        def execute():
+            try:
+                if action == "load":
+                    self.load(directory, job_id)
+                else:
+                    getattr(self, action)()
+            except (OSError, ValueError, RuntimeError, KeyError, subprocess.SubprocessError) as exc:
+                with self.lock:
+                    self.error = str(exc)
+                if not background:
+                    raise
+            finally:
+                with self.lock:
+                    self.operation = None
+        if background:
+            threading.Thread(target=execute, daemon=True).start()
+        else:
+            execute()
 
     def _queue(self, directory=None):
         directory = directory or self.directory
@@ -68,11 +199,14 @@ class Watch:
             except (OSError, ValueError) as exc:
                 error = "运动文件校验失败，请停止广播并检查文件：" + str(exc)
             running = self.running()
+            address = self.mac if self.transport == "netsim" else self.air_mac
             return dict(running=running, ready=running and self.ready,
                         connected=running and self.connected, mac=self.mac,
-                        keep_mac=self.mac.replace(":", ""),
-                        binding_address=dict(value=self.mac if running and self.ready else None, medium="virtual"),
-                        transport="netsim", records=records, error=error,
+                        keep_mac=address.replace(":", "") if address and running and self.ready and not self.stopping else None,
+                        binding_address=dict(value=address if running and self.ready and not self.stopping else None,
+                                             medium="physical" if self.transport == "windows" else "virtual"),
+                        transport=self.transport, operation=self.operation, stopping=self.stopping,
+                        loaded_job=self.loaded_job, records=records, error=error,
                         total_km=round(sum(r["distance_km"] for r in records), 3),
                         pending=sum(not r["received"] for r in records),
                         received=sum(r["received"] for r in records))
@@ -83,17 +217,32 @@ class Watch:
                 return
             queue = self._queue()
             queue.inventory()
+        if self.transport == "windows":
+            if not self.check()["ready"]:
+                raise ValueError("本机检查未通过；请确认管理员权限、Python 3.11、蓝牙开启及外设广播能力。")
+            self.windows_state.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            if self.netsim_ini is None:
+                raise ValueError("请先配置 Netsim。")
             values = dict(line.split("=", 1) for line in self.netsim_ini.read_text().splitlines() if "=" in line)
             port = int(values["grpc.port"])
             if not 1 <= port <= 65535:
                 raise ValueError("模拟器蓝牙端口无效。")
+        with self.lock:
             run_id = uuid4().hex
             self.stop_path = self.lab / (run_id + ".stop")
             self.ready = self.connected = False
+            self.air_mac = None
+            self.stopping = False
             self.error = None
-            command = [sys.executable, "-u", "-m", "experiments.keep_device.emulator",
-                       f"android-netsim:127.0.0.1:{port}", "--model", "B5", "--address", self.mac,
-                       "--state", str(self.state), "--stop-file", str(self.stop_path)]
+            if self.transport == "windows":
+                command = [self.config["python"], "-u", "-m", "experiments.keep_device.launcher", "--events-json",
+                           "--btvs", self.config["btvs"], "--tshark", self.config["tshark"],
+                           "--state", str(self.state), "--stop-file", str(self.stop_path)]
+            else:
+                command = [sys.executable, "-u", "-m", "experiments.keep_device.emulator",
+                           f"android-netsim:127.0.0.1:{port}", "--model", "B5", "--address", self.mac,
+                           "--state", str(self.state), "--stop-file", str(self.stop_path)]
             if self.directory is not None:
                 command += ["--workout-dir", str(self.directory)]
             self.process = subprocess.Popen(
@@ -103,15 +252,40 @@ class Watch:
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
             self.queue = queue
             threading.Thread(target=self._read, args=(self.process, self.lab / (run_id + ".log")), daemon=True).start()
-            timer = threading.Timer(20, self._startup_timeout, args=(self.process, self.stop_path))
+            timer = threading.Timer(120 if self.transport == "windows" else 20, self._startup_timeout, args=(self.process, self.stop_path))
             timer.daemon = True
             timer.start()
 
     def _startup_timeout(self, process, stop_path):
         with self.lock:
-            if self.process is process and process.poll() is None and not self.ready:
-                self.error = "广播启动超时，请检查模拟器蓝牙后重试。"
-                self.stop()
+            if self.process is not process or process.poll() is not None or self.ready:
+                return
+            self.error = "广播启动超时，请检查蓝牙环境后重试。"
+        self.stop(expected_process=process)
+
+    def _event(self, process, event):
+        if self.process is not process:
+            return
+        kind = event.get("type")
+        if kind in ("stopping", "stopped", "error"):
+            self.air_mac = None
+            self.ready = self.connected = False
+            self.stopping = True
+            if kind == "error":
+                self.error = event.get("message", "Windows 广播运行失败。")
+        elif not self.stopping:
+            if kind == "advertising":
+                self.ready = True
+                self.mac = event.get("identity") or self.mac
+            elif kind == "address":
+                value = event.get("value")
+                self.air_mac = value if isinstance(value, str) and re.fullmatch(r"(?:[0-9A-F]{2}:){5}[0-9A-F]{2}", value) else None
+            elif kind == "link":
+                self.connected = event.get("connected") is True
+                if event.get("ambiguous"):
+                    self.error = "存在多个订阅客户端，请断开多余设备，只连接一台手机。"
+                else:
+                    self.error = None
 
     def _read(self, process, log_path):
         try:
@@ -120,6 +294,21 @@ class Watch:
                     log.write(line)
                     log.flush()
                     if self.process is not process:
+                        continue
+                    if self.transport == "windows":
+                        if line.startswith("WATCH_EVENT "):
+                            with self.lock:
+                                try:
+                                    event = json.loads(line[len("WATCH_EVENT "):])
+                                    if not isinstance(event, dict):
+                                        raise ValueError("Invalid event")
+                                    self._event(process, event)
+                                except ValueError:
+                                    self.error = "Windows 广播状态无效，正在停止本轮广播，请检查运行日志。"
+                                    self.ready = self.connected = False
+                                    self.air_mac = None
+                                    self.stopping = True
+                                    self.stop_path.touch()
                         continue
                     if line.startswith("ADVERTISING"):
                         self.ready = True
@@ -132,43 +321,57 @@ class Watch:
         finally:
             process.stdout.close()
             code = process.wait()
-            if self.process is process:
-                self.connected = self.ready = False
-                if code and not self.error:
-                    self.error = "广播已异常停止，请检查模拟器后重试。"
+            with self.lock:
+                if self.process is process:
+                    self.connected = self.ready = False
+                    self.air_mac = None
+                    self.stopping = False
+                    if code and not self.error:
+                        self.error = "广播已异常停止，请检查运行环境及本轮日志后重试。"
 
-    def stop(self):
+    def stop(self, expected_process=None):
         with self.lock:
-            if not self.running():
+            if (expected_process is not None and self.process is not expected_process) or not self.running():
                 return
             self.stop_path.touch()
-            try:
-                self.process.wait(timeout=8)
-            except subprocess.TimeoutExpired:
-                if os.name == "nt":
-                    subprocess.run(["taskkill", "/PID", str(self.process.pid), "/T", "/F"], check=True,
-                                   capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                else:
-                    self.process.terminate()
-                self.process.wait(timeout=5)
+            self.stopping = True
+            self.ready = self.connected = False
+            self.air_mac = None
+            process = self.process
+        try:
+            process.wait(timeout=100 if self.transport == "windows" else 8)
+        except subprocess.TimeoutExpired:
+            if self.transport == "windows":
+                self.error = "Windows 退出清理超时；请检查本轮进程与蓝牙名称恢复后再启动。"
+                raise RuntimeError(self.error)
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], check=True,
+                               capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                process.terminate()
+            process.wait(timeout=5)
+        with self.lock:
             self.connected = self.ready = False
+            self.stopping = False
 
-    def load(self, directory):
+    def load(self, directory, job_id=None):
         with self.lock:
             directory = Path(directory).resolve()
             self._queue(directory).inventory()
-            if directory == self.directory:
-                self.start()
-                return
             self.queue.refresh_receipts()
-            if any(not item["received"] for item in self.queue.inventory()):
+            same = directory == self.directory
+            if not same and any(not item["received"] for item in self.queue.inventory()):
                 raise ValueError("手表还有待同步记录，请先完成当前同步，再载入下一批。")
+        if not same:
             self.stop()
-            temporary = self.selection.with_suffix(".tmp")
-            temporary.write_text(json.dumps({"directory": str(directory)}), encoding="utf-8")
-            temporary.replace(self.selection)
-            self.directory = directory
-            self.start()
+            with self.lock:
+                temporary = self.selection.with_suffix(".tmp")
+                temporary.write_text(json.dumps({"directory": str(directory)}), encoding="utf-8")
+                temporary.replace(self.selection)
+                self.directory = directory
+                self.queue = self._queue()
+        self.loaded_job = job_id
+        self.start()
 
 
 def create_app(watch):
@@ -214,13 +417,24 @@ def create_app(watch):
         response.headers["Cache-Control"] = "no-store"
         return response
 
+    @app.get("/api/watch/config")
+    def configuration():
+        response = jsonify(watch.configuration())
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.post("/api/watch/<action>")
     def control(action):
         try:
-            if action == "start":
-                watch.start()
-            elif action == "stop":
-                watch.stop()
+            if action == "config":
+                watch.configure(request.get_json(silent=True))
+                return configuration()
+            if action == "check":
+                response = jsonify(watch.check(request.get_json(silent=True)))
+                response.headers["Cache-Control"] = "no-store"
+                return response
+            if action in ("start", "stop"):
+                watch.control(action)
             elif action == "load":
                 data = request.get_json(silent=True) or {}
                 if not isinstance(data, dict) or not isinstance(data.get("job_id"), str):
@@ -234,11 +448,11 @@ def create_app(watch):
                     raise ValueError("只能载入本面板生成的 B5 文件。")
                 if set(directory.glob("*.sport44")) != set(files):
                     raise ValueError("生成目录已变化，请重新生成后载入。")
-                watch.load(directory)
+                watch.control("load", directory, data["job_id"])
             else:
                 return jsonify(error="未知操作。"), 404
             return jsonify(watch.snapshot())
-        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        except (OSError, ValueError, RuntimeError, KeyError, subprocess.SubprocessError) as exc:
             return jsonify(error=str(exc)), 400
 
     return app
@@ -248,13 +462,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lab", required=True)
     parser.add_argument("--state", required=True)
-    parser.add_argument("--netsim-ini", required=True)
+    parser.add_argument("--netsim-ini")
+    parser.add_argument("--transport", choices=("netsim", "windows"))
+    parser.add_argument("--windows-python", help="Independent Python 3.11 executable")
+    parser.add_argument("--windows-state", help="Separate private Windows binding state")
+    parser.add_argument("--btvs")
+    parser.add_argument("--tshark")
+    parser.add_argument("--no-start", action="store_true", help="Open the panel without starting Bluetooth")
     parser.add_argument("--workout-dir")
     parser.add_argument("--port", type=int, default=5000)
     args = parser.parse_args()
-    watch = Watch(args.lab, args.state, args.netsim_ini, args.workout_dir)
+    watch = Watch(args.lab, args.state, args.netsim_ini, args.workout_dir, transport=args.transport,
+                  windows_python=args.windows_python, windows_state=args.windows_state, btvs=args.btvs, tshark=args.tshark)
     atexit.register(watch.stop)
-    watch.start()
+    if not args.no_start:
+        watch.start()
     create_app(watch).run(host="127.0.0.1", port=args.port, debug=False, use_reloader=False)
 
 

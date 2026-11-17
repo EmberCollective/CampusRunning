@@ -31,6 +31,7 @@ let activeBrowser;
         if (!url.pathname.startsWith('/api/')) return route.continue();
         const body = url.pathname === '/api/tracks' ? [meta] : url.pathname.endsWith('/coords') ? { ...meta, base_coordinates: coords } :
             url.pathname === '/api/watch/status' ? watch : url.pathname === '/api/templates' ? [] :
+            url.pathname === '/api/watch/config' ? {transport:'netsim',python:'',btvs:'',tshark:'',running:true,netsim_configured:true} :
             url.pathname === '/api/amap-key' ? { key: '', securityJsCode: '' } :
             url.pathname === '/api/defaults' ? { default_track_id: 'campus_default' } :
             url.pathname === '/api/version' ? { version: '3.1.2' } : url.pathname.startsWith('/api/generate/') ? {
@@ -106,9 +107,10 @@ let activeBrowser;
         await app.waitForFunction(() => document.querySelectorAll('#watch-records tr').length === 8);
         await capture(`watch-${width}`, sets.watch);
         await Promise.all([draft, app].map(p => p.locator('#open-settings').click()));
+        await Promise.all([draft, app].map(p => p.locator('[data-setting-tab="maps"]').click()));
         await app.waitForFunction(() => !document.querySelector('#apply-settings').disabled);
-        await Promise.all([draft, app].map(p => p.locator('#transport-choice').selectOption('windows')));
-        await capture(`settings-${width}`, sets.settings);
+        // Windows configuration now has functional controls; compare the unchanged settings shell on Maps.
+        await capture(`settings-maps-${width}`, sets.settings);
         await Promise.all([draft, app].map(p => p.keyboard.press('Escape')));
     }
     fs.writeFileSync(path.join(output, 'geometry.json'), JSON.stringify({ results, errors }, null, 2));

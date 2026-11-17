@@ -5,6 +5,7 @@ console. Uses BTVS/TShark and the existing Bless entry point, not a new BLE stac
 """
 
 import argparse
+import asyncio
 import ctypes
 import json
 import os
@@ -22,7 +23,7 @@ import time
 
 from .files import WorkoutFiles
 from .state import BindingState
-from .windows import _duration, _terminate_child_tree
+from .windows import _duration, _terminate_child_tree, _workouts
 from .windows_mac import AdvertisingAddress, _FIELDS, _FILTER
 
 
@@ -33,8 +34,9 @@ _PORT = 24352
 class Status:
     """Present confirmed transport events; neither receipt nor BLE proves upload."""
 
-    def __init__(self, size=0, emit=print):
+    def __init__(self, size=0, emit=print, event=lambda data: None):
         self.emit = emit
+        self.event = event
         self.size = size
         self.address = AdvertisingAddress()
         self.last_mac = None
@@ -52,8 +54,10 @@ class Status:
             if self.last_mac is not None and self.last_mac != mac:
                 self.emit("广播地址已变化；重新添加请使用新 MAC。若 Keep 保留旧绑定，请先在 Keep 解绑。")
             self.last_mac = mac
+            self.event(dict(type="address", value=mac))
             self.emit(f"当前广播 MAC：{mac}；Keep 输入：{mac.replace(':', '')}")
         else:
+            self.event(dict(type="address", value=None))
             self.emit("当前广播 MAC 不可用，请等待新的地址提示。" + message)
 
     def prototype(self, line):
@@ -61,6 +65,8 @@ class Status:
             self.pending = dict(re.findall(r"(\w+)=([\w/]+)", line))
         elif line.startswith("SUBSCRIPTION"):
             self.pending = None
+            clients = int(re.search(r"clients=(\d+);", line)[1])
+            self.event(dict(type="link", connected=clients == 1, ambiguous=clients > 1))
             self.emit("蓝牙客户端已订阅，等待业务请求。" if "clients=1;" in line
                       else "蓝牙订阅已断开或存在多个客户端，请只连接一台手机。")
         elif line.startswith("DEVICE_INFO_SENT"):
@@ -72,7 +78,7 @@ class Status:
             if pending is None:
                 return
             command = pending.get("command")
-            if command == "6/2" and "sid=06 cid=02 " in line and pending.get("status") == "0":
+            if command == "6/2" and "sid=06 cid=02 " in line and pending.get("status") == "0" and self.size:
                 start = int(pending["offset"])
                 end = start + int(pending["returned_length"])
                 if not 0 <= start < end <= self.size:
@@ -89,7 +95,7 @@ class Status:
                     self.sent = sent
                     self.emit(f"运动文件已发送：{sent}/{self.size} 字节（{sent / self.size:.0%}）；等待手机收讫。")
             elif ((command == "6/7" and "sid=06 cid=07 " in line and pending.get("status") == "1")
-                  or (command == "6/3" and "sid=06 cid=03 " in line and pending.get("entries") == "1")):
+                  or (command == "6/3" and "sid=06 cid=03 " in line and int(pending.get("entries", 0)) > 0)):
                 if pending.get("type") == "44":
                     self.emit("手机已确认领取运动文件；活动来源、有效性和入账仍需在 Keep 核对。")
             elif command == "6/1" and "sid=06 cid=01 " in line and pending.get("type") == "44":
@@ -98,9 +104,12 @@ class Status:
             self.pending = None
             self.emit("设备请求未完成：" + line)
         elif line.startswith("ADVERTISING"):
+            identity = re.search(r"adapter_address=([0-9A-F:]{17})", line)
+            self.event(dict(type="advertising", identity=identity[1] if identity else None))
             self.emit("B5 已启动，等待本轮广播 MAC。")
         elif line.startswith("STOPPED"):
             self.pending = None
+            self.event(dict(type="stopped"))
             self.emit("B5 广播已停止，正在恢复电脑蓝牙名称。")
         elif line.startswith("NAME_REGISTRY_RESTORED"):
             self.emit("电脑蓝牙名称配置已恢复；实际广播名称仍以扫描结果为准。")
@@ -180,7 +189,7 @@ def _private_path(value):
     return path
 
 
-def run(args, emit=print):
+def run(args, emit=print, event=lambda data: None):
     state = _private_path(args.state)
     binding = None
     if not state.parent.is_dir():
@@ -195,6 +204,15 @@ def run(args, emit=print):
         workout = _private_path(args.workout)
         WorkoutFiles(workout)
         size = workout.stat().st_size
+    workout_dir = getattr(args, "workout_dir", None)
+    if workout_dir:
+        workout_dir = _private_path(workout_dir)
+        _workouts(args.workout, workout_dir)
+    requested_stop = Path(args.stop_file) if getattr(args, "stop_file", None) else None
+
+    def check_stop():
+        if requested_stop is not None and requested_stop.exists():
+            raise KeyboardInterrupt
     # Fail before starting anything if another capture already owns this endpoint.
     with socket.socket() as probe:
         probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
@@ -207,15 +225,17 @@ def run(args, emit=print):
                 emit("本地仍为已绑定；若要重新添加，请先在 Keep 解绑，再使用 -ResetBinding / --reset-binding 启动。")
     events = queue.Queue()
     processes = {}
-    status = Status(size, emit)
+    status = Status(size, emit, event)
     with tempfile.TemporaryDirectory(prefix="keep-b5-", dir=state.parent) as private:
         stop_file = Path(private) / "stop"
         original_error = None
         try:
+            check_stop()
             processes["btvs"] = _spawn([args.btvs, "-Mode", "Wireshark", "-Remote", "on",
                                          "-Port", str(_PORT)], "btvs", events)
             deadline = time.monotonic() + 15
             while not _tcp_state(processes["btvs"].pid, "LISTENING"):
+                check_stop()
                 if processes["btvs"].poll() is not None or time.monotonic() >= deadline:
                     raise RuntimeError("BTVS 未能开始监听；B5 未启动。")
                 time.sleep(0.1)
@@ -225,11 +245,14 @@ def run(args, emit=print):
                 command.extend(["-e", field])
             processes["capture"] = _spawn(command, "capture", events, separate_stderr=True)
             _await_capture(processes["btvs"], processes["capture"], events)
+            check_stop()
             command = [sys.executable, "-u", "-m", "experiments.keep_device.windows", "--model", "B5",
                        "--keep-name", "--duration", str(args.duration), "--state", str(state),
                        "--stop-file", str(stop_file)]
             if args.workout:
                 command.extend(["--workout", str(workout)])
+            if workout_dir:
+                command.extend(["--workout-dir", str(workout_dir)])
             processes["prototype"] = _spawn(command, "prototype", events)
             emit("地址观察已就绪，正在启动 B5。按 Ctrl+C 停止并等待名称恢复。")
             emit(f"本轮广播持续 {args.duration:g} 秒，到期自动停止。")
@@ -240,6 +263,7 @@ def run(args, emit=print):
             deadline = time.monotonic() + 90
             prototype_eof = False
             while True:
+                check_stop()
                 try:
                     source, line = events.get(timeout=0.2)
                 except queue.Empty:
@@ -268,6 +292,7 @@ def run(args, emit=print):
             original_error = error
             raise
         finally:
+            event(dict(type="stopping"))
             previous_interrupt = signal.signal(signal.SIGINT, signal.SIG_IGN)
             try:
                 stop_file.touch()
@@ -305,23 +330,53 @@ def run(args, emit=print):
                 signal.signal(signal.SIGINT, previous_interrupt)
 
 
+async def check_environment():
+    """Read capabilities only; do not rename, restart or start advertising."""
+    from importlib.metadata import version
+    from winrt.windows.devices.bluetooth import BluetoothAdapter
+    from winrt.windows.devices.radios import RadioState
+    import bless  # Verify the configured interpreter can load the runtime.
+
+    adapter = await asyncio.wait_for(BluetoothAdapter.get_default_async(), 10)
+    radio = await asyncio.wait_for(adapter.get_radio_async(), 10) if adapter else None
+    checks = dict(python=sys.version_info[:2] == (3, 11), bless=version("bless") == "0.3.0",
+                  administrator=bool(ctypes.windll.shell32.IsUserAnAdmin()),
+                  peripheral=bool(adapter and adapter.is_peripheral_role_supported),
+                  radio_on=bool(radio and radio.state == RadioState.ON))
+    return dict(checks=checks, ready=all(checks.values()), python_version=sys.version.split()[0])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--btvs", required=True, type=_tool, help="Microsoft BTVS executable")
     parser.add_argument("--tshark", required=True, type=_tool, help="Wireshark TShark executable")
     parser.add_argument("--state", required=True, help="Private persistent state JSON outside the repository")
-    parser.add_argument("--workout", help="Optional private SPORT44 file")
+    workouts = parser.add_mutually_exclusive_group()
+    workouts.add_argument("--workout", help="Optional private SPORT44 file")
+    workouts.add_argument("--workout-dir", help="Optional fixed directory of SPORT44 files")
+    parser.add_argument("--stop-file", help="Private panel signal for graceful shutdown")
+    parser.add_argument("--events-json", action="store_true", help="Emit structured lifecycle events for the local panel")
+    parser.add_argument("--check", action="store_true", help="Read environment capabilities without changing Bluetooth")
     parser.add_argument("--reset-binding", action="store_true",
                         help="Reset only local binding before startup; first unbind this device in Keep")
     parser.add_argument("--duration", type=_duration, default=3600, help="advertising seconds (default: 3600)")
     args = parser.parse_args()
     if sys.platform != "win32":
         parser.exit(1, "此入口仅支持 Windows。\n")
+    if args.check:
+        try:
+            print(json.dumps(asyncio.run(check_environment())), flush=True)
+        except Exception as error:
+            parser.exit(1, f"环境检查失败（{type(error).__name__}），请核对独立 Python 与 Windows 蓝牙驱动。\n")
+        return
     if not ctypes.windll.shell32.IsUserAnAdmin():
         parser.exit(1, "请在管理员终端运行；更名和启动电脑蓝牙需要管理员权限。\n")
     try:
-        run(args, lambda message: print(message, flush=True))
+        event = lambda data: print("WATCH_EVENT " + json.dumps(data), flush=True) if args.events_json else None
+        run(args, lambda message: print(message, flush=True), event)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        if args.events_json:
+            event(dict(type="error", message=str(error)))
         parser.exit(1, f"启动或运行失败：{error}\n")
 
 

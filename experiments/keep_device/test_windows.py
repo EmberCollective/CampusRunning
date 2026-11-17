@@ -15,12 +15,23 @@ from experiments.keep_device.btcp import CHARACTERISTIC_UUIDS, decode_frame, enc
 from experiments.keep_device.state import BindingState
 from experiments.keep_device.windows import (
     DeviceInfoBridge, NameRefreshError, _duration, _refresh_radio, _restart_adapter, _run_with_keep_name,
-    _temporary_keep_name, main,
+    _temporary_keep_name, _workouts, main,
 )
 
 
 REQUEST = bytes.fromhex("a5a5a000040001020303678d")
 WRITE = SimpleNamespace(uuid=CHARACTERISTIC_UUIDS[0])
+
+
+def test_batch_validation_precedes_bluetooth_setup(tmp_path):
+    import pytest
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        _workouts("one.sport44", str(tmp_path))
+    with pytest.raises(ValueError):
+        _workouts(workout_dir=str(tmp_path))
+    (tmp_path / "broken.sport44").write_bytes(b"broken")
+    with pytest.raises(ValueError):
+        _run_with_keep_name(10, model="B5", workout_dir=str(tmp_path))
 
 
 def client(name="one", size=20):

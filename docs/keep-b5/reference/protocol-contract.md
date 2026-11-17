@@ -4,13 +4,13 @@
 
 ## 模块与 Python 接口
 
-可替换传输接口的设计见[传输接口契约](../design/transport-interface.md)，纯标准库类型位于 [transport.py](../../../experiments/keep_device/transport.py)。现有后端尚未迁移，面板仍使用 Netsim；不能将接口定义视为实体广播或多实例支持已经完成。
+可替换传输接口的设计见[传输接口契约](../design/transport-interface.md)，纯标准库类型位于 [transport.py](../../../experiments/keep_device/transport.py)。现有后端尚未迁移；面板直接复用 Netsim 和 Windows 入口，不表示任意后端或多实例支持已经完成。
 
 | 模块 | 入口 | 输入与输出 / 职责 |
 |---|---|---|
 | [history.py](../../../experiments/keep_device/history.py) | `encode_workout(data: ExportData) -> bytes` | 将既有导出数据编码为单条 RUN=2 SPORT44；不生成轨迹、不转换坐标、不访问账号或蓝牙 |
 | [exporter.py](../../../experiments/keep_device/exporter.py) | `B5Exporter(BaseExporter)` | 构造注入旧生成引擎；校验轨迹末点距离/首末时长与摘要一致，编码后 CRC 校验，原子发布 `.sport44` 且拒覆盖 |
-| [dashboard.py](../../../experiments/keep_device/dashboard.py) | `python -m experiments.keep_device.dashboard` | 仅本机的可选旧 Web 扩展，注入 B5 导出器，管理一个自有 Netsim 子进程和固定文件清单 |
+| [dashboard.py](../../../experiments/keep_device/dashboard.py) | `python -m experiments.keep_device.dashboard` | 仅本机的可选 Web 扩展，注入 B5 导出器，管理一个自有 Netsim 或 Windows 启动器子进程和固定文件清单 |
 | [files.py](../../../experiments/keep_device/files.py) | `WorkoutFiles(path)` 或 `WorkoutFiles(None, paths=[...])`；`accepts(payload)`；`reply(payload)` | 启动时读取固定快照；请求/回复为 `SID + CID + protobuf`，按 UUID 路由读取并维护每文件接收标记 |
 | [state.py](../../../experiments/keep_device/state.py) | `BindingState(path, mac)`；`accepts(payload)`；`reply(payload)` | 保存设备绑定和配置；读写私人 JSON，状态成功落盘后回复 |
 | [btcp.py](../../../experiments/keep_device/btcp.py) | `DeviceInfoSession(mac, state=None, model="B3", workout=None)` | 按连接维护设备信息和 B3 发包序号；`reply_packets(request, limit)` 返回通知字节列表 |
@@ -33,10 +33,14 @@
 | `GET /api/watch/status` | running/ready/connected、mac/keep_mac、binding_address、transport、records、total_km、pending/received、error；禁止缓存 |
 | `POST /api/watch/start` / `stop` | 启停面板拥有的广播进程，不接管其他进程 |
 | `POST /api/watch/load` | JSON `{ "job_id": "..." }`；仅载入本服务生成且校验通过的完整 B5 目录，存在旧待同步记录时拒绝替换 |
+| `GET /api/watch/config` / `POST /api/watch/config` | 读取/保存 `transport`、`python`、`btvs`、`tshark`；只保存到私人 `lab/connection.json`，不自动启动；广播或操作未退出时拒绝修改 |
+| `POST /api/watch/check` | 同样四字段可检查未保存的配置；Windows 调用独立 Python 的 `launcher --check`，只读检查版本、管理员权限、默认控制器能力和无线电状态；Netsim 只检查 ini 文件存在 |
 
 面板操作和 B5 生成请求要求页面会话的 `X-Watch-Token`；服务绑定 localhost 并校验 Host。页面令牌不是 Keep 凭据。清单来自加载时的不可变字节快照，之后仅按内容哈希校验并刷新收讫标记；外部新增文件不会出现在已加载清单。`connected` 来自本次进程的真实连接/断开事件，并受进程存活状态约束，不等同于 Keep 账号绑定或活动有效。摘要时间以 UTC+08:00 展示，不暴露用户配置或坐标。
 
-当前 `transport` 为 `netsim`，`binding_address` 为 `{ "value": "AA:BB:CC:DD:EE:FF" | null, "medium": "virtual" }`。仅面板拥有的进程仍运行且广播已确认就绪时返回本轮虚拟地址，否则 `value` 为 `null`。前端读取失败也立即停用旧地址；不使用兼容保留的 `mac/keep_mac` 身份字段代替可填写地址。实体蓝牙尚未接入此接口，不沿用 Netsim 的地址规则。
+`transport` 为 `netsim` 或 `windows`；`binding_address` 为 `{ "value": "AA:BB:CC:DD:EE:FF" | null, "medium": "virtual" | "physical" }`。仅面板拥有的进程仍运行、广播已确认且未进入停止清理时提供地址；Windows 还必须有本轮 BTVS/TShark 的有效 HCI 地址证据。停止、观察失效、退出和前端读取失败时停用旧地址，不用设备身份或永久控制器地址替代。
+
+Windows 操作在后台执行，HTTP 快速返回；`operation` 为 `start/stop/load/null`，`stopping` 表示广播或名称仍在退出清理，`loaded_job` 表示已实际选中的任务。前端继续轮询，不将请求受理视为操作完成。`connected` 在 Windows 仅证明一个通知订阅客户端存在，不证明官方 Keep 身份。配置与检查均不更名或重启蓝牙；只有显式启动/载入才执行现有广播流程。
 
 模拟器 `--stop-file` 必须是已有目录中的新路径；文件出现后正常停止广播。面板退出先通知其子进程，超时只终止自己拥有的进程树。进程强杀或主机断电不能保证正常退出；已持久化的收讫标记保留。
 
@@ -225,7 +229,7 @@ SPORT44 删除请求在原型中表示收讫：先原子写入同目录 `<文件
 
 ## 运行与清理边界
 
-模拟器 `--workout-dir` 与 `--workout` 互斥，仅 B5 可用。它按文件名排序选择目录第一层的 `*.sport44`，启动后不扫描新文件；不接受 ZIP/FIT，也不将多条运动合并。Windows 启动入口仍只有单文件参数。2026-11-16 本批 44 条、398697 字节已被 Android Keep 逐条领取，44 个独立标记落盘；运动列表已观察到本批 B5 来源记录，但未逐条核验全部有效性，也未验收批量断线恢复或 iOS。
+模拟器、Windows 的 Python 入口均支持 `--workout-dir`，与 `--workout` 互斥，仅 B5 可用。它按文件名排序选择目录第一层的 1–64 条 `*.sport44`、合计最多 64 MiB，启动后不扫描新文件；不接受 ZIP/FIT，也不将多条运动合并。PowerShell 包装入口仍提供单文件参数。2026-11-16 模拟器本批 44 条、398697 字节已被 Android Keep 逐条领取；未逐条核验全部有效性，也未验收批量断线恢复、Windows 批量或 iOS。
 
 `emulator.py` 直接使用 Bumble `android-netsim` transport，与 Windows 启动器的状态和运行依赖隔离。重启后读取本轮 `netsim.ini` 的 `grpc.port`，显式复用同一实验静态随机地址、state 和指定 SPORT44；保留接收标记，不能把目录为空视为传输故障。该入口输出连接、业务及文件日志，没有 Windows 启动器的汇总进度显示。Netsim 验收不能代替实体蓝牙或 iOS 验收。
 
@@ -236,6 +240,8 @@ SPORT44 删除请求在原型中表示收讫：先原子写入同目录 `<文件
 启动器复用 `windows_mac.AdvertisingAddress` 判断广播地址，复用原型日志呈现业务状态。订阅仅证明客户端订阅；业务应答仅证明回复完成。文件进度按已成功回复的读取区间并集计数，不重复累计重读区间；100% 与客户端收讫均不等于 Keep 云端接纳、来源正确或活动有效。
 
 `windows.py --stop-file PATH` 要求路径在已有目录内且启动时不存在；文件出现后结束广播等待，走正常清理。启动器在私人临时目录创建这一信号，退出时等待原型最多 90 秒，然后关闭本次观察进程；清理失败明确报错。它不把系统配对成功当作退出或连接成功条件。
+
+面板另向 `launcher.py --stop-file` 发出外层停止信号，启动器转给上述内部信号，保留名称恢复和自有捕获进程清理顺序。`--events-json` 输出 `WATCH_EVENT` JSON 的 address/advertising/link/stopped/stopping/error；停止及错误先使地址失效，最终以启动器进程退出为清理完成。面板等待最多 100 秒；超时显示失败并继续禁止重启，不强杀正在恢复名称的启动器。
 
 Windows 桥仅允许一个通知订阅客户端，排队/待调度请求上限为 8；订阅切换会使旧任务失效。每条通知定向发送，等待最多 10 秒，同时核对成功状态与实际发送长度。Bless 不提供写入者身份，库可能确认底层 ATT 写入，业务拒绝不是访问认证。
 

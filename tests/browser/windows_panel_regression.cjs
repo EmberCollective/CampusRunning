@@ -18,18 +18,24 @@ let browser;
         config_file:'C:/lab/connection.json', data_dir:'C:/lab', python:'C:/lab/python.exe', btvs:'C:/lab/btvs.exe', tshark:'C:/lab/tshark.exe', running:false, operation:null, netsim_configured:false };
     let state = { transport:'netsim', running:false, ready:false, connected:false, stopping:false, operation:null,
         mac:'C2:7A:4D:91:0B:68', binding_address:{ value:null, medium:'virtual' }, records:[], pending:0, received:0, total_km:0, error:null };
-    let probeReady = false, probeError = false;
+    let probeReady = false, probeError = false, qrFailure = false, statusFailure = false;
     let logText = 'CONNECTED; fixture session\nDISCONNECTED reason=19', logFailure = false;
     await page.addInitScript(() => {
         Object.defineProperty(navigator, 'clipboard', {value:{writeText:async text => {window.copiedLog = text;}}});
     });
     await page.route('**/api/watch/**', async route => {
         const action = new URL(route.request().url()).pathname.split('/').at(-1);
+        if (action === 'binding-qr') {
+            // A tiny image fixture checks visibility; the real QR is decoded separately.
+            return route.fulfill(qrFailure ? {status:409,json:{error:'address changed'}} :
+                {contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aP1sAAAAASUVORK5CYII=', 'base64')});
+        }
         if (action === 'logs') {
             assert(route.request().headers()['x-watch-token']);
             return route.fulfill(logFailure ? {status:500,json:{error:'fixture unavailable'}} : {json:{text:logText,files:1}});
         }
-        if (route.request().method() === 'GET') return route.fulfill({json:action === 'config' ? config : state});
+        if (route.request().method() === 'GET') return route.fulfill(statusFailure && action === 'status' ?
+            {status:503,json:{error:'fixture unavailable'}} : {json:action === 'config' ? config : state});
         actions.push(action);
         if (action === 'reset-binding') {
             assert.deepEqual(route.request().postDataJSON(), { keep_unbound:true, transport:state.transport });
@@ -103,8 +109,24 @@ let browser;
         state.operation = null; state.ready = true;
         await refresh(() => !document.querySelector('#toggle-broadcast').disabled);
         assert(await page.locator('#copy-address').isDisabled());
+        assert(await page.locator('#binding-qr').isHidden());
         state.binding_address.value = '42:23:45:67:89:AB';
         await refresh(() => !document.querySelector('#copy-address').disabled);
+        await page.waitForFunction(() => !document.querySelector('#binding-qr').hidden);
+        assert.match(await page.locator('#binding-qr-image').getAttribute('src'), /mac=4223456789AB$/);
+        qrFailure = true; state.binding_address.value = '52:23:45:67:89:AB';
+        await refresh(() => !document.querySelector('#binding-qr-error').hidden);
+        assert(await page.locator('#binding-qr').isHidden());
+        qrFailure = false; state.binding_address.value = '62:23:45:67:89:AB';
+        await refresh(() => !document.querySelector('#binding-qr').hidden);
+        assert.match(await page.locator('#binding-qr-image').getAttribute('src'), /mac=6223456789AB$/);
+        statusFailure = true;
+        await refresh(() => document.querySelector('#connection-text').textContent.includes('未知'));
+        assert(await page.locator('#binding-qr').isHidden());
+        assert.equal(await page.locator('#binding-qr-image').getAttribute('src'), null);
+        statusFailure = false;
+        await refresh(() => !document.querySelector('#binding-qr').hidden);
+        pass('binding QR follows the advertised address, hides on unavailable status and falls back on image failure');
         assert.match(await page.locator('#address-medium').innerText(), /实体/);
         assert.match(await page.locator('#connect-scope').innerText(), /附近手机/);
         state.connected = true;
@@ -114,6 +136,7 @@ let browser;
         await page.locator('#toggle-broadcast').click();
         assert(await page.locator('#toggle-broadcast').isDisabled());
         assert.equal(await page.locator('#sample-mac').innerText(), '—');
+        assert(await page.locator('#binding-qr').isHidden());
         assert.match(await page.locator('#connection-text').innerText(), /清理/);
         assert(await page.locator('#reset-binding').isDisabled());
         config.running = true; config.operation = 'stop';

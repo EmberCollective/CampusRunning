@@ -1,5 +1,8 @@
 .environment-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
 #environment-result{overflow-wrap:anywhere}
+.binding-qr{margin:16px 0 0;text-align:center}
+.binding-qr img{display:block;width:196px;height:196px;max-width:100%;margin:0 auto;background:white}
+.binding-qr figcaption{margin-top:8px;font-size:12px;color:var(--secondary)}
 .settings-body{min-height:0}
 .connection-storage{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
 .connection-storage .hint{margin-top:8px}

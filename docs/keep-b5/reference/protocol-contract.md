@@ -4,6 +4,12 @@
 
 ## 模块与 Python 接口
 
+### 扫码连接
+
+`GET /api/watch/binding-qr?mac=<12位地址>` 返回 PNG，仅接受与当前已确认广播地址一致的参数。停止、未就绪、正在操作、地址未知或不匹配返回 409；所有响应设置 `Cache-Control: no-store`。接口不接受任意二维码内容，不使用业务身份 MAC 代替广播地址，不修改绑定状态。
+
+载荷采用 Android Keep 9.1.120 已恢复的解析契约：`keep://kitbit/bindInfo?mac=<12位MAC>&type=B5`。扫码处理器从 query 读取 `mac` 与大写 `type=B5`，地址不带冒号。二维码仅替代地址输入；解析成功不代表蓝牙发现、绑定或活动同步成功。当前已有用户扫码识别证据，完整扫码绑定未通过验收，不能据此宣称修复既有连接问题或兼容 iOS。
+
 可替换传输接口的设计见[传输接口契约](../design/transport-interface.md)，纯标准库类型位于 [transport.py](../../../experiments/keep_device/transport.py)。现有后端尚未迁移；面板直接复用 Netsim 和 Windows 入口，不表示任意后端或多实例支持已经完成。
 
 | 模块 | 入口 | 输入与输出 / 职责 |

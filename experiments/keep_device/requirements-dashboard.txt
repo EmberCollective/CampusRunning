@@ -2,3 +2,4 @@
 -r requirements.txt
 Flask==3.1.2
 garmin-fit-sdk==21.221.0
+segno==1.6.6

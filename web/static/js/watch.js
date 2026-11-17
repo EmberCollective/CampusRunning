@@ -45,7 +45,7 @@ const WatchPanel = (() => {
         $('toggle-watch-log').textContent = collapsed ? '展开' : '收起';
     };
     function address() {
-        if (busy || unknown || !snapshot?.running || !snapshot.ready || snapshot.stopping) return null;
+        if (busy || unknown || !snapshot?.running || !snapshot.ready || snapshot.stopping || snapshot.operation) return null;
         const value = snapshot.binding_address?.value;
         return typeof value === 'string' && /^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(value) ? value : null;
     }
@@ -108,6 +108,14 @@ const WatchPanel = (() => {
                 physical ? '请在附近手机的官方 Keep 中连接 B5；本轮广播最长 1 小时' : '请在同一已准备好的官方模拟器里连接 B5');
         $('connection-pill').className = 'pill' + (connected ? ' positive' : ready ? ' waiting' : '');
         $('sample-mac').textContent = validAddress?.replaceAll(':', '') || '—';
+        const qrImage = $('binding-qr-image'), qrMac = validAddress?.replaceAll(':', '') || '';
+        if (qrImage.dataset.mac !== qrMac) {
+            qrImage.dataset.mac = qrMac;
+            if (qrMac) qrImage.src = '/api/watch/binding-qr?mac=' + qrMac;
+            else qrImage.removeAttribute('src');
+        }
+        $('binding-qr').hidden = !qrMac || !qrImage.complete || !qrImage.naturalWidth;
+        $('binding-qr-error').hidden = !qrMac || !qrImage.complete || !!qrImage.naturalWidth;
         $('dialog-mac').textContent = $('sample-mac').textContent;
         $('settings-binding-address').textContent = validAddress ? validAddress + (physical ? ' · 实体' : ' · 虚拟') : '未知 / 已失效';
         $('device-identity').textContent = snapshot?.mac || '—';
@@ -188,6 +196,7 @@ const WatchPanel = (() => {
         act('reset-binding', { keep_unbound: true, transport: resetTransport });
     };
     $('copy-address').onclick = $('dialog-copy').onclick = copy;
+    $('binding-qr-image').onload = $('binding-qr-image').onerror = render;
     $('retry-status').onclick = refresh;
     $('load-candidate').onclick = () => { if (candidate) act('load', { job_id: candidate.id }); };
     document.addEventListener('workbench:page', event => { if (event.detail === 'watch') refresh(); });

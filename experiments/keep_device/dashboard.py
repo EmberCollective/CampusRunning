@@ -2,6 +2,7 @@
 
 import argparse
 import atexit
+from io import BytesIO
 from collections import deque
 from datetime import date, datetime
 import json
@@ -17,6 +18,7 @@ from uuid import uuid4
 
 from flask import jsonify, render_template, request
 from jinja2 import ChoiceLoader, FileSystemLoader
+import segno
 
 from web import routes
 from .exporter import B5Exporter
@@ -515,6 +517,24 @@ def create_app(watch):
     @app.get("/api/watch/config")
     def configuration():
         response = jsonify(watch.configuration())
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get("/api/watch/binding-qr")
+    def binding_qr():
+        current = watch.snapshot()
+        address = current["binding_address"]["value"]
+        if (not current["running"] or not current["ready"] or current["stopping"]
+                or current["operation"] or not isinstance(address, str)
+                or not re.fullmatch(r"(?:[0-9A-F]{2}:){5}[0-9A-F]{2}", address)
+                or request.args.get("mac") != address.replace(":", "")):
+            response = jsonify(error="本轮地址不可用，请刷新连接状态后重试。")
+            response.status_code = 409
+        else:
+            output = BytesIO()
+            segno.make_qr(f"keep://kitbit/bindInfo?mac={address.replace(':', '')}&type=B5",
+                          error="m").save(output, kind="png", scale=6, border=4)
+            response = app.response_class(output.getvalue(), mimetype="image/png")
         response.headers["Cache-Control"] = "no-store"
         return response
 

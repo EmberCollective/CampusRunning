@@ -109,6 +109,43 @@ def test_binding_address_requires_confirmed_advertisement(watch):
     assert watch.snapshot()["binding_address"]["value"] is None
 
 
+def test_binding_qr_uses_only_current_advertised_address(app, watch, monkeypatch):
+    client = app.test_client()
+    watch.process = Mock()
+    watch.process.poll.return_value = None
+    watch.ready = True
+    watch.config["transport"] = "windows"
+    watch.air_mac = "42:23:45:67:89:AB"
+    make = Mock(wraps=dashboard.segno.make_qr)
+    monkeypatch.setattr(dashboard.segno, "make_qr", make)
+    before = watch.netsim_state.read_bytes()
+    response = client.get("/api/watch/binding-qr?mac=4223456789AB")
+    assert response.status_code == 200 and response.mimetype == "image/png"
+    assert response.data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert response.headers["Cache-Control"] == "no-store"
+    make.assert_called_once_with("keep://kitbit/bindInfo?mac=4223456789AB&type=B5", error="m")
+    assert watch.netsim_state.read_bytes() == before
+    assert client.get("/api/watch/binding-qr?mac=" + watch.mac.replace(":", "")).status_code == 409
+    watch.air_mac = "52:23:45:67:89:AB"
+    assert client.get("/api/watch/binding-qr?mac=4223456789AB").status_code == 409
+    assert client.get("/api/watch/binding-qr?mac=5223456789AB").status_code == 200
+
+
+@pytest.mark.parametrize("guard", ["stopped", "unready", "stopping", "operation", "unknown", "invalid"])
+def test_binding_qr_refuses_unavailable_or_stale_address(app, watch, guard):
+    watch.process = Mock()
+    watch.process.poll.return_value = 1 if guard == "stopped" else None
+    watch.ready = guard != "unready"
+    watch.stopping = guard == "stopping"
+    watch.operation = "start" if guard == "operation" else None
+    if guard in ("unknown", "invalid"):
+        watch.config["transport"] = "windows"
+        watch.air_mac = None if guard == "unknown" else "invalid-address"
+    response = app.test_client().get("/api/watch/binding-qr?mac=" + watch.mac.replace(":", ""))
+    assert response.status_code == 409
+    assert response.headers["Cache-Control"] == "no-store"
+
+
 def test_start_rejects_corrupt_files_before_launch(tmp_path, source, monkeypatch):
     watch = Watch(tmp_path / "panel", tmp_path / "state.json", tmp_path / "netsim.ini", source.parent)
     source.write_bytes(b"broken")

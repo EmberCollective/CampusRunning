@@ -92,12 +92,16 @@ python app.py
 | GET | `/api/tracks/<id>` | 获取轨迹详情 |
 | GET | `/api/templates` | 列出所有模板 |
 | GET | `/api/defaults` | 获取默认设置 |
+| GET | `/api/pace/algorithms` | 列出已注册配速算法 |
+| POST | `/api/pace/preview` | 生成配速曲线样例，不写运动文件 |
 | POST | `/api/generate/daily` | 每日范围生成 |
 | POST | `/api/generate/total` | 总公里数生成 |
 | POST | `/api/generate/single` | 单文件生成 |
 | GET | `/api/download/<job_id>` | 下载生成的文件 |
 
 ### 请求示例
+
+所有生成模式可使用 `pace_algorithm`（默认 `natural`，另有 `steady`、`progressive`）和 `pace_intensity`（0–1，默认 0.15）。旧模板兼容；关闭 `enable_pace_fluctuation` 时按实际距离匀速生成。预览请求、研究边界和 Python 算法注册接口见 [配速模型](pace-models.md)。
 
 #### POST /api/generate/daily
 

@@ -44,6 +44,8 @@ class TrackGenerator:
         smooth_factor: float = 0.3,
         enable_pace_fluctuation: bool = True,
         enable_cadence: bool = True,
+        pace_algorithm: str = "natural",
+        pace_intensity: float = 0.15,
     ) -> None:
         """初始化轨迹生成器。
 
@@ -55,6 +57,8 @@ class TrackGenerator:
             smooth_factor: 光滑因子。
             enable_pace_fluctuation: 是否启用配速波动。
             enable_cadence: 是否启用步频/步数数据自动生成。
+            pace_algorithm: 已注册的配速算法 ID。
+            pace_intensity: 配速波动强度（0–1）。
         """
         self.base_analysis: TrackAnalysis = track_analysis
         self.analyzer: TrackAnalyzer = analyzer
@@ -65,6 +69,8 @@ class TrackGenerator:
         self.smooth_factor: float = smooth_factor
         self.enable_pace_fluctuation: bool = enable_pace_fluctuation
         self.enable_cadence: bool = enable_cadence
+        self.pace_algorithm = pace_algorithm
+        self.pace_intensity = pace_intensity
 
         # 基础轨迹（可能经过坐标修正）
         if corrector is not None:
@@ -424,11 +430,18 @@ class TrackGenerator:
             self._pace_fluctuator is None
             or self._pace_fluctuator.base_pace != base_pace_min_per_km
         ):
-            self._pace_fluctuator = PaceFluctuator(base_pace_min_per_km)
+            self._pace_fluctuator = PaceFluctuator(
+                base_pace_min_per_km, self.pace_intensity, algorithm=self.pace_algorithm,
+            )
+
+        segment_distances = [
+            self.analyzer.calculate_distance(a, b) / 1000
+            for a, b in zip(track_points, track_points[1:])
+        ]
 
         # 生成配速曲线
         pace_profile = self._pace_fluctuator.generate_pace_profile(
-            len(track_points)
+            len(track_points), segment_distances,
         )
 
         # 根据配速曲线推导每点速度与步频（速度 = 1000 / (60·配速)）
@@ -443,14 +456,6 @@ class TrackGenerator:
                 len(track_points), speeds
             )
 
-        # 计算每段距离
-        segment_distances: List[float] = []
-        for i in range(len(track_points) - 1):
-            distance = self.analyzer.calculate_distance(
-                track_points[i], track_points[i + 1]
-            )
-            segment_distances.append(distance / 1000)  # 转换为公里
-
         # 计算每段的时间
         segment_times = self._pace_fluctuator.generate_segment_times(
             pace_profile[:-1], segment_distances
@@ -458,12 +463,12 @@ class TrackGenerator:
 
         # 生成轨迹点
         trackpoints: List[TrackpointData] = []
-        current_time = start_time
+        elapsed_seconds = 0.0
         cumulative_distance = 0.0
 
         for i, point in enumerate(track_points):
             # 使用本地时间格式
-            point_time_str = current_time.strftime("%Y-%m-%dT%H:%M:%S")
+            point_time_str = (start_time + datetime.timedelta(seconds=elapsed_seconds)).strftime("%Y-%m-%dT%H:%M:%S")
 
             # 计算海拔（模拟值，基于到中心的距离）
             distance_to_center = self.analyzer.calculate_distance(
@@ -497,9 +502,7 @@ class TrackGenerator:
 
             # 更新当前时间（除了最后一个点）
             if i < len(track_points) - 1:
-                current_time += datetime.timedelta(
-                    seconds=segment_times[i]
-                )
+                elapsed_seconds += segment_times[i]
 
         return trackpoints
 
@@ -521,8 +524,6 @@ class TrackGenerator:
         Returns:
             TrackpointData 列表。
         """
-        time_interval = duration_seconds / max(1, len(track_points) - 1)
-
         # 按实际轨迹点距离计算累计距离。
         # 注意：base_distance 是单圈长度，多圈轨迹下不能用其均分近似
         # （否则累计距离与速度都会系统性偏低）。
@@ -560,7 +561,8 @@ class TrackGenerator:
         for i, point in enumerate(track_points):
             # 计算当前点的时间
             point_time = start_time + datetime.timedelta(
-                seconds=i * time_interval
+                seconds=(duration_seconds * cumulative_distances[i] / cumulative_distances[-1]
+                         if cumulative_distances[-1] > 0 else 0)
             )
             # 使用本地时间格式
             point_time_str = point_time.strftime("%Y-%m-%dT%H:%M:%S")

@@ -11,9 +11,11 @@ import pytest
 from src.config_manager import ConfigManager
 from src.core.models import GenerationConfig
 from src.generation_engine import GenerationEngine
+from src.core.cadence_generator import compute_lap_cadence_metrics
 
 from experiments.keep_device.exporter import B5Exporter
 from experiments.keep_device.files import WorkoutFiles
+from experiments.keep_device.test_history import _segments
 
 
 class CaptureExporter(B5Exporter):
@@ -108,3 +110,40 @@ def test_strict_batch_propagates_export_failure(native, monkeypatch):
     monkeypatch.setattr(exporter, "export", fail)
     with pytest.raises(ValueError, match="invalid workout"):
         engine.generate_dates([datetime.date(2026, 11, 16)], 3.01, 3.01, config)
+
+
+@pytest.mark.parametrize("algorithm", ["natural", "steady", "progressive", "uniform"])
+@pytest.mark.parametrize("intensity", [0, .15, 1])
+@pytest.mark.parametrize("distance", [1.0, 3.01, 4.12])
+def test_pace_models_preserve_b5_contract(native, algorithm, intensity, distance):
+    exporter, engine, config = native
+    config.pace_algorithm, config.pace_intensity = ("natural" if algorithm == "uniform" else algorithm), intensity
+    config.enable_pace_fluctuation = algorithm != "uniform"
+    result = engine.generate_single(datetime.date(2026, 11, 17), distance, config)
+    data = exporter.data
+    assert round(abs(result.duration_seconds - distance*7.5*60), 6) <= 1
+    points = data.trackpoints
+    for km in range(1, int(distance)+1):
+        crossing = next(p for p in points if round(p.distance_meters) >= km*1000)
+        assert round(crossing.distance_meters) == km*1000
+    encoded = Path(result.filepath).read_bytes()
+    description = encoded[-92:-14]
+    kind, duration, start, end, meters, steps, calories = struct.unpack_from('<7i', description)
+    assert kind == 2 and duration == end-start == result.duration_seconds
+    assert meters == round(distance*1000)
+    assert steps == compute_lap_cadence_metrics(points)[2]
+    segments = _segments(encoded, len(points))
+    assert sum(segments[40]) == duration and segments[40] == segments[43]
+    assert sum(segments[20]) == meters
+    assert segments[44] == tuple(round(s*1000/m) for s,m in zip(segments[40], segments[20]))
+    previous = points[0]
+    for index, point in enumerate(points):
+        offset = 3 + index*65
+        assert struct.unpack_from('<f', encoded, offset)[0] == pytest.approx(point.speed*3.6)
+        assert struct.unpack_from('<f', encoded, offset+44)[0] == pytest.approx(1000/point.speed)
+        if index:
+            seconds = (datetime.datetime.fromisoformat(point.time)-datetime.datetime.fromisoformat(previous.time)).total_seconds()
+            predicted = (point.distance_meters-previous.distance_meters)/previous.speed
+            assert seconds == pytest.approx(predicted, abs=1.1)
+        previous = point
+    assert WorkoutFiles(Path(result.filepath)).inventory()[0]['received'] is False

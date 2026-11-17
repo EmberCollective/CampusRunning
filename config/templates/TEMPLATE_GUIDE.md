@@ -66,6 +66,8 @@
 | `include_track` | bool | 是否包含轨迹点数据 |
 | `apply_correction` | bool | 是否应用坐标修正 |
 | `enable_pace_fluctuation` | bool | 是否启用配速波动 |
+| `pace_algorithm` | string | `natural`（默认）/`steady`/`progressive`，或本机显式注册的算法 |
+| `pace_intensity` | float | 波动强度 0–1，默认 0.15；内置算法在 0 时匀速 |
 
 ### 每日模式 (daily_config)
 

@@ -221,6 +221,8 @@ class GenerationConfig:
         calories_per_km: 每公里消耗卡路里
         start_date: 可选的默认开始日期
         end_date: 可选的默认结束日期
+        pace_algorithm: 已注册的配速算法 ID
+        pace_intensity: 配速波动强度（0–1）
     """
     track_id: str = "campus_default"
     min_pace: float = 7.0
@@ -244,6 +246,8 @@ class GenerationConfig:
     calories_per_km: float = 60.0
     start_date: Optional[datetime.date] = None
     end_date: Optional[datetime.date] = None
+    pace_algorithm: str = "natural"
+    pace_intensity: float = 0.15
 
     _VALID_OUTPUT_FORMATS = ("tcx", "fit", "b5")
 
@@ -253,6 +257,9 @@ class GenerationConfig:
         Raises:
             ValueError: output_format 不是受支持的格式
         """
+        from src.core.pace_fluctuator import PaceFluctuator
+
+        PaceFluctuator(1.0, self.pace_intensity, algorithm=self.pace_algorithm)
         if self.output_format not in self._VALID_OUTPUT_FORMATS:
             raise ValueError(
                 f"不支持的输出格式: {self.output_format}（可选 tcx/fit/b5）"

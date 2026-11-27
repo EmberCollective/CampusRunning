@@ -183,10 +183,7 @@ def _await_capture(btvs, capture, events):
 
 
 def _private_path(value):
-    path = Path(value).expanduser().resolve()
-    if path.is_relative_to(_ROOT):
-        raise ValueError("状态和运动文件必须放在仓库外的私人目录。")
-    return path
+    return Path(value).expanduser().resolve()
 
 
 def run(args, emit=print, event=lambda data: None):

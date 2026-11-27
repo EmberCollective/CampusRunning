@@ -119,9 +119,8 @@ def test_netstat_ignores_gbk_headings_under_utf8_mode(monkeypatch):
     assert not run.call_args.kwargs.get("text", False)
 
 
-def test_private_state_and_workout_cannot_be_saved_in_repository():
-    with pytest.raises(ValueError, match="仓库外"):
-        launcher._private_path(launcher._ROOT / "private-state.json")
+def test_private_path_resolves_inside_repository():
+    assert launcher._private_path(launcher._ROOT / "lab" / "state.json") == (launcher._ROOT / "lab" / "state.json").resolve()
 
 
 def test_capture_failure_never_starts_b5_and_cleans_only_owned_processes(monkeypatch, tmp_path):

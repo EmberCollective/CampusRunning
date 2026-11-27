@@ -36,8 +36,6 @@ class Watch:
         self.lab = Path(lab).resolve()
         initial_state = Path(state).resolve()
         initial_windows_state = Path(windows_state).resolve() if windows_state else initial_state.with_stem(initial_state.stem + "-windows")
-        if self.lab.is_relative_to(ROOT):
-            raise ValueError("手表数据和状态必须保存在仓库外。")
         self.lab.mkdir(parents=True, exist_ok=True)
         self.config_path = self.lab / "connection.json"
         self.config = json.loads(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
@@ -101,8 +99,8 @@ class Watch:
             if not isinstance(value, str) or not 0 < len(value) <= 4096:
                 raise ValueError("请填写有效的设备状态文件完整路径。")
             path = Path(value).resolve()
-            if path.is_relative_to(ROOT) or path in (self.config_path, self.config_path.with_suffix(".tmp"), self.lab / "selection.json"):
-                raise ValueError("设备状态必须保存在仓库外，且不能覆盖面板配置或文件清单。")
+            if path in (self.config_path, self.config_path.with_suffix(".tmp"), self.lab / "selection.json"):
+                raise ValueError("设备状态不能覆盖面板配置或文件清单。")
             if path.exists() and not path.is_file():
                 raise ValueError("设备状态路径必须指向 JSON 文件，不能是文件夹。")
             config[key] = str(path)
@@ -280,8 +278,8 @@ class Watch:
         if directory is None:
             return WorkoutFiles(None)
         directory = Path(directory).resolve()
-        if directory.is_relative_to(ROOT) or not directory.is_dir():
-            raise ValueError("请选择仓库外的有效运动文件目录。")
+        if not directory.is_dir():
+            raise ValueError("请选择有效的运动文件目录。")
         return WorkoutFiles(None, paths=sorted(directory.glob("*.sport44")))
 
     def running(self):

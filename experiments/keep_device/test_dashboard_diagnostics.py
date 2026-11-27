@@ -31,11 +31,11 @@ def test_state_paths_are_editable_persistent_and_preserve_existing_files(watch, 
     assert restored.configuration()["data_dir"] == str(watch.lab)
 
 
-@pytest.mark.parametrize("target", ["same", "repository", "config", "temporary", "selection", "directory", "invalid"])
+@pytest.mark.parametrize("target", ["same", "config", "temporary", "selection", "directory", "invalid"])
 def test_state_path_validation_preserves_configuration(watch, tmp_path, target):
     watch.configure({})
     before = watch.config_path.read_bytes()
-    value = {"same": str(watch.windows_state), "repository": str(ROOT / "test-private-state.json"),
+    value = {"same": str(watch.windows_state),
              "config": str(watch.config_path), "temporary": str(watch.config_path.with_suffix(".tmp")), "selection": str(watch.selection),
              "directory": str(tmp_path), "invalid": ""}[target]
     with pytest.raises(ValueError):

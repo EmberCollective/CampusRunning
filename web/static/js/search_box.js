@@ -13,19 +13,19 @@ function initSearchBox() {
 
     input.addEventListener('input', () => {
         clearTimeout(searchTimer);
+        hideSearchResults();
         const kw = input.value.trim();
-        if (!kw) {
-            hideSearchResults();
-            return;
-        }
+        if (!kw) return;
         searchTimer = setTimeout(() => doSearch(kw), 300);
     });
 
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
+            e.preventDefault();
             // 回车选首条
             const first = document.querySelector('#search-results li[data-idx]');
             if (first) first.click();
+            else doSearch(input.value.trim());
         } else if (e.key === 'Escape') {
             hideSearchResults();
         }
@@ -60,6 +60,9 @@ function updateSearchState() {
 
 // ===== 搜索 =====
 async function doSearch(kw) {
+    clearTimeout(searchTimer);
+    if (!kw) { searchSeq++; hideSearchResults(); return; }
+    const seq = ++searchSeq;
     if (!hasAmapKey()) {
         openSettings();
         return;
@@ -70,14 +73,15 @@ async function doSearch(kw) {
         showSearchMessage('初始化搜索服务…');
         try {
             await loadAmap(getAmapKey(), getAmapScode());
+            if (seq !== searchSeq) return;
             placeSearch = createPlaceSearch();
         } catch (error) {
+            if (seq !== searchSeq) return;
             showSearchMessage('搜索服务初始化失败：' + (error && error.message ? error.message : error));
             return;
         }
     }
 
-    const seq = ++searchSeq;
     placeSearch.search(kw, (status, result) => {
         if (seq !== searchSeq) return;  // 过期响应丢弃
         if (status === 'complete' && result.poiList && result.poiList.pois.length) {
@@ -98,6 +102,8 @@ function renderSearchResults(pois) {
     pois.forEach((poi, idx) => {
         const li = document.createElement('li');
         li.dataset.idx = idx;
+        li.tabIndex = 0;
+        li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectPoi(poi); } });
 
         const name = document.createElement('div');
         name.className = 'poi-name';
@@ -126,6 +132,7 @@ function showSearchMessage(text) {
 }
 
 function hideSearchResults() {
+    searchSeq++;
     const ul = document.getElementById('search-results');
     ul.style.display = 'none';
 }

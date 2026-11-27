@@ -36,7 +36,7 @@ def main():
                 lines: MapEngine.adapters.leaflet.lineLayer.getLayers().map(l=>l.getLatLngs()),
                 handles: document.querySelectorAll('.selection-handle').length,
                 frame: document.querySelector('.selection-frame')?.parentNode.getAttribute('transform'),
-                message: document.querySelector('#message').textContent})''')
+                message: document.querySelector('#toast').textContent})''')
 
         def step(name, action, check=lambda b, a: True):
             before = state() if records else {}
@@ -86,7 +86,7 @@ def main():
             drag_xy(b, a) if reverse else drag_xy(a, b)
 
         def draw(pixels):
-            page.locator('#tool-draw').click()
+            page.locator('[data-tool="draw"]').click()
             for x, y in pixels:
                 page.mouse.click(*stage_xy({'x': x, 'y': y}))
 
@@ -97,12 +97,12 @@ def main():
             return abs(a-b) < 1e-5
 
         try:
-            step('打开编辑器', lambda: page.goto(args.url+'/track-editor', wait_until='networkidle'),
+            step('打开编辑器', lambda: (page.goto(args.url+'/track-editor', wait_until='networkidle'), page.locator('#new-track').click()),
                  lambda b, a: not a['coords'])
-            assert args.save_id not in page.locator('#load-track-select option').evaluate_all('(es)=>es.map(e=>e.value)')
+            assert args.save_id not in page.evaluate('Generator.tracks().map(t=>t.id)')
             step('画笔实际创建六节点', lambda: draw([(380,310),(500,310),(500,430),(380,430),(750,380),(700,600)]),
                  lambda b, a: len(a['coords']) == 6)
-            step('开启框选工具', click('#tool-select'), lambda b, a: a['tool'] == 'select')
+            step('开启框选工具', click('[data-tool="select"]'), lambda b, a: a['tool'] == 'select')
             step('正向框选四节点，八柄出现，地图不移动', select,
                  lambda b, a: a['indices'] == [0,1,2,3] and a['handles'] == 8 and a['view'] == b['view'])
             step('反向框选四节点', lambda: select(reverse=True), lambda b, a: a['indices'] == [0,1,2,3])
@@ -151,7 +151,7 @@ def main():
             step('选框内中键平移地图', lambda:drag_handle_middle(),
                  lambda b,a:a['view']!=b['view'] and a['coords']==b['coords'] and a['undo']==b['undo'])
             for mode in ('fresh','satellite','classic'):
-                step('切底图 '+mode,click('#mode-'+mode),lambda b,a:a['coords']==b['coords'] and a['indices']==b['indices'])
+                step('切底图 '+mode,lambda m=mode:page.locator('#map-style').select_option(m),lambda b,a:a['coords']==b['coords'] and a['indices']==b['indices'])
             step('调整窗口保持选择',lambda:page.set_viewport_size({'width':1300,'height':900}),
                  lambda b,a:a['coords']==b['coords'] and a['handles']==8)
             step('恢复窗口',lambda:page.set_viewport_size({'width':1440,'height':1000}))
@@ -179,12 +179,12 @@ def main():
                 page.mouse.up()
             step('地理越界整帧拒绝，无损坏坐标或额外历史',out_of_bounds,
                  lambda b,a:a['coords']==b['coords'] and a['undo']==b['undo'])
-            step('切工具退出清选择',click('#tool-pan'),lambda b,a:not a['indices'])
+            step('切工具退出清选择',click('[data-tool="pan"]'),lambda b,a:not a['indices'])
             def save():
                 page.locator('#track-id').fill(args.save_id)
                 page.locator('#track-name').fill('框选回归')
-                page.locator('#save-form button[type="submit"]').click()
-                page.wait_for_function("document.querySelector('#message').textContent.includes('已保存')")
+                page.locator('#save-track').click()
+                page.wait_for_function("document.querySelector('#toast').textContent.includes('已保存')")
             step('真实保存变换结果',save,lambda b,a:'已保存' in a['message'])
             saved=state()
             data=ctx.request.get(args.url+f'/api/tracks/{args.save_id}/coords').json()
@@ -192,7 +192,7 @@ def main():
             assert data['coordinate_correction']==saved['correction']
             step('刷新页面按ID重新打开',lambda:page.goto(args.url+'/track-editor?track='+args.save_id,wait_until='networkidle'),
                  lambda b,a:a['coords']==saved['coords'] and a['correction']==saved['correction'] and a['undo']==0)
-            step('重开后框选原有节点',lambda:(page.locator('#tool-select').click(),select()),
+            step('重开后框选原有节点',lambda:(page.locator('[data-tool="select"]').click(),select()),
                  lambda b,a:a['indices']==[0,1,2,3])
             step('重开后变换保留轨迹ID',lambda:drag_handle('move',8,5),
                  lambda b,a:a['trackId']==args.save_id and a['undo']==1 and unchanged_others(b,a))
@@ -200,9 +200,9 @@ def main():
             overwritten=state()
             step('覆盖后刷新坐标和修正仍正确',lambda:page.reload(wait_until='networkidle'),
                  lambda b,a:a['coords']==overwritten['coords'] and a['correction']==saved['correction'])
-            step('新建退化选区测试',click('#new-btn'),lambda b,a:not a['coords'])
+            step('新建退化选区测试',click('#new-track:visible, #new-track-inline:visible'),lambda b,a:not a['coords'])
             step('创建竖直三点',lambda:draw([(400,310),(400,370),(400,430)]))
-            step('开启退化选区框选',click('#tool-select'))
+            step('开启退化选区框选',click('[data-tool="select"]'))
             step('零宽选区',lambda:select((0,1,2)),lambda b,a:a['indices']==[0,1,2] and a['handles']==8)
             step('零宽边柄禁用且不记录历史',lambda:drag_handle('e',30,0),lambda b,a:a['coords']==b['coords'] and a['undo']==b['undo'])
             step('零宽选区仍可单轴拉伸',lambda:drag_handle('n',0,-12),lambda b,a:a['undo']==b['undo']+1
@@ -210,13 +210,13 @@ def main():
             step('选择单点',lambda:(page.keyboard.press('Escape'),select((0,))),lambda b,a:a['indices']==[0])
             step('单点双轴缩放安全无历史',lambda:drag_handle('ne',15,-15),lambda b,a:a['coords']==b['coords'] and a['undo']==b['undo'])
             step('单点移动',lambda:drag_handle('move',20,10),lambda b,a:a['undo']==b['undo']+1 and a['coords'][1:]==b['coords'][1:])
-            step('新建负缩放测试',click('#new-btn'))
+            step('新建负缩放测试',click('#new-track:visible, #new-track-inline:visible'))
             step('创建矩形节点',lambda:draw([(380,310),(500,310),(500,430),(380,430)]))
-            step('开启负缩放测试',click('#tool-select'))
+            step('开启负缩放测试',click('[data-tool="select"]'))
             step('选择矩形',select)
             step('边柄越过锚点禁用翻转',lambda:drag_handle('e',-300,0),lambda b,a:a['undo']==b['undo']+1
                  and a['pixels'][1]['x']>a['pixels'][0]['x'] and near(a['pixels'][0]['x'],b['pixels'][0]['x']))
-            step('撤销压缩恢复精确坐标',click('#undo-btn'),lambda b,a:a['coords']==records[-2]['after']['coords'])
+            step('撤销压缩恢复精确坐标',click('#editor-undo'),lambda b,a:a['coords']==records[-2]['after']['coords'])
             step('空白点击不选点、不加历史',lambda:page.mouse.click(*stage_xy({'x':300,'y':600})),
                  lambda b,a:not a['indices'] and a['coords']==b['coords'] and a['undo']==b['undo'])
             step('重新框选供舞台外松手测试',select)

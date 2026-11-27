@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/readme/hero.svg" alt="校园跑步数据生成器 —— 真实轨迹 · 真实配速 · 一键生成运动数据文件" width="100%">
+  <img src="assets/readme/hero.svg" alt="校园跑步数据生成器 —— 统一工作台 · 真实轨迹 · 真实配速 · 一键生成运动数据文件" width="100%">
   <p>
     <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
     <img alt="Python 3.13+" src="https://img.shields.io/badge/Python-3.13%2B-3776AB?logo=python&logoColor=white">
@@ -31,12 +31,12 @@
 每条记录由五层机制撑起「真实感」：
 
 - **真实轨迹**——基于操场坐标生成顺时针 GPS 轨迹点，内置多条校园轨迹，也可自行添加
-- **真实配速**——热身 → 稳定 → 疲劳 → 冲刺四阶段配速波动，拒绝匀速直线
+- **配速模型与预览**——自然慢跑、稳定跑、渐进跑三种模拟算法，可查看时间曲线和配速分布，支持[自定义算法](docs/pace-models.md)
 - **真实步频步数**——按配速与里程生成符合真实分布的步频曲线，FIT 与 TCX 均写入
 - **坐标转换**——按轨迹所在地域将 GCJ-02 自动转换为 WGS-84，避免导入后区域性偏移
 - **可视化轨迹编辑器**——Web 内在高德地图上标点绘制轨迹，一键保存为配置
 
-CLI 与 Web 双入口，生成结果一致。
+CLI 与 Web 双入口，生成结果一致。Web 端为 4.0 统一工作台：生成、轨迹编辑与手表管理同页完成，生成后可打包下载，手表环境就绪时也可直接载入。
 
 ## 快速开始
 
@@ -69,8 +69,11 @@ python app.py    # 浏览器访问 http://127.0.0.1:5000
 
 - **四种生成模式**——每日范围 / 总公里数 / 单文件 / 指定日期批量（日历勾选）
 - **模板**——表单参数一键存成模板，下次直接套用
-- **轨迹编辑器**——高德地图上标点、画笔绘制环线，实时查看距离，保存即入轨迹库
-- **结果打包**——生成的 FIT/TCX 一键 ZIP 下载
+- **配速算法与曲线预览**——在高级设置中选择算法与波动强度，生成前直接预览曲线和分布
+- **轨迹编辑器**——高德地图上标点、画笔、快捷图形与框选变换，实时查看距离，保存即入轨迹库
+- **生成结果**——逐条核对日期、里程与配速，一键 ZIP 下载 FIT/TCX；手表环境就绪时也可载入手表
+
+![配速算法与曲线预览](assets/readme/pace_preview.png)
 
 ### CLI
 
@@ -95,6 +98,24 @@ python main.py daily --template easy_run --track campus_default --zip \
 ### 导入手机
 
 生成结果如何导入 Keep，见 [Keep 导入教程（含截图）](guied.md)。默认输出 FIT 格式（Keep 导入推荐，带完整步频/步数数据）；也可切换 TCX——它是通用格式，Garmin Training Center、GoldenCheetah、Strava 等软件可直接打开。
+
+## 实验性内容：手表导入（Keep 手环 B5）
+
+> **实验性功能**：需要独立实验环境与真实蓝牙，验收边界见下文，不代表正式导入功能。
+
+4.0 起内置手表管理：复用同一套生成流程，直接产出 Keep 手环 B5 的运动数据——单次最多 64 条，逐条收讫，重启不重发。工作台选择「B5 手表」输出方式生成，检查结果后载入手表：
+
+![工作台生成 B5 手表记录](assets/readme/panel_generate.png)
+
+手表控制页实时显示本轮广播地址与连接二维码——地址每轮变化，以页面当前显示为准。手机 Keep「添加 B5 → 扫一扫」可替代手动输入地址，随后等待 Keep 读取文件：
+
+![手表控制页：本轮广播地址与连接二维码](assets/readme/watch_qr.png)
+
+- **两种接入方式**——官方 Android 模拟器（API 35，无需实体蓝牙）与 Windows 实体蓝牙入口；面板实时显示本轮广播地址、连接状态与传输进度
+- **验收边界**——Android Keep 已完成绑定、完整传输与有效活动入账；iOS 与稳定重连尚未通过验收，文件领取成功不代表活动有效
+- **环境要求**——需要独立实验环境（Windows 需 BTVS/TShark 与独立 Python 3.11），桌面安装包不含完整 B5 环境
+
+运行步骤见[连接与运行](docs/keep-b5/guides/connection-and-running.md)，适配范围与版本要求见[兼容性说明](docs/keep-b5/reference/compatibility.md)。
 
 ## 配置
 
@@ -139,6 +160,7 @@ python main.py daily --template easy_run --track campus_default --zip \
 | `src/*.py` | 配置管理、模板管理、生成引擎编排 |
 | `web/` | Flask 路由、页面与静态资源 |
 | `config/` | 轨迹定义、预设模板、默认设置 |
+| `experiments/keep_device/` | 独立 Keep B3/B5 适配实验；可选手表面板复用旧页面，原生生成 B5 并显示里程、连接和 MAC |
 
 架构与数据流详见[架构说明](docs/architecture.md)。
 
@@ -150,6 +172,7 @@ python main.py daily --template easy_run --track campus_default --zip \
 - [模板创建指南](config/templates/TEMPLATE_GUIDE.md)
 - [高德 Key 申请教程](docs/amap_key_guide.md)
 - [Keep 导入教程](guied.md)
+- Keep 手环 B5 同步实验：[分类文档](docs/keep-b5/README.md) · [适配范围与环境要求](docs/keep-b5/reference/compatibility.md) · [连接与运行](docs/keep-b5/guides/connection-and-running.md)。手表页提供官方 Android 模拟器与 Windows 实体蓝牙两条路线；iOS 和稳定重连尚未通过。
 - [更新日志](CHANGELOG.md)
 - 维护者手册：[构建与打包](docs/maintainer/build.md) · [发版流程](docs/maintainer/release.md) · [工具速查](docs/maintainer/tools.md)
 

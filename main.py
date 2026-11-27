@@ -36,6 +36,7 @@ from src.paths import get_config_dir
 from src.config_manager import ConfigManager
 from src.template_manager import TemplateManager
 from src.generation_engine import GenerationEngine
+from src.core.pace_fluctuator import list_pace_algorithms
 
 
 def setup_logging(verbose: bool = False):
@@ -70,6 +71,9 @@ def generate_by_daily_range(args, engine: GenerationEngine, template_manager: Te
         overrides["track_id"] = args.track
     if args.format:
         overrides["output_format"] = args.format
+    for key in ("pace_algorithm", "pace_intensity"):
+        if getattr(args, key, None) is not None:
+            overrides[key] = getattr(args, key)
 
     config = template_manager.apply_template(
         template_id=args.template,
@@ -117,6 +121,9 @@ def generate_by_total_km(args, engine: GenerationEngine, template_manager: Templ
         overrides["track_id"] = args.track
     if args.format:
         overrides["output_format"] = args.format
+    for key in ("pace_algorithm", "pace_intensity"):
+        if getattr(args, key, None) is not None:
+            overrides[key] = getattr(args, key)
 
     config = template_manager.apply_template(
         template_id=args.template,
@@ -162,6 +169,9 @@ def generate_single_file(args, engine: GenerationEngine, template_manager: Templ
         overrides["track_id"] = args.track
     if args.format:
         overrides["output_format"] = args.format
+    for key in ("pace_algorithm", "pace_intensity"):
+        if getattr(args, key, None) is not None:
+            overrides[key] = getattr(args, key)
     if args.pace:
         # 单文件模式使用固定配速
         overrides["min_pace"] = args.pace
@@ -333,6 +343,10 @@ def main():
     single_parser.add_argument('--zip', action='store_true', help='将生成的文件打包成ZIP压缩包')
     single_parser.add_argument('--track', help='指定轨迹ID')
     single_parser.add_argument('--template', help='指定预设模板')
+
+    for pace_parser in (daily_parser, total_parser, single_parser):
+        pace_parser.add_argument('--pace-algorithm', choices=[a['id'] for a in list_pace_algorithms()], help='配速算法（默认 natural）')
+        pace_parser.add_argument('--pace-intensity', type=float, help='配速波动强度 0–1（默认 0.15）')
 
     # 高德 Key 管理命令
     key_parser = subparsers.add_parser('set-key', help='管理高德地图 API Key 配置')

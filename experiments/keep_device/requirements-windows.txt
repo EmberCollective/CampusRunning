@@ -1,0 +1,7 @@
+# Separate Windows / Python 3.11 experiment; no Bumble dependency.
+bless==0.3.0
+bleak==3.1.0
+bleak-winrt==1.2.0
+protobuf==7.36.2
+# Bless 0.3.0 omits this dependency from its published metadata.
+pysetupdi @ git+https://github.com/gwangyi/pysetupdi.git@4b48c1da115f571e82876ee7659e78ec4d1e2ae9

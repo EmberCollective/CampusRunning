@@ -1,5 +1,15 @@
 # API 参考
 
+## Keep 设备适配实验接口
+
+独立模块位于 `experiments/keep_device/`，默认主应用和 `main.py` 不加载实验功能，也不直接调用 Keep 上传接口。可选 `python -m experiments.keep_device.dashboard` 复用原 Web 生成端点并显式注入原生 B5 导出器，增加 `/watch` 和 `/api/watch/*`；参数、权限及生命周期见[契约](keep-b5/reference/protocol-contract.md#可选面板接口)。
+
+- 编码：`experiments.keep_device.history.encode_workout(data: ExportData) -> bytes`。输入为主项目已有数据模型，坐标已转换为 WGS-84，输出 B5 SPORT44 二进制；验证失败抛出 `ValueError`。
+- Windows 传输入口：`python -m experiments.keep_device.windows --model B5 --state PATH --workout PATH`，可选 `--keep-name` 临时设置实验名称；需独立 Windows 环境和 BLE 外设角色支持。
+- 模拟器传输入口：`python -m experiments.keep_device.emulator TRANSPORT --model B5 --address ADDRESS --state PATH --workout PATH`，复用 Bumble/Netsim。
+
+环境准备、从生成引擎取得 `ExportData`、手机绑定及停止流程见[实验说明](keep-b5/guides/connection-and-running.md)；完整参数、单位、设备命令及文件契约见[接口与协议契约](keep-b5/reference/protocol-contract.md)。两种入口仅提供设备侧数据，活动是否被接受由官方 Keep 处理；当前真实验收限定 Android Keep 9.1.120 的单条 B5 活动。
+
 ## CLI 使用
 
 ### 基本用法
@@ -82,12 +92,16 @@ python app.py
 | GET | `/api/tracks/<id>` | 获取轨迹详情 |
 | GET | `/api/templates` | 列出所有模板 |
 | GET | `/api/defaults` | 获取默认设置 |
+| GET | `/api/pace/algorithms` | 列出已注册配速算法 |
+| POST | `/api/pace/preview` | 生成配速曲线样例，不写运动文件 |
 | POST | `/api/generate/daily` | 每日范围生成 |
 | POST | `/api/generate/total` | 总公里数生成 |
 | POST | `/api/generate/single` | 单文件生成 |
 | GET | `/api/download/<job_id>` | 下载生成的文件 |
 
 ### 请求示例
+
+所有生成模式可使用 `pace_algorithm`（默认 `natural`，另有 `steady`、`progressive`）和 `pace_intensity`（0–1，默认 0.15）。旧模板兼容；关闭 `enable_pace_fluctuation` 时按实际距离匀速生成。预览请求、研究边界和 Python 算法注册接口见 [配速模型](pace-models.md)。
 
 #### POST /api/generate/daily
 

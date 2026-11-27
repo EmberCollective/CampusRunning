@@ -25,20 +25,26 @@ async function initAmapKeyFromServer() {
             const data = await response.json();
             _serverAmapKey = data.key || '';
             _serverAmapScode = data.securityJsCode || '';
+        } else {
+            throw new Error('无法读取地图配置');
         }
     } catch (e) {
-        console.warn('无法从服务器加载高德 Key 配置:', e);
+        throw new Error('无法读取本地地图配置，请恢复服务后重试');
     }
+}
+
+function readMapStorage(key) {
+    try { return localStorage.getItem(key); } catch { return ''; }
 }
 
 function getAmapKey() {
     // 优先使用服务器配置，其次使用 localStorage
-    return _serverAmapKey || localStorage.getItem(AMAP_KEY_STORAGE) || '';
+    return _serverAmapKey || readMapStorage(AMAP_KEY_STORAGE) || '';
 }
 
 function getAmapScode() {
     // 优先使用服务器配置，其次使用 localStorage
-    return _serverAmapScode || localStorage.getItem(AMAP_SCODE_STORAGE) || '';
+    return _serverAmapScode || readMapStorage(AMAP_SCODE_STORAGE) || '';
 }
 
 function hasAmapKey() {
@@ -60,12 +66,13 @@ const MapEngine = {
         this.adapters.leaflet = new LeafletAdapter('map-leaflet');
         this.adapters.leaflet.setBaseMode('classic');
         this._bindSwitchButtons();
-        this._bindSettingsModal();
         this._updateSwitchStates();
+        this.switchMode(readMapStorage('map_mode') || 'classic');
     },
 
     // ===== 模式切换 =====
     switchMode(mode) {
+        if (!['classic', 'fresh', 'satellite', 'amap'].includes(mode)) return;
         if (mode === this.mode || this.loading) return;
 
         if (mode === 'amap') {
@@ -91,7 +98,7 @@ const MapEngine = {
     async _switchToAmap() {
         if (!hasAmapKey()) {
             // 未配置 Key：引导到设置弹层，停留当前档
-            openSettings();
+            openSettings('maps');
             return;
         }
 
@@ -142,7 +149,7 @@ const MapEngine = {
     },
 
     fitTrack(points) {
-        this.activeAdapter().fitTrack(points);
+        this.activeAdapter().fitTrack(points, [60, 60]); // Leave room for the rotation handle and map controls.
     },
 
     flyTo(lat, lng, zoom) {
@@ -206,6 +213,7 @@ const MapEngine = {
     },
 
     _updateSwitchStates() {
+        document.getElementById('map-style').value = this.mode;
         ['classic', 'fresh', 'satellite', 'amap'].forEach((mode) => {
             const btn = document.getElementById('mode-' + mode);
             if (!btn) return;
@@ -218,112 +226,7 @@ const MapEngine = {
         });
     },
 
-    // ===== Key 设置弹层 =====
-    _bindSettingsModal() {
-        document.getElementById('settings-btn').addEventListener('click', openSettings);
-        document.getElementById('settings-close-btn').addEventListener('click', closeSettings);
-        document.getElementById('settings-save-btn').addEventListener('click', () => this._saveKeys());
-        document.getElementById('settings-clear-btn').addEventListener('click', () => this._clearKeys());
-        // 点击遮罩关闭
-        document.getElementById('settings-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'settings-modal') closeSettings();
-        });
-    },
-
-    async _saveKeys() {
-        const key = document.getElementById('amap-key-input').value.trim();
-        const scode = document.getElementById('amap-scode-input').value.trim();
-        const note = document.getElementById('settings-note');
-
-        if (!key) {
-            note.textContent = 'Key 不能为空';
-            return;
-        }
-
-        const keyChanged = key !== getAmapKey() || scode !== getAmapScode();
-        localStorage.setItem(AMAP_KEY_STORAGE, key);
-        if (scode) {
-            localStorage.setItem(AMAP_SCODE_STORAGE, scode);
-        } else {
-            localStorage.removeItem(AMAP_SCODE_STORAGE);
-        }
-
-        // 更新服务端缓存，确保当前会话立即生效
-        _serverAmapKey = key;
-        _serverAmapScode = scode;
-
-        // 同步保存到服务端配置文件
-        let serverMsg = '';
-        try {
-            const resp = await fetch('/api/amap-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key, securityJsCode: scode }),
-            });
-            if (!resp.ok) serverMsg = '（服务端保存失败，刷新页面后 Key 可能丢失）';
-        } catch (e) {
-            serverMsg = '（服务端保存失败，刷新页面后 Key 可能丢失）';
-        }
-
-        // 引擎已加载后凭据变更不热重载（loader 不重复请求）
-        if (this.adapters.amap && keyChanged) {
-            note.textContent = '已保存。检测到 Key 变更，刷新页面后生效。' + serverMsg;
-        } else {
-            note.textContent = '已保存。' + serverMsg;
-        }
-        this._updateSwitchStates();
-        if (typeof updateSearchState === 'function') updateSearchState();
-    },
-
-    async _clearKeys() {
-        localStorage.removeItem(AMAP_KEY_STORAGE);
-        localStorage.removeItem(AMAP_SCODE_STORAGE);
-        // 同时清除服务器配置缓存，确保清除操作立即生效
-        _serverAmapKey = '';
-        _serverAmapScode = '';
-        document.getElementById('amap-key-input').value = '';
-        document.getElementById('amap-scode-input').value = '';
-
-        // 同步清除服务端配置文件
-        let serverMsg = '';
-        try {
-            const resp = await fetch('/api/amap-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: '', securityJsCode: '' }),
-            });
-            if (!resp.ok) serverMsg = '（服务端清除失败）';
-        } catch (e) {
-            serverMsg = '（服务端清除失败）';
-        }
-        document.getElementById('settings-note').textContent = '已清除。' + serverMsg;
-
-        // 若正处于官方档，切回经典档
-        if (this.mode === 'amap') {
-            this.switchMode('classic');
-        }
-        this._updateSwitchStates();
-        if (typeof updateSearchState === 'function') updateSearchState();
-    },
 };
-
-// ===== 弹层与遮罩开关 =====
-function openSettings() {
-    document.getElementById('amap-key-input').value = getAmapKey();
-    document.getElementById('amap-scode-input').value = getAmapScode();
-    // 当服务器配置生效时，提示用户来源
-    const note = document.getElementById('settings-note');
-    if (_serverAmapKey) {
-        note.textContent = '当前使用配置文件中的 Key（config/amap_key.json）。在此清除后刷新页面将重新加载配置文件。';
-    } else {
-        note.textContent = '';
-    }
-    document.getElementById('settings-modal').style.display = '';
-}
-
-function closeSettings() {
-    document.getElementById('settings-modal').style.display = 'none';
-}
 
 function showMapLoading(text) {
     document.getElementById('map-loading-text').textContent = text || '加载中…';
